@@ -935,7 +935,7 @@ class FlightScene(Scene):
         img = cache.get((key, rb))
         if img is None:
             try:
-                th = min(1024, max(256, i18n.quality()["tex"]))
+                th = S3.safe_tex(key, max(256, i18n.quality()["tex"]))
                 M = S3.rot_z(math.radians(-12)) @ S3.rot_x(0.28)
                 L = S3.norm3(np.array((-0.62, 0.32, 0.72), dtype=np.float32))
                 img = S3.to_surface(S3.render_body(key, rb, M, L, 0.8, 0.0, th))

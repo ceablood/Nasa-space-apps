@@ -16,7 +16,7 @@ fırlat, yolculuğu yönet, gezegenlere in, koloni kur ve en sonunda
 - **Boyalı arka planlar:** Ana menüde yörüngeden şafak, kolonilerde Ay, Mars, Venüs ve Jüpiter manzaraları; fotogerçekçi ama elle boyanmış görünümlü, yazısız (her dilde aynı).
 - **Mars toz fırtınaları:** Zaman zaman yükselen, hareket eden renkli toz bulutları.
 - **Ses:** Her ekranın kendi ortam sesi (üs, hangar, kontrol, uzay, koloni, laboratuvar) ve yeni efektler.
-- **Görüntü kalitesi:** AJANS → Ayarlar'da STANDART / YÜKSEK / ULTRA / MAKSİMUM. MAKSİMUM 2048×4096 piksel gezegen dokuları kullanır; ilk açılışta her doku bir kez üretilir (10-30 sn) ve ~/.aetherx/tex klasörüne kaydedilip sonraki açılışlarda anında yüklenir. Gezegenler sinema tipi ton eşleme (ACES), yumuşak gün/gece geçişi ve hafif ortam ışığıyla çizilir; küçük çizimlerde kumlanmayı önlemek için düşük çözünürlüklü doku seviyesine (mip) inilir. Oyun 1600×900 tuvalde çizilip tam ekranda ekran çözünürlüğüne (4K dahil) ölçeklenir; pygame ile gerçek 8K iç çizim pratik değildir.
+- **Görüntü kalitesi:** AJANS → Ayarlar'da STANDART / YÜKSEK / ULTRA / MAKSİMUM (varsayılan: ULTRA; kalite arttıkça 3B kolonide kenar yumuşatma, yıldız ve halka parçacığı sayısı da artar). MAKSİMUM 2048×4096 piksel gezegen dokuları kullanır; ilk açılışta her doku bir kez üretilir (10-30 sn) ve ~/.aetherx/tex klasörüne kaydedilip sonraki açılışlarda anında yüklenir. Gezegenler sinema tipi ton eşleme (ACES), yumuşak gün/gece geçişi ve hafif ortam ışığıyla çizilir; küçük çizimlerde kumlanmayı önlemek için düşük çözünürlüklü doku seviyesine (mip) inilir. Oyun 1600×900 tuvalde çizilip tam ekranda ekran çözünürlüğüne (4K dahil) ölçeklenir; pygame ile gerçek 8K iç çizim pratik değildir.
 
 ## Kurulum ve çalıştırma
 

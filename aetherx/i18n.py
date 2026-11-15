@@ -22,11 +22,11 @@ from .config import SETTINGS_FILE, SAVE_DIR
 LANGS = [("tr", "Türkçe"), ("en", "English"), ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
          ("ru", "Русский")]
 LANG = "tr"
-PREFS = {"lang": "tr", "quality": "high", "lang_chosen": False, "cinematic": True}
-QUALITY = {"standard": {"tex": 256, "ss": 1, "stars": 300, "rocks": 260},
-           "high": {"tex": 512, "ss": 2, "stars": 420, "rocks": 520},
-           "ultra": {"tex": 1024, "ss": 2, "stars": 700, "rocks": 900},
-           "max": {"tex": 2048, "ss": 2, "stars": 900, "rocks": 1400}}
+PREFS = {"lang": "tr", "quality": "ultra", "lang_chosen": False, "cinematic": True}
+QUALITY = {"standard": {"tex": 256, "ss": 1.0, "stars": 300, "rocks": 260},
+           "high": {"tex": 512, "ss": 1.35, "stars": 600, "rocks": 700},
+           "ultra": {"tex": 1024, "ss": 1.6, "stars": 1000, "rocks": 1400},
+           "max": {"tex": 2048, "ss": 2.0, "stars": 1400, "rocks": 2400}}
 
 _exact, _upper, _lower = {}, {}, {}
 _templates = []          # (regex, hedef, n_grup)

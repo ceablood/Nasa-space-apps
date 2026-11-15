@@ -308,7 +308,7 @@ class LaunchScene(Scene):
 
     def horizon(self, R, cy, k):
         """Uzaydan Dünya ufku: gerçek Dünya dokusu, eğrilik, atmosfer kuşağı, bulut gölgesi (1/4 çözünürlük)."""
-        q = 1 if i18n.PREFS.get("quality") == "ultra" else 2
+        q = 1 if i18n.PREFS.get("quality") in ("ultra", "max") else 2
         top = int(cy - R - 30)
         hh = H - top
         if hh <= 2:

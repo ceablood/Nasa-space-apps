@@ -934,7 +934,7 @@ class Colony3D:
         import time as _time
         t_start = _time.perf_counter()
         # süper örnekleme: pürüzsüz siluetler; bilgisayar yavaşsa kendiliğinden kapanır (uyarlanır kalite)
-        ss = 1.35 if (cinema.enabled() and not getattr(self, "low_perf", False)) else 1.0
+        ss = i18n.quality().get("ss", 1.35) if (cinema.enabled() and not getattr(self, "low_perf", False)) else 1.0
         self.ss = ss
         w, h = int(rect.w * ss), int(rect.h * ss)
         if self.view is None or self.view.get_size() != (w, h):

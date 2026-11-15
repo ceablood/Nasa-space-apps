@@ -503,7 +503,7 @@ def planet3d_surface(key, radius, light=(-0.6, -0.45)):
             lz = _m.sqrt(max(0.05, 1 - lx * lx - ly * ly))
             Lv = S3.norm3(np.array((lx, -ly, lz), dtype=np.float32))
             M = S3.rot_z(_m.radians(-12)) @ S3.rot_x(0.25)
-            th = 256 if rb < 60 else (512 if rb < 200 else min(1024, max(512, i18n.quality()["tex"])))
+            th = 256 if rb < 60 else (512 if rb < 200 else S3.safe_tex(key, max(512, i18n.quality()["tex"])))
             img = S3.to_surface(S3.render_body(key, rb, M, Lv, 0.9, 0.0, th))
         except Exception:
             img = False

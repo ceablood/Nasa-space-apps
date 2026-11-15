@@ -542,6 +542,13 @@ def _disk_save(key, th, t):
         pass
 
 
+def safe_tex(key, th):
+    """2048+ dokular oyun sırasında üretilmez (donma olmasın); önbellekte yoksa 1024 kullan."""
+    if th > 1024 and not (has_texture(key, th) or disk_has(key, th)):
+        return 1024
+    return th
+
+
 def texture(key, th=256):
     k = (key, th)
     t = _TEX.get(k)
