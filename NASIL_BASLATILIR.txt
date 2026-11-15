@@ -1,0 +1,16 @@
+AETHER-X - NASIL BASLATILIR
+===========================
+
+1) Bu zip dosyasini once bir klasore CIKAR (zip icinden calistirma).
+2) Windows: BASLAT.bat dosyasina cift tikla.
+   macOS / Linux: klasorde terminal ac ve "sh baslat.sh" yaz.
+3) Ilk acilista eksik kutuphaneler (pygame-ce, numpy) otomatik kurulur.
+   Internet baglantisi gerekir. Sonra gorseller bir kez hazirlanir (10-15 sn).
+
+Python yoksa: https://www.python.org/downloads/
+(Kurarken "Add python.exe to PATH" kutusunu isaretle.)
+
+Oyun bir hatayla kapanirsa klasorde "aetherx_hata.txt" olusur.
+Bu dosyayi paylasirsan sorun hemen bulunur.
+
+Ayrintilar: README.md
