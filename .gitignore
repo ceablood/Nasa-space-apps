@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+aetherx_hata.txt
+.venv/
