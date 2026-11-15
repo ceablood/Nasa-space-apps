@@ -23,6 +23,16 @@ except Exception:  # pragma: no cover
 _CACHE = {}
 
 
+def _cine_on():
+    from . import i18n
+    return i18n.PREFS.get("cinematic", True)
+
+
+def _styl(img, **kw):
+    from . import cinema
+    return cinema.stylize_sprite(img, **kw)
+
+
 def _cache(key, fn):
     s = _CACHE.get(key)
     if s is None:
@@ -267,8 +277,8 @@ def render_spacecraft(hull, engine, power, antenna, payloads, agency, color, sca
             if ek == "ion":
                 pygame.draw.ellipse(s, (120, 200, 255), (body.centerx - nw * 0.45, ny + nh - 5, nw * 0.9, 8))
             nozzle = (body.centerx, ny + nh)
-        return s, nozzle
-    return _cache(key, build)
+        return _styl(s), nozzle
+    return _cache(key + (_cine_on(),), build)
 
 
 def render_booster(size, agency, color, scale=1.0):
@@ -314,8 +324,8 @@ def render_booster(size, agency, color, scale=1.0):
         nz = [(cx - bw * 0.3, bh), (cx + bw * 0.3, bh), (cx + bw * 0.4, bh + 26 * scale), (cx - bw * 0.4, bh + 26 * scale)]
         pygame.draw.polygon(s, (90, 90, 100), nz)
         pygame.draw.rect(s, (120, 125, 140), body, 1)
-        return s, (cx, bh + int(26 * scale))
-    return _cache(key, build)
+        return _styl(s), (cx, bh + int(26 * scale))
+    return _cache(key + (_cine_on(),), build)
 
 
 # ===========================================================================
@@ -582,8 +592,8 @@ def asteroid_sprite(kind, radius, seed):
         if kind == "ice":
             pygame.draw.polygon(s, (230, 250, 255), inner, 2)
         pygame.draw.polygon(s, scale_color(c2, 0.6), pts, 2)
-        return s
-    return _cache(key, build)
+        return _styl(s, rim=(255, 200, 150) if kind != "ice" else (170, 230, 255), brushk=radius > 10)
+    return _cache(key + (_cine_on(),), build)
 
 
 def draw_satellite(surf, x, y, t, scale=1.0, color=(220, 225, 235)):

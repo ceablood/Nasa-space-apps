@@ -56,6 +56,7 @@ EVENTS = [(0.0, "Kalkış! Kule temizlendi."), (900, "Ses hızı aşıldı (Max-
 
 
 class LaunchScene(Scene):
+    bloom_k = 0.25           # egzoz bulutları zaten parlak: aşırı patlamasın
     music = "launch"
     show_topbar = False
     allow_events = False

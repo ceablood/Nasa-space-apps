@@ -18,6 +18,7 @@ class Scene:
     title = ""
     title_icon = None
     accent = C["cyan"]
+    bloom_k = 1.0            # ekran başına parlama (bloom) şiddeti; zaten çok parlak sahnelerde düşürülür
 
     def __init__(self, app):
         self.app = app

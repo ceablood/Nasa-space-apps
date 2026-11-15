@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+# /// script
+# dependencies = [
+#     "pygame-ce",
+#     "numpy",
+# ]
+# ///
 """
 AETHER-X  //  Uzay Ajansı Komuta Simülasyonu
 
@@ -147,5 +153,20 @@ def main():
         sys.exit(1)
 
 
-if __name__ == "__main__":
+async def main_web():
+    """Tarayıcı sürümü (pygbag / WebAssembly). GitHub Pages'te çalışır."""
+    import asyncio  # noqa: F401
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    from aetherx.app import App
+    app = App()
+    await app.run_async()
+
+
+if sys.platform == "emscripten":
+    import asyncio
+    import numpy  # noqa: F401  (pygbag paket önyüklemesi için)
+    import pygame  # noqa: F401
+    asyncio.run(main_web())
+elif __name__ == "__main__":
     main()

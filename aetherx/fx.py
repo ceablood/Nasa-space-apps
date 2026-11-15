@@ -453,6 +453,7 @@ class SpaceBackground:
         self.shooting = ShootingStars()
         self.tint = tint
         self.pulse = 0.0
+        self.palette = palette
 
     def update(self, dt, vx=0.0, vy=0.0):
         self.nebula.update(dt)
@@ -471,6 +472,11 @@ class SpaceBackground:
             ov.fill(self.tint)
             surf.blit(ov, (0, 0))
         surf.blit(self.vig, (0, 0))
+        try:
+            from . import cinema
+            cinema.space_pass(surf, self.palette, self.pulse, 0.6 if streak > 0 else 1.0)
+        except Exception:
+            pass
 
 
 # ===========================================================================

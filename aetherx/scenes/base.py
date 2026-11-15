@@ -11,6 +11,7 @@ import random
 import pygame
 
 from . import Scene
+from .. import cinema
 from .. import art
 from .. import data as D
 from ..config import C, H, TOPBAR_H, W
@@ -391,6 +392,13 @@ class BaseScene(Scene):
         ws = self.world
         ws.blit(self.static[1], (0, 0))
         self.draw_world(ws, night)
+        if cinema.enabled():
+            day = 1.0 - night
+            cinema.full_pass(ws, ws.get_rect(), self.t, sun=(int(W * 0.84), -90),
+                             sun_col=(255, 196, 136) if day > 0.5 else (150, 180, 255), rays=0.3 + 0.5 * day,
+                             mote_col=(255, 228, 190) if day > 0.5 else (190, 210, 255), n_motes=44,
+                             haze_col=(60, 46, 30) if day > 0.5 else (20, 28, 64), haze_k=0.7,
+                             warm=(int(40 * day), int(22 * day), 4), cool=(130, 120, 205))
         z = self.zoom.value
         if abs(z - 1.0) < 0.003:
             surf.blit(ws, (0, 0))

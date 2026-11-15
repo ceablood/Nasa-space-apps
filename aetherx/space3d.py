@@ -14,6 +14,7 @@ AETHER-X // 3B GÖK CİSİMLERİ (numpy yazılım çizici)
 """
 import math
 import random
+import sys
 
 import numpy as np
 
@@ -487,6 +488,10 @@ TEX_VERSION = 3
 _DISK = None
 
 
+# tarayıcıda (pygbag) sıkıştırmalı dosya yazmak WebAssembly çökmesine yol açıyor: disk önbelleği kapalı
+WEB = sys.platform == "emscripten"
+
+
 def _disk_dir():
     global _DISK
     if _DISK is None:
@@ -497,6 +502,8 @@ def _disk_dir():
 
 
 def _disk_load(key, th):
+    if WEB:
+        return None
     try:
         f = _disk_dir() / f"{key}_{th}_v{TEX_VERSION}.npz"
         if not f.exists():
@@ -517,6 +524,8 @@ def _disk_load(key, th):
 
 
 def disk_has(key, th):
+    if WEB:
+        return False
     try:
         return (_disk_dir() / f"{key}_{th}_v{TEX_VERSION}.npz").exists()
     except Exception:
@@ -524,6 +533,8 @@ def disk_has(key, th):
 
 
 def _disk_save(key, th, t):
+    if WEB:
+        return
     try:
         d = _disk_dir()
         d.mkdir(parents=True, exist_ok=True)

@@ -15,6 +15,7 @@ eksik çeviri olup olmadığını bu listeye göre denetler.
 """
 import json
 import re
+import sys
 from pathlib import Path
 
 from .config import SETTINGS_FILE, SAVE_DIR
@@ -23,6 +24,8 @@ LANGS = [("tr", "Türkçe"), ("en", "English"), ("de", "Deutsch"), ("fr", "Fran�
          ("ru", "Русский")]
 LANG = "tr"
 PREFS = {"lang": "tr", "quality": "ultra", "lang_chosen": False, "cinematic": True}
+if sys.platform == "emscripten":         # tarayıcıda (WebAssembly) hız için bir kademe düşük başla
+    PREFS["quality"] = "high"
 QUALITY = {"standard": {"tex": 256, "ss": 1.0, "stars": 300, "rocks": 260},
            "high": {"tex": 512, "ss": 1.35, "stars": 600, "rocks": 700},
            "ultra": {"tex": 1024, "ss": 1.6, "stars": 1000, "rocks": 1400},
@@ -49,7 +52,7 @@ def load_prefs():
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         if isinstance(d, dict):
-            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen") if k in d})
+            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic") if k in d})
     except Exception:
         pass
     if PREFS["lang"] not in [c for c, _ in LANGS]:

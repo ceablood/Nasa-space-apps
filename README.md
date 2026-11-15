@@ -1,8 +1,31 @@
 # AETHER-X · Uzay Ajansı Komuta Simülasyonu (Python / pygame)
 
+## ▶ Tarayıcıda oyna
+
+**https://ceablood.github.io/Nasa-space-apps/**
+
+Kurulum gerekmez. Sayfa açılınca yükleme ekranı gelir: Python, pygame ve numpy tarayıcıya iner (ilk açılışta
+~20 MB), sonra oyunun görselleri hazırlanır ve oyun başlar. Ses için ekrana bir kez tıklaman istenir.
+Tarayıcı sürümü varsayılan olarak YÜKSEK kalitede başlar; güçlü bir bilgisayarda AJANS → Ayarlar'dan
+ULTRA'ya alabilirsin. Kayıt tarayıcı sekmesi açık kaldığı sürece tutulur; kalıcı kayıt için masaüstü
+sürümünü kullan.
+
+Ekran görüntüleri: [`screenshots/`](screenshots/) · Tanıtım görseli promptu: [`KEY_ART_PROMPT.md`](KEY_ART_PROMPT.md)
+
 Kendi uzay ajansını kur, 12 alanlı fırlatma üssünü büyüt, roket tasarla,
 fırlat, yolculuğu yönet, gezegenlere in, koloni kur ve en sonunda
 **Jüpiter'de dev koloniyi** kur.
+
+## Sürüm 3 yenilikleri
+
+- **Tarayıcı sürümü:** Oyun pygbag ile WebAssembly'ye derlenip GitHub Pages'te yayınlanır (`.github/workflows/pages.yml`).
+- **Sinematik katman her yerde:** Hacimsel ışık huzmeleri, pus, toz zerreleri, fırça dokusu ve tamamlayıcı
+  renk uyumu artık bütün ekranlarda (hangar, AR-GE, ekip, görevler, depo, görev kontrol, ajans, yolculuk, üs,
+  NOVA odası). Tüm ekrana yumuşak parlama (bloom). Roket, güçlendirici ve asteroitlerde renkli kenar ışığı,
+  mor gölge kenarı ve fırça dokusu. Ayrıntılar: [`KEY_ART_PROMPT.md`](KEY_ART_PROMPT.md).
+- **Daha yüksek grafik:** Varsayılan kalite ULTRA; 3B kolonide kaliteye bağlı süper örnekleme; daha çok halka parçacığı.
+- **Pürüzsüz Dünya kıyıları:** Ana menüdeki Dünya'da basamaklı kıyı çizgileri giderildi.
+- **Düzeltme:** SİNEMATİK EFEKTLER ayarı artık yeniden açılışta hatırlanıyor.
 
 ## Sürüm 2 yenilikleri
 

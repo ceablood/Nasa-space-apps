@@ -24,7 +24,7 @@ import pygame
 from . import space3d as S3
 
 F32 = np.float32
-VERSION = 5
+VERSION = 6
 _MEM = {}
 
 
@@ -270,7 +270,12 @@ def _menu(w, h):
     oc = np.clip(samp(tex["spec"]), 0, 1)                # kıyıyı pürüzsüz yeniden keskinleştir
     ocean = tex["rgb"][tex["spec"] > 0.97].reshape(-1, 3).mean(0).astype(F32)
     land = np.clip((e - oc * ocean) / np.maximum(1 - oc, 0.08), 0, 255)
-    wv = np.clip((oc * oc * (3 - 2 * oc) - 0.35) / 0.3, 0, 1)
+    # pürüzsüz kıyı: maske önce bulanıklaştırılır (doku pikseli basamakları kaybolur), sonra ekran
+    # çözünürlüğünde ince gürültüyle doğal, kenar yumuşatılmış bir kıyı çizgisi çıkarılır
+    ocs = np.clip(samp(S3.blur(tex["spec"], 3)), 0, 1)[..., 0]
+    ocs = ocs + (_noise2(h, w, 29, 7, 3) - 0.5) * 0.16
+    wv = np.clip((ocs - 0.42) / 0.16, 0, 1)[..., None]
+    wv = wv * wv * (3 - 2 * wv)
     e = land * (1 - wv) + ocean * wv
     cl = samp(tex["cloud"])
     e = e * (1 - cl) + 245 * cl
@@ -398,8 +403,9 @@ def get(kind, size, convert=True):
     if s is not None:
         return s
     f = _dir() / f"{kind}_{w}x{h}_v{VERSION}.png"
+    web = os.sys.platform == "emscripten"            # tarayıcıda PNG önbelleği yok (zlib çökmesi)
     try:
-        if f.exists():
+        if not web and f.exists():
             s = pygame.image.load(str(f))
             if convert:
                 try:
@@ -419,6 +425,8 @@ def get(kind, size, convert=True):
         except pygame.error:
             pass
     try:
+        if web:
+            raise OSError("web")
         f.parent.mkdir(parents=True, exist_ok=True)
         pygame.image.save(s, str(f))
     except Exception:

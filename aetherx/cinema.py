@@ -220,3 +220,91 @@ def full_pass(surf, rect, t, sun=None, sun_col=(255, 200, 140), rays=0.5, mote_c
         god_rays(surf, sun, sun_col, rays, t=t, clip=rect)
     motes(surf, rect, t, n_motes, mote_col)
     surf.blit(mul, rect.topleft, special_flags=pygame.BLEND_MULT)
+
+
+# ===========================================================================
+# v3: "müze kalitesinde stilize anahtar görsel" katmanı — oyunun her yerine
+# ===========================================================================
+# Uzay arka planı paletlerine göre ışık / gölge uyumu (tamamlayıcı renkler):
+#   sun     : ekran dışı yıldızın konumu (huzmeler kenardan girer)
+#   key     : sıcak anahtar ışık rengi, mote: toz zerresi rengi
+#   warm    : merkezde sıcak ışık sızıntısı, cool: kenarlarda soğuk/mor AO
+PALETTE_LIGHT = {
+    "deep":   {"sun": (1520, -120), "key": (255, 196, 140), "mote": (255, 226, 190), "warm": (20, 12, 2),
+               "cool": (140, 140, 215), "haze": (24, 30, 60)},
+    "ember":  {"sun": (1480, -80), "key": (255, 168, 96), "mote": (255, 210, 160), "warm": (26, 12, 0),
+               "cool": (120, 160, 200), "haze": (50, 26, 18)},
+    "teal":   {"sun": (120, -110), "key": (180, 255, 236), "mote": (210, 255, 240), "warm": (10, 16, 12),
+               "cool": (190, 130, 200), "haze": (14, 40, 46)},
+    "violet": {"sun": (1500, -100), "key": (255, 180, 220), "mote": (255, 220, 240), "warm": (18, 8, 14),
+               "cool": (150, 170, 220), "haze": (36, 20, 54)},
+}
+
+
+def space_pass(surf, palette, t, strength=1.0):
+    """Ortak uzay arka planı için tam sinematik geçiş: huzmeler, toz, pus, fırça + renk uyumu.
+    Arka plan katmanına uygulanır; üstüne çizilen arayüz keskin kalır."""
+    if not enabled():
+        return
+    p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
+    lowq = i18n.PREFS.get("quality") == "standard"
+    full_pass(surf, surf.get_rect(), t, sun=p["sun"], sun_col=p["key"], rays=0.55 * strength,
+              mote_col=p["mote"], n_motes=0 if lowq else 38, haze_col=p["haze"], haze_k=0.8 * strength,
+              warm=p["warm"], cool=p["cool"])
+
+
+def bloom(surf, strength=0.85, threshold=128):
+    """Parlak alanlardan yumuşak ışık taşması (çok kademeli bulanık), toplamsal.
+    İnce yazılar küçültmede ortalanıp eşik altında kaldığı için keskin kalır."""
+    if not enabled() or strength <= 0.02 or i18n.PREFS.get("quality") == "standard":
+        return
+    w, h = surf.get_size()
+    try:
+        s1 = pygame.transform.smoothscale(surf, (max(1, w // 8), max(1, h // 8)))
+    except (ValueError, pygame.error):
+        return
+    s1.fill((threshold,) * 3, special_flags=pygame.BLEND_RGB_SUB)
+    s2 = pygame.transform.smoothscale(s1, (max(1, w // 24), max(1, h // 24)))       # geniş hale
+    s2 = pygame.transform.smoothscale(s2, s1.get_size())
+    s1.blit(s2, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+    s1 = pygame.transform.smoothscale(s1, (max(1, w // 4), max(1, h // 4)))
+    big = pygame.transform.smoothscale(s1, (w, h))
+    m = int(255 * min(1.0, strength))
+    big.fill((m, m, m), special_flags=pygame.BLEND_RGB_MULT)
+    surf.blit(big, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+
+
+def _edge(m, off):
+    e = m.copy()
+    e.erase(m.overlap_mask(m, off), (0, 0))
+    return e
+
+
+def stylize_sprite(img, rim=(255, 196, 150), shade=(96, 84, 150), light=(1, 1), brushk=True):
+    """Kenar ışığı (rim) + karşı kenarda doymuş mor AO + yüzeyde yönlü fırça dokusu + yumuşak siluet.
+    light: ışığın geldiği yönün tersi ofseti (1,1) = sol-üstten ışık."""
+    if not enabled() or img is None:
+        return img
+    try:
+        w, h = img.get_size()
+        if w < 4 or h < 4:
+            return img
+        out = img.copy()
+        if brushk and w * h < 900_000:
+            from .paint import _brush_texture
+            v = 236 + _brush_texture(h, w, 7) * 19
+            br = _rgba_surface(np.repeat(v[..., None], 3, 2))
+            out.blit(br, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        m = pygame.mask.from_surface(img, 60)
+        lx, ly = light
+        for k, a in ((1, 0.55), (2, 0.32), (4, 0.14)):          # kenar ışığı: ışığa bakan kenar
+            c = tuple(int(cc * a) for cc in rim)
+            e = _edge(m, (lx * k, ly * k)).to_surface(setcolor=(*c, 255), unsetcolor=(0, 0, 0, 255))
+            out.blit(e, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        for k, a in ((1, 0.55), (3, 0.3), (6, 0.15)):           # gölge kenarı: soğuk/mor AO
+            c = tuple(int(255 - (255 - cc) * a) for cc in shade)
+            e = _edge(m, (-lx * k, -ly * k)).to_surface(setcolor=(*c, 255), unsetcolor=(255, 255, 255, 255))
+            out.blit(e, (0, 0), special_flags=pygame.BLEND_RGB_MULT)
+        return out
+    except Exception:
+        return img

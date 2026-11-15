@@ -11,6 +11,7 @@ import pygame
 
 from . import Scene
 from .. import data as D
+from .. import cinema
 from ..config import C, H, MIN_PER_DAY, TOPBAR_H, W
 from ..fx import ParticleSystem, draw_glow, scale_color, clamp
 from ..i18n import tr
@@ -98,6 +99,9 @@ class NovaRoomScene(Scene):
             pygame.draw.rect(surf, (6, 8, 16), (x + 4, TOPBAR_H + 4, 132, H), border_radius=6)
             pygame.draw.line(surf, scale_color(C["cyan"], 0.08 + 0.05 * math.sin(t + i)), (x + 70, TOPBAR_H), (x + 70, H), 1)
         self.ps.draw(surf)
+        cinema.full_pass(surf, surf.get_rect(), t, sun=(340, 120), sun_col=(140, 230, 255), rays=0.7,
+                         mote_col=(170, 240, 255), n_motes=40, haze_col=(10, 30, 44), haze_k=0.4,
+                         warm=(0, 10, 14), cool=(170, 130, 210))
         self.draw_title(surf, sub=f"NOVA Seviye {g.lvl('nova')} · {D.BUILDING['nova']['levels'][max(1, g.lvl('nova'))]}")
         cx, cy = 340, 390
         lv = max(1, g.lvl("nova"))

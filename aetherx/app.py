@@ -12,6 +12,7 @@ import os
 import random
 import pygame
 
+from . import cinema
 from . import art
 from . import data as D
 from . import i18n
@@ -23,6 +24,8 @@ from .nova import NovaBrain, NovaBubble, draw_nova_face
 from .ui import (UI, Button, Toasts, draw_bar, draw_cursor, draw_icon, draw_text, draw_tooltip,
                  fmt_num, glass_panel, text_size, wrap_text, chip)
 
+
+WEB = sys.platform == "emscripten"      # pygbag ile tarayıcıda çalışıyor
 SCENES = {
     "intro": ("intro", "IntroScene"),
     "base": ("base", "BaseScene"),
@@ -119,6 +122,10 @@ class App:
         self.load_error = None
         self.loading = False
         if not self.load_steps:
+            return
+        if WEB:                              # tarayıcı (WebAssembly): iş parçacığı yok, adımlar kareler arasında
+            self.loading = True
+            self.load_t = 0.0
             return
         if os.environ.get("AETHERX_SYNC_LOAD") == "1":
             for _, fn in self.load_steps:
@@ -445,6 +452,7 @@ class App:
         surf = self.screen
         if self.scene:
             self.scene.draw(surf)
+            cinema.bloom(surf, (0.9 if i18n.PREFS.get("quality") in ("ultra", "max") else 0.6) * self.scene.bloom_k)
             if self.scene.show_topbar and self.game.s:
                 self.draw_topbar(surf)
         self.bubble.draw(surf)
@@ -457,6 +465,40 @@ class App:
         acc = self.game.color if self.game.s else C["cyan"]
         draw_cursor(surf, acc)
         pygame.display.flip()
+
+    async def run_async(self):
+        """Tarayıcı sürümü (pygbag): her karede kontrolü tarayıcıya geri ver."""
+        import asyncio
+        while self.running and getattr(self, "loading", False):
+            dt = self.clock.tick(30) / 1000.0
+            self.load_t += dt
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT:
+                    self.running = False
+            self.draw_loading()
+            await asyncio.sleep(0)
+            if self.load_done < len(self.load_steps):
+                try:
+                    self.load_steps[self.load_done][1]()
+                except Exception as ex:
+                    self.load_error = ex
+                self.load_done += 1
+            else:
+                self.loading = False
+        while self.running:
+            dt = self.clock.tick(FPS) / 1000.0
+            dt = min(dt, 1 / 20)
+            for e in pygame.event.get():
+                self.handle_event(e)
+            self.update(dt)
+            self.draw()
+            self.frame += 1
+            if self.game.s and self.frame % 1800 == 0:
+                try:
+                    self.game.save()
+                except Exception:
+                    pass
+            await asyncio.sleep(0)
 
     def run(self):
         while self.running and getattr(self, "loading", False):
