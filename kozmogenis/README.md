@@ -44,5 +44,6 @@ ctest --test-dir build --output-on-failure     # 32 test
 ## Dürüst durum
 
 * Unreal katmanı yazıldı ama **derlenmedi**; ilk derlemede düzeltme gerekebilir. Bu ortamda UE5 yoktur.
+* UE5 geçiş analizi (21 sistem, çakışmalar, eksikler, aşamalar): [docs/UE5_GECIS_PLANI.md](docs/UE5_GECIS_PLANI.md)
 * Sitedeki "Windows için indir" düğmesi, `.exe` gerçekten üretilene kadar **eklenmeyecek** (sahte düğme yok).
 * Şemadaki 200.000 satırlık hedefe ulaşılmadı: şu an ~3.700 anlamlı satır. Satır sayısı için dolgu kod yazılmaz; her ekleme test edilerek ilerler.
