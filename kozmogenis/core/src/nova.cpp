@@ -232,6 +232,13 @@ std::vector<std::string> Nova::warnings() const {
             w.push_back(id + ": Ay gecesi ~14 Dünya günü sürer; güneş paneliyle enerji kesintisi olur. Fisyon reaktörü önerilir.");
         if (c.average_morale() < 0.4) w.push_back(id + ": moral düşük (" + fmt("%.2f", c.average_morale()) + ").");
         if (c.housing() < pop) w.push_back(id + ": konut yetersiz (" + std::to_string(pop) + "/" + std::to_string(c.housing()) + ").");
+        for (const auto& col : c.colonists())
+            if (col.alive && col.dose_msv > env::kCareerLimitMsv * 0.8)
+                w.push_back(id + ": " + col.name + " radyasyon dozu " + fmt("%.0f", col.dose_msv) + " mSv (NASA kariyer sınırı 600 mSv)" +
+                            (col.dose_limit_reached ? " — çalışamaz." : "."));
+        const double sf = game_.environment().solar_factor(c.body(), game_.day());
+        if (sf < 0.9)
+            w.push_back(id + ": toz fırtınası güneş enerjisini %" + fmt("%.0f", (1 - sf) * 100) + " düşürüyor.");
     }
     return w;
 }

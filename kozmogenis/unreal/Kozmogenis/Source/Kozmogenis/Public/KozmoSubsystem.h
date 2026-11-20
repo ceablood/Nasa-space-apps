@@ -11,6 +11,7 @@ THIRD_PARTY_INCLUDES_START
 #include "kozmo/flight.hpp"
 #include "kozmo/game.hpp"
 #include "kozmo/nova.hpp"
+#include "kozmo/universe.hpp"
 THIRD_PARTY_INCLUDES_END
 
 #include "KozmoSubsystem.generated.h"
@@ -82,6 +83,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Kozmo|NOVA") TArray<FString> GetNovaWarnings() const;
 	/** Hafif/ağır roketin fiziksel fırlatma simülasyonu (atmosfer, kademeler, yörünge); özet metin döner. */
 	UFUNCTION(BlueprintCallable, Category = "Kozmo|Flight") FString SimulateAscent(bool bHeavy, float PayloadT);
+
+	/** Tohumlu prosedürel galaksiden en iyi koloni adaylarını metin olarak döner. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Universe") FString DescribeGalaxy(int64 Seed, int32 Systems);
 
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") bool SaveToSlot(const FString& SlotName);
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString LoadFromSlot(const FString& SlotName);

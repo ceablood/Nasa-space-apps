@@ -47,6 +47,8 @@ struct Colonist {
     double skill = 0.5;            // 0..1 meslek becerisi (oyun varsayımı)
     bool alive = true;
     double hours_worked = 0.0;
+    double dose_msv = 0.0;           // birikmiş radyasyon dozu
+    bool dose_limit_reached = false; // kariyer sınırı aşıldı: çalışma görevlerinden çekilir
 };
 
 enum class ModuleType { Habitat, Greenhouse, Electrolyzer, SolarArray, FissionReactor, Mine, Sabatier, Lab, Clinic };
@@ -83,6 +85,8 @@ struct TickReport {
 struct ResourceShortage { std::string colony, resource; };
 struct ColonistDied { std::string colony; std::string name; std::string cause; };
 struct ColonyMoraleLow { std::string colony; double morale; };
+struct RadiationLimitReached { std::string colony; std::string name; double dose_msv; };
+struct ModuleDamaged { std::string colony; std::string module; double condition; };
 
 enum class SimDetail { Full, Coarse };   // ölçeklenebilir simülasyon: odaktaki koloni Full
 
@@ -115,6 +119,15 @@ public:
     // bir kaynağı çek (gemiye yükleme / laboratuvar araştırma puanı toplama): en fazla mevcut kadar
     double take(const std::string& k, double t);
 
+    // çevre (her tick öncesi oyun tarafından ayarlanır): güneş çarpanı (toz fırtınası), korumasız dış doz
+    void set_environment(double solar_factor, double outside_dose_msv_per_day) {
+        env_solar_ = solar_factor;
+        env_dose_ = outside_dose_msv_per_day;
+    }
+    void add_dose(int colonist_id, double msv);
+    // rastgele bir modüle hasar (mikrometeoroid vb.)
+    void damage_random_module(double amount, Rng& rng, EventBus* bus);
+
 private:
     void tick_npc_full(Colonist& c, double dt, double local_hour, Rng& rng, bool food_ok);
     void tick_npc_coarse(Colonist& c, double dt, bool food_ok);
@@ -127,6 +140,7 @@ private:
     std::vector<Module> modules_;
     std::vector<Colonist> colonists_;
     std::map<Job, double> labor_ema_;   // iş gücü (personel yuvası eşdeğeri), 24 saatlik kayan ortalama
+    double env_solar_ = 1.0, env_dose_ = 0.0;
     int next_id_ = 1;
 };
 
