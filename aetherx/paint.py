@@ -407,7 +407,12 @@ def get(kind, size, convert=True):
     try:
         if not web and f.exists():
             s = pygame.image.load(str(f))
-            if convert:
+            if pygame.display.get_surface() is not None:     # ekran formatına: hızlı karıştırma
+                try:
+                    s = s.convert()
+                except pygame.error:
+                    pass
+            elif convert:
                 try:
                     s = s.convert()
                 except pygame.error:

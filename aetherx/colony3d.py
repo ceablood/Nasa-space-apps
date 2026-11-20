@@ -278,8 +278,6 @@ def building_mesh(key, cx, cz, y, w, d, planet, seed=0):
 
 def colonist_mesh(x, y, z, heading, col, phase, state, carry):
     """Basit insan modeli; durum makinesine göre bacak/kol salınımı ve taşıma."""
-    m = Mesh()
-    s = 0.34
     swing = 0.0
     arm = 0.0
     if state in ("walk", "carry"):
@@ -289,6 +287,19 @@ def colonist_mesh(x, y, z, heading, col, phase, state, carry):
         arm = -1.1 + math.sin(phase * 7) * 0.9
     if carry:
         arm = -1.3
+    parts = _colonist_local(swing, arm, col, carry)
+    m = Mesh()
+    ca, sa = math.cos(heading), math.sin(heading)
+    for pts, cc, inner, two, emit in parts.faces:
+        def tf(p):
+            return _v(x + p[0] * ca + p[2] * sa, y + p[1], z - p[0] * sa + p[2] * ca)
+        m.faces.append(([tf(p) for p in pts], cc, tf(inner), two, emit))
+    return m
+
+
+def _colonist_local(swing, arm, col, carry):
+    """Kolonist modeli yerel uzayda (orijinde, yönsüz)."""
+    s = 0.34
     suit = (236, 238, 244)
 
     def limb(ox, oy, oz, w, h, d, ang, c):
@@ -315,12 +326,98 @@ def colonist_mesh(x, y, z, heading, col, phase, state, carry):
     parts.extend(limb(0.2 * s * 3, 0.36 * s * 3, 0, 0.08 * s * 3, 0.3 * s * 3, 0.08 * s * 3, arm if carry else -arm, suit))
     if carry:
         parts.box(0, 0.26 * s * 3, 0.62 * s * 3, 0.3 * s * 3, 0.22 * s * 3, 0.22 * s * 3, (160, 112, 66), side_col=(140, 96, 56))
+    return parts
+
+
+# =========================================================================== paketleme (optimizasyon)
+_PACK = {}
+
+
+def pack_faces(faces):
+    """Yüz listesini numpy dizilerine çevirir ve normal/merkezleri bir kez hesaplar.
+    Döngüsüz tek dönüşüm: eskiden her karede her yüz için ayrı ayrı atama yapılıyordu."""
+    nv = 4
+    n_f = len(faces)
+    if n_f == 0:
+        return None
+    padded, cols, inner, two, emit, cnt = [], [], [], [], [], []
+    for pts, col, inn, tw, em in faces:
+        k = len(pts)
+        cnt.append(k)
+        padded.append(list(pts) + [pts[-1]] * (nv - k) if k < nv else pts)
+        cols.append(col)
+        inner.append(inn)
+        two.append(tw)
+        emit.append(em)
+    P = np.array(padded, F32)
+    pk = {"P": P, "cols": np.array(cols, F32), "inner": np.array(inner, F32), "two": np.array(two, bool),
+          "emit": np.array(emit, F32), "cnt": np.array(cnt, np.int32)}
+    _normals(pk)
+    return pk
+
+
+def _normals(pk):
+    P = pk["P"]
+    cen = P.mean(1)
+    n = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
+    ln = np.linalg.norm(n, axis=1)
+    n = n / np.maximum(ln, 1e-9)[:, None]
+    n[((cen - pk["inner"]) * n).sum(1) < 0] *= -1
+    pk["cen"], pk["n"], pk["ln"] = cen, n, ln
+
+
+def pack_cached(faces):
+    """Durağan yüz listeleri (arazi, binalar) için paket önbelleği: liste kimliğiyle."""
+    hit = _PACK.get(id(faces))
+    if hit is not None and hit[0] is faces:
+        return hit[1]
+    pk = pack_faces(faces)
+    if len(_PACK) > 24:
+        _PACK.clear()
+    _PACK[id(faces)] = (faces, pk)
+    return pk
+
+
+def concat_packs(packs):
+    packs = [p for p in packs if p is not None]
+    if not packs:
+        return None
+    if len(packs) == 1:
+        return packs[0]
+    return {k: np.concatenate([p[k] for p in packs]) for k in packs[0]}
+
+
+_COLONIST = {}
+
+
+def colonist_packed(x, y, z, heading, col, phase, state, carry):
+    """colonist_mesh ile aynı model; poz (uzuv açıları ~0,04 rad adımla) başına bir kez kurulur,
+    sonra yalnızca vektörel döndürme + öteleme yapılır."""
+    swing = arm = 0.0
+    if state in ("walk", "carry"):
+        swing = math.sin(phase * 9) * 0.5
+        arm = -swing
+    elif state == "work":
+        arm = -1.1 + math.sin(phase * 7) * 0.9
+    if carry:
+        arm = -1.3
+    q = 0.04
+    key = (tuple(col), round(swing / q), round(arm / q), bool(carry))
+    loc = _COLONIST.get(key)
+    if loc is None:
+        loc = pack_faces(_colonist_local(round(swing / q) * q, round(arm / q) * q, col, carry).faces)
+        if len(_COLONIST) > 800:
+            _COLONIST.clear()
+        _COLONIST[key] = loc
     ca, sa = math.cos(heading), math.sin(heading)
-    for pts, cc, inner, two, emit in parts.faces:
-        def tf(p):
-            return _v(x + p[0] * ca + p[2] * sa, y + p[1], z - p[0] * sa + p[2] * ca)
-        m.faces.append(([tf(p) for p in pts], cc, tf(inner), two, emit))
-    return m
+    R = np.array(((ca, 0, -sa), (0, 1, 0), (sa, 0, ca)), F32)      # satır vektörü @ R
+    t = np.array((x, y, z), F32)
+    out = dict(loc)
+    out["P"] = loc["P"] @ R + t
+    out["inner"] = loc["inner"] @ R + t
+    out["cen"] = loc["cen"] @ R + t
+    out["n"] = loc["n"] @ R
+    return out
 
 
 # =========================================================================== kamera
@@ -837,35 +934,23 @@ class Colony3D:
         return x, y, z, cx + fpx * x / np.maximum(z, 1e-3), cy - fpx * y / np.maximum(z, 1e-3)
 
     def shade_and_draw(self, surf, faces, eye, f, r, u, fpx, cx, cy, L, sun_col, sky, gnd, day, fog_col, alpha=None,
-                       cull=True, objects=False):
-        if not faces:
-            return
+                       cull=True, objects=False, cached=False):
+        """faces: yüz listesi ya da pack_faces/concat_packs çıktısı; cached=True durağan listeyi önbellekler."""
         nv = 4
-        P = np.zeros((len(faces), nv, 3), F32)
-        cols = np.zeros((len(faces), 3), F32)
-        inner = np.zeros((len(faces), 3), F32)
-        two = np.zeros(len(faces), bool)
-        emit = np.zeros(len(faces), F32)
-        cnt = np.zeros(len(faces), np.int32)
-        for i, (pts, col, inn, tw, em) in enumerate(faces):
-            k = len(pts)
-            cnt[i] = k
-            P[i, :k] = pts
-            if k < nv:
-                P[i, k:] = pts[-1]
-            cols[i] = col
-            inner[i] = inn
-            two[i] = tw
-            emit[i] = em
-        cen = P.mean(1)
-        n = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
-        ln = np.linalg.norm(n, axis=1, keepdims=True)
-        n = n / np.maximum(ln, 1e-9)
-        flip = ((cen - inner) * n).sum(1) < 0
-        n[flip] *= -1
+        if isinstance(faces, dict):
+            pk = faces
+        elif cached:
+            pk = pack_cached(faces)
+        else:
+            pk = pack_faces(faces)
+        if pk is None:
+            return
+        P, cols, two, emit, cnt = pk["P"], pk["cols"], pk["two"], pk["emit"], pk["cnt"]
+        cen, ln = pk["cen"], pk["ln"][:, None]
+        n = pk["n"].copy()
         view = cen - eye
         facing = (view * n).sum(1) < 0
-        keep = (facing | two | ~cull) & (ln[:, 0] > 1e-8)
+        keep = (facing | two | (not cull)) & (ln[:, 0] > 1e-8)          # not cull: bool (~True = -2 olurdu)
         # kamera arkası
         x, y, z, sx, sy = self.project(P.reshape(-1, 3), eye, f, r, u, fpx, cx, cy)
         z = z.reshape(-1, nv)
@@ -914,19 +999,22 @@ class Colony3D:
         ink = cine and objects
         lw = max(1, int(round(fpx / 560)))
         order = np.argsort(-z.mean(1))
-        for i in order:
-            if not keep[i]:
-                continue
-            k = cnt[i]
-            pts = [(float(sx[i, j]), float(sy[i, j])) for j in range(k)]
-            col = (int(rgb[i, 0]), int(rgb[i, 1]), int(rgb[i, 2]))
-            if alpha is not None:
-                col = col + (int(alpha),)
-            pygame.draw.polygon(surf, col, pts)
-            if ink and not two[i]:
+        order = order[keep[order]]
+        # numpy -> Python listesi tek seferde (öğe öğe float() çağrısı yerine)
+        SX, SY, RGB = sx[order].tolist(), sy[order].tolist(), rgb[order].tolist()
+        CNT, TWO = cnt[order].tolist(), two[order].tolist()
+        if ink:
+            ICS = (rgb[order] * np.array((0.38, 0.34, 0.42)) + np.array((8, 4, 16))).astype(np.int32).tolist()
+        poly, lines = pygame.draw.polygon, pygame.draw.lines
+        a_ = int(alpha) if alpha is not None else None
+        for j in range(len(SX)):
+            k = CNT[j]
+            pts = list(zip(SX[j][:k], SY[j][:k]))
+            col = RGB[j]
+            poly(surf, col if a_ is None else (col[0], col[1], col[2], a_), pts)
+            if ink and not TWO[j]:
                 # Arcane tarzı mürekkep çizgisi: koyu, hafif mor kontur (kenar yumuşatma süper örneklemeden gelir)
-                ic = (int(rgb[i, 0] * 0.38 + 8), int(rgb[i, 1] * 0.34 + 4), int(rgb[i, 2] * 0.42 + 16))
-                pygame.draw.lines(surf, ic, True, pts, lw)
+                lines(surf, ICS[j], True, pts, lw)
 
     def draw(self, surf, rect, bg=None):
         if self.heights is None:
@@ -962,7 +1050,8 @@ class Colony3D:
         fog = tuple(int(c * (0.4 + 0.6 * day)) for c in pal[2])
         terrain, objects, lights, construct = self.static_mesh()
         # 1) arazi
-        self.shade_and_draw(v, terrain.faces, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, cull=False)
+        self.shade_and_draw(v, terrain.faces, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, cull=False,
+                            cached=True)
         # 2) gölgeler (güneş yönünde izdüşüm)
         lay = self._layer
         sh_a = int(110 * day)
@@ -1005,7 +1094,7 @@ class Colony3D:
                 pts = [(float(a1), float(b1)) for a1, b1 in zip(sx, sy)]
                 pygame.draw.lines(v, C["gold"], True, pts, 3)
         # 4) nesneler: binalar + inşaatlar + kolonistler (birlikte derinlik sıralı)
-        faces = list(objects.faces)
+        faces = []                            # her karede değişen yüzler (inşaatlar); binalar önbellekli paketten
         scaffolds = []
         for e, bx, bz, fw, fd in construct:
             p = e.get("prog", 0.0)
@@ -1019,13 +1108,16 @@ class Colony3D:
                 lim = e["pad"] + (top - e["pad"]) * (p - 0.45) / 0.55
                 faces.extend(ff for ff in mesh.faces if min(pp[1] for pp in ff[0]) <= lim)
             scaffolds.append((e, bx, bz, fw, fd, p))
+        packs = [pack_cached(objects.faces), pack_faces(faces)]
         for a in self.agents:
             a.screen = None
             if a.hidden:
                 continue
             gy = self.height(a.x, a.z)
-            faces.extend(colonist_mesh(a.x, gy, a.z, a.heading, a.col, a.phase, a.state, a.carry).faces)
-        self.shade_and_draw(v, faces, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, objects=True)
+            packs.append(colonist_packed(a.x, gy, a.z, a.heading, a.col, a.phase, a.state, a.carry))
+        allp = concat_packs(packs)
+        if allp is not None:
+            self.shade_and_draw(v, allp, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, objects=True)
         # 5) iskeleler, hayaletler ve yerleştirme önizlemesi (yarı saydam)
         need_layer = bool(scaffolds) or bool(construct) or bool(self.place)
         if need_layer:

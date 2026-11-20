@@ -6,6 +6,7 @@ parçacık sistemi (alev, duman, kıvılcım, plazma), ekran sarsıntısı, yumu
 geçişler ve ışıma (glow) yardımcıları.
 """
 import math
+import sys
 import random
 
 import pygame
@@ -330,16 +331,26 @@ class Nebula:
     def update(self, dt):
         self.t += dt
 
-    def draw(self, surf, alpha=1.0, drift=(0, 0)):
+    def params(self, alpha=1.0, drift=(0, 0)):
+        """Bu karenin tamsayı konum/alfa değerleri. Bulutsu çok yavaş hareket ettiğinden bunlar
+        çoğu karede aynı kalır; arka plan bu anahtarla önbelleklenir (alfa 3'lük adımlarla, fark edilmez)."""
         t = self.t
         ka = 0.55 + 0.25 * math.sin(t * 0.35)
         kb = 0.45 + 0.25 * math.sin(t * 0.27 + 1.7)
-        ox = -80 + math.sin(t * 0.05) * 60 + drift[0]
-        oy = -60 + math.cos(t * 0.04) * 40 + drift[1]
-        self.a.set_alpha(int(255 * ka * alpha))
-        surf.blit(self.a, (ox, oy))
-        self.b.set_alpha(int(255 * kb * alpha))
-        surf.blit(self.b, (-80 - math.sin(t * 0.03) * 70 - drift[0] * 0.6, -60 + math.sin(t * 0.06) * 35))
+        return (int(-80 + math.sin(t * 0.05) * 60 + drift[0]), int(-60 + math.cos(t * 0.04) * 40 + drift[1]),
+                int(255 * ka * alpha) // 3 * 3,
+                int(-80 - math.sin(t * 0.03) * 70 - drift[0] * 0.6), int(-60 + math.sin(t * 0.06) * 35),
+                int(255 * kb * alpha) // 3 * 3)
+
+    def draw_params(self, surf, p):
+        ax, ay, aa, bx, by, ba = p
+        self.a.set_alpha(aa)
+        surf.blit(self.a, (ax, ay))
+        self.b.set_alpha(ba)
+        surf.blit(self.b, (bx, by))
+
+    def draw(self, surf, alpha=1.0, drift=(0, 0)):
+        self.draw_params(surf, self.params(alpha, drift))
 
 
 # ===========================================================================
@@ -454,6 +465,10 @@ class SpaceBackground:
         self.tint = tint
         self.pulse = 0.0
         self.palette = palette
+        self._comp = None             # gradyan + bulutsu birleşik katmanı (yalnızca değişince yeniden çizilir)
+        self._comp_key = None
+        self._comp_t = 0.0
+        self._tint_s = None
 
     def update(self, dt, vx=0.0, vy=0.0):
         self.nebula.update(dt)
@@ -462,21 +477,45 @@ class SpaceBackground:
         self.pulse += dt
 
     def draw(self, surf, nebula_alpha=1.0, streak=0.0, drift=(0, 0)):
-        surf.blit(self.grad, (0, 0))
-        self.nebula.draw(surf, nebula_alpha, drift)
+        from . import cinema
+        strength = 0.6 if streak > 0 else 1.0
+        layers = cinema.space_layers(self.palette, self.vig, strength)     # (pus+sıcak ışık, fırça×vinyet) ya da None
+        p = (self.nebula.params(nebula_alpha, drift), id(layers[0]) if layers else 0)
+        if WEB and self._comp is not None and self._comp_key[1] == p[1] and self.pulse - self._comp_t < 0.4:
+            p = self._comp_key           # tarayıcıda bulutsu en fazla 0,4 sn'de bir yenilenir (hareketi saniyede ~3 px)
+        if self._comp is None or self._comp_key != p:
+            self._comp_t = self.pulse
+            # gradyan + bulutsu (+ sinematik pus) birleşik katmanı: yalnızca görünür bir değişiklikte yeniden çizilir
+            if self._comp is None:
+                self._comp = pygame.Surface((W, H))
+                try:
+                    self._comp = self._comp.convert()
+                except pygame.error:
+                    pass
+            self._comp.blit(self.grad, (0, 0))
+            self.nebula.draw_params(self._comp, p[0])
+            if layers:
+                self._comp.blit(layers[0], (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+            self._comp_key = p
+        surf.blit(self._comp, (0, 0))
         self.stars.draw(surf, 1.0, streak)
         if streak <= 0:
             self.shooting.draw(surf)
         if self.tint:
-            ov = pygame.Surface((W, H), pygame.SRCALPHA)
-            ov.fill(self.tint)
-            surf.blit(ov, (0, 0))
-        surf.blit(self.vig, (0, 0))
-        try:
-            from . import cinema
-            cinema.space_pass(surf, self.palette, self.pulse, 0.6 if streak > 0 else 1.0)
-        except Exception:
-            pass
+            if self._tint_s is None:
+                if WEB:
+                    self._tint_s = pygame.Surface((W, H))
+                    self._tint_s.fill(self.tint[:3])
+                    self._tint_s.set_alpha(self.tint[3] if len(self.tint) > 3 else 255)
+                else:
+                    self._tint_s = pygame.Surface((W, H), pygame.SRCALPHA)
+                    self._tint_s.fill(self.tint)
+            surf.blit(self._tint_s, (0, 0))
+        if layers:
+            cinema.space_dynamic(surf, self.palette, self.pulse, strength)    # huzmeler + toz zerreleri
+            surf.blit(layers[1], (0, 0), special_flags=pygame.BLEND_RGB_MULT)  # fırça dokusu × vinyet × soğuk gölge
+        else:
+            surf.blit(self.vig, (0, 0))
 
 
 # ===========================================================================
@@ -761,6 +800,9 @@ class Transition:
 # TAM EKRAN RENK KATMANI (önbellekli)
 # ===========================================================================
 _OVERLAY = {}
+# tarayıcıda (WebAssembly, SIMD yok) piksel başı alfa tam ekran ~19 ms; opak yüzey + yüzey alfası ~2 ms.
+# Masaüstünde (SIMD) tam tersi: piksel başı alfa daha hızlı. Yol platforma göre seçilir.
+WEB = sys.platform == "emscripten"
 
 
 def overlay(surf, rgba, size=None):
@@ -768,13 +810,24 @@ def overlay(surf, rgba, size=None):
     size = size or surf.get_size()
     ov = _OVERLAY.get(size)
     if ov is None:
-        ov = pygame.Surface(size, pygame.SRCALPHA)
+        if WEB:
+            ov = pygame.Surface(size)
+            try:
+                ov = ov.convert()
+            except pygame.error:
+                pass
+        else:
+            ov = pygame.Surface(size, pygame.SRCALPHA)
         _OVERLAY[size] = ov
     r, g, b, a = rgba
     a = int(max(0, min(255, a)))
     if a <= 0:
         return
-    ov.fill((int(r), int(g), int(b), a))
+    if WEB:
+        ov.fill((int(r), int(g), int(b)))
+        ov.set_alpha(a)
+    else:
+        ov.fill((int(r), int(g), int(b), a))
     surf.blit(ov, (0, 0))
 
 
