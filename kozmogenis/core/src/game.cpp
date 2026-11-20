@@ -201,7 +201,10 @@ void Game::arrive(Mission& m) {
             if (!st) KOZMO_LOG(Warn, "colony", "Modül kurulamadı: " + st.error().message);
         }
         for (const auto& [k, q] : m.payload.cargo) c->add_resource(k, q);
-        for (const auto& [name, job] : m.payload.crew) c->add_colonist(name, job, 0.5, rng_);
+        for (const auto& [name, job] : m.payload.crew) {
+            const int cid_new = c->add_colonist(name, job, 0.5, rng_);
+            c->add_dose(cid_new, env::cruise_dose_msv_per_day() * (m.arrive_day - m.depart_day));   // yolculuk dozu
+        }
     }
     bus_.publish(MissionArrived{m.id, m.target});
 }
@@ -245,7 +248,19 @@ void Game::advance(double days) {
             if (m.state == MissionState::InTransit && day_ >= m.arrive_day) arrive(m);
         // koloniler: odak tam, diğerleri 6 saatte bir kaba (ölçeklenebilir simülasyon)
         const long long hour_index = static_cast<long long>(std::floor(day_ * 24.0 + 1e-6));
+        // çevre olayları: günde bir değerlendirilir
+        if (hour_index % 24 == 0) {
+            std::vector<std::string> bodies;
+            for (const auto& [id, c] : colonies_)
+                if (std::find(bodies.begin(), bodies.end(), c.body()) == bodies.end()) bodies.push_back(c.body());
+            env_.advance(day_ - 1.0, day_, bodies, rng_, &bus_);
+            for (auto& [id, c] : colonies_)
+                if (env_.impact_pending(c.body())) c.damage_random_module(rng_.uniform(0.15, 0.4), rng_, &bus_);
+        }
         for (auto& [id, c] : colonies_) {
+            auto base = env::surface_dose_msv_per_day(c.body());
+            c.set_environment(env_.solar_factor(c.body(), day_),
+                              (base ? base.value() : env::cruise_dose_msv_per_day()) + env_.extra_dose(c.body(), day_));
             if (id == focus_) {
                 c.tick(step_h, local_hour(c.body()), rng_, &bus_, colony::SimDetail::Full);
             } else if (hour_index % 6 == 0) {
@@ -271,6 +286,7 @@ std::string Game::save() const {
     v.set("focus", focus_);
     v.set("next_mission", next_mission_);
     v.set("research", tree_.to_json());
+    v.set("environment", env_.to_json());
     json::Value cols = json::Value::array();
     for (const auto& [id, c] : colonies_) cols.push(c.to_json());
     v.set("colonies", cols);
@@ -335,6 +351,10 @@ Status Game::load(const std::string& text) {
     g.next_mission_ = v["next_mission"].as_int(1);
     auto st = g.tree_.from_json(v["research"]);
     if (!st) return st;
+    if (v.has("environment")) {
+        auto es = g.env_.from_json(v["environment"]);
+        if (!es) return es;
+    }
     for (const auto& cj : v["colonies"].as_array()) {
         auto c = colony::Colony::from_json(cj);
         if (!c) return c.error();

@@ -15,7 +15,7 @@ Tarayıcıda hemen oynanan sürüm (AETHER-X, Python/pygame) ayrıdır: https://
 ```bash
 cmake -S kozmogenis -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure     # 49 test
+ctest --test-dir build --output-on-failure     # 59 test
 ./build/kozmo_cli --demo                        # uçtan uca otomatik oyun
 ./build/kozmo_cli                               # terminalde etkileşimli oyun ("yardim")
 ```
@@ -33,6 +33,8 @@ ctest --test-dir build --output-on-failure     # 49 test
 | `gare` | Çalışma zamanı: modül kaydı/bağımlılık, sabit-değişken adım, zaman hızlandırma, olay kuyruğu, servisler, ayarlar, tanılama | — |
 | `flight` | Fırlatma fiziği: RK4, USSA 1976 atmosfer, sürüklenme, yerçekimi dönüşü, kademe, motor kısma, yörüngeye giriş | Fizik + mühendislik yaklaşımı |
 | `nova` | NOVA çevrimdışı çekirdeği: Türkçe komut, kaynaklı bilgi, tavsiye, onay zorunlu eylemler, isteğe bağlı çevrimiçi bağlayıcı | — |
+| `universe` | Tohumlu prosedürel galaksi: yıldız fiziği, yaşanabilir bölge, gezegen türleri, atmosfer tutma, koloni puanı, A* rota | Astrofizik bağıntılar + oyun varsayımı (dağılımlar) |
+| `environment` | Uzay havası ve radyasyon: ölçülmüş doz oranları, NASA kariyer sınırı, güneş fırtınası, Mars toz fırtınası, mikrometeoroid | Ölçümler (Chang'e-4, Curiosity RAD, MSL) + oyun varsayımı (sıklık) |
 | `research` | Önkoşullu teknoloji ağacı; **kurgusal teknoloji açıkça işaretli** (He-3 füzyon) | Oyun varsayımı |
 | `json` + `game` | Görev akışı, fırlatma penceresi zorunluluğu, varışta koloni kurma, yerinde inşa, ticaret, tam kayıt/yükleme (deterministik tekrar) | — |
 

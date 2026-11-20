@@ -242,6 +242,21 @@ FString UKozmoSubsystem::SimulateAscent(bool bHeavy, float PayloadT)
 	return S;
 }
 
+FString UKozmoSubsystem::DescribeGalaxy(int64 Seed, int32 Systems)
+{
+	const kozmo::universe::Galaxy G(static_cast<std::uint64_t>(Seed), FMath::Clamp(Systems, 1, 20000));
+	FString S = FString::Printf(TEXT("Galaksi (tohum %lld): %d yıldız sistemi\n"), Seed, G.systems().size());
+	for (const auto& [Id, Pi] : G.best_colony_candidates(5))
+	{
+		const auto* Sys = G.find(Id);
+		const auto& P = Sys->planets[Pi];
+		S += FString::Printf(TEXT("%s (%s) -> %s: %s, %.0f K, %.2f g, puan %.2f\n"), *KozmoStr(Sys->name),
+			*KozmoStr(kozmo::universe::to_string(Sys->star.spectral)), *KozmoStr(P.name), *KozmoStr(kozmo::universe::to_string(P.type)),
+			P.equilibrium_temp_k, P.surface_gravity_g, P.colony_score);
+	}
+	return S;
+}
+
 FString UKozmoSubsystem::SlotPath(const FString& SlotName) const
 {
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Kozmo"), SlotName + TEXT(".json"));

@@ -10,6 +10,7 @@
 #include "kozmo/colony.hpp"
 #include "kozmo/core.hpp"
 #include "kozmo/economy.hpp"
+#include "kozmo/environment.hpp"
 #include "kozmo/json.hpp"
 #include "kozmo/propulsion.hpp"
 #include "kozmo/research.hpp"
@@ -68,6 +69,7 @@ public:
     econ::Market* market(const std::string& id);
     const std::map<std::string, econ::Market>& markets() const { return markets_; }
     void set_focus(const std::string& colony_id) { focus_ = colony_id; }
+    const env::Scheduler& environment() const { return env_; }
 
     // --- astronomi (oyun saatine göre)
     double longitude(const std::string& body) const;
@@ -99,6 +101,7 @@ private:
     Rng rng_;
     EventBus bus_;
     research::Tree tree_;
+    env::Scheduler env_;
     std::map<std::string, econ::Market> markets_;
     std::map<std::string, colony::Colony> colonies_;
     std::vector<Mission> missions_;

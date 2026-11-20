@@ -1,5 +1,7 @@
 ﻿#include "kozmo/colony.hpp"
 
+#include "kozmo/environment.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -135,7 +137,8 @@ Activity Colony::choose_activity(const Colonist& c, double h) const {
     };
     consider(Activity::Sleep, c.needs.fatigue * 1.2 + (night ? 0.55 : 0.0));
     if (food) consider(Activity::Eat, c.needs.hunger * 1.4);
-    consider(Activity::Work, (day_shift ? 0.75 : 0.15) * (1.0 - c.needs.fatigue) * (0.6 + 0.4 * c.needs.health));
+    if (!c.dose_limit_reached)
+        consider(Activity::Work, (day_shift ? 0.75 : 0.15) * (1.0 - c.needs.fatigue) * (0.6 + 0.4 * c.needs.health));
     consider(Activity::Socialize, (1.0 - c.needs.morale) * 0.8 + (!day_shift && !night ? 0.2 : 0.0));
     if (clinic) consider(Activity::Treatment, (1.0 - c.needs.health) * 1.6);
     return a;
@@ -204,8 +207,12 @@ void Colony::tick_npc_coarse(Colonist& c, double dt, bool food_ok) {
         n.morale = std::max(0.0, n.morale - 0.15 * d);
     }
     n.fatigue += (0.3 - n.fatigue) * std::min(1.0, d * 2.0);
-    c.hours_worked += 8.0 * d;
-    c.activity = Activity::Work;
+    if (!c.dose_limit_reached) {
+        c.hours_worked += 8.0 * d;
+        c.activity = Activity::Work;
+    } else {
+        c.activity = Activity::Idle;
+    }
     if (n.hunger > 0.85) n.health = std::max(0.0, n.health - 0.1 * d);
 }
 
@@ -213,7 +220,7 @@ TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, S
     TickReport rep;
     if (dt <= 0) return rep;
     const double d = dt / 24.0;
-    const double flux_ratio = solar_flux_ / kSolarConstant;
+    const double flux_ratio = solar_flux_ / kSolarConstant * env_solar_;     // toz fırtınası güneşi keser
     // güneş: yerel gündüz eğrisi (günlük ortalaması 1 olacak şekilde pi ile ölçekli yarım sinüs)
     const double sun = std::max(0.0, std::sin(3.14159265358979 * (local_hour - 6.0) / 12.0)) * 3.14159265358979;
 
@@ -227,7 +234,7 @@ TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, S
         if (detail == SimDetail::Full) {
             if (c.activity == Activity::Work) instant[c.job] += 3.0 * sf;
         } else {
-            instant[c.job] += sf;
+            if (!c.dose_limit_reached) instant[c.job] += sf;
         }
     }
     const bool first = labor_ema_.empty();
@@ -335,6 +342,15 @@ TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, S
         if (!o2_ok) c.needs.health -= 0.25 * dt;                 // oksijensizlik saatler içinde öldürür
         if (!water_ok) c.needs.health -= 0.012 * dt;             // susuzluk ~3-4 gün
         if (crowd > 1.0) c.needs.morale = std::max(0.0, c.needs.morale - 0.01 * (crowd - 1.0) * dt);
+        if (env_dose_ > 0) {
+            const bool sheltered = housing() > 0;
+            c.dose_msv += env_dose_ * (sheltered ? env::kHabitatShielding : 1.0) * d;
+            if (!c.dose_limit_reached && c.dose_msv >= env::kCareerLimitMsv) {
+                c.dose_limit_reached = true;
+                KOZMO_LOG(Warn, "colony", id_ + ": " + c.name + " radyasyon kariyer sınırını aştı");
+                if (bus) bus->publish(RadiationLimitReached{id_, c.name, c.dose_msv});
+            }
+        }
         if (ratio < 0.5) c.needs.morale = std::max(0.0, c.needs.morale - 0.01 * dt);
         if (c.needs.health <= 0.0) {
             c.alive = false;
@@ -406,6 +422,8 @@ json::Value Colony::to_json() const {
         o.set("fatigue", c.needs.fatigue);
         o.set("morale", c.needs.morale);
         o.set("health", c.needs.health);
+        o.set("dose", c.dose_msv);
+        o.set("dose_limit", c.dose_limit_reached);
         cols.push(o);
     }
     v.set("colonists", cols);
@@ -444,6 +462,8 @@ Result<Colony> Colony::from_json(const json::Value& v) {
         k.needs.fatigue = o["fatigue"].as_number();
         k.needs.morale = o["morale"].as_number(0.7);
         k.needs.health = o["health"].as_number(1.0);
+        k.dose_msv = o["dose"].as_number();
+        k.dose_limit_reached = o["dose_limit"].as_bool(false);
         c.colonists_.push_back(k);
     }
     for (const auto& [j, q] : v["labor"].as_object()) {
@@ -452,6 +472,26 @@ Result<Colony> Colony::from_json(const json::Value& v) {
         c.labor_ema_[static_cast<Job>(jj)] = q.as_number();
     }
     return c;
+}
+
+}  // namespace kozmo::colony
+
+namespace kozmo::colony {
+
+void Colony::add_dose(int id, double msv) {
+    for (auto& c : colonists_)
+        if (c.id == id) {
+            c.dose_msv += msv;
+            if (c.dose_msv >= env::kCareerLimitMsv) c.dose_limit_reached = true;
+        }
+}
+
+void Colony::damage_random_module(double amount, Rng& rng, EventBus* bus) {
+    if (modules_.empty()) return;
+    Module& m = modules_[static_cast<std::size_t>(rng.range(0, static_cast<int>(modules_.size()) - 1))];
+    m.condition = std::max(0.2, m.condition - amount);
+    KOZMO_LOG(Warn, "colony", id_ + ": " + module_name(m.type) + " hasar aldı");
+    if (bus) bus->publish(ModuleDamaged{id_, module_name(m.type), m.condition});
 }
 
 }  // namespace kozmo::colony

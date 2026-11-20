@@ -14,4 +14,6 @@ THIRD_PARTY_INCLUDES_START
 #include "../../../../../core/src/gare.cpp"
 #include "../../../../../core/src/flight.cpp"
 #include "../../../../../core/src/nova.cpp"
+#include "../../../../../core/src/universe.cpp"
+#include "../../../../../core/src/environment.cpp"
 THIRD_PARTY_INCLUDES_END

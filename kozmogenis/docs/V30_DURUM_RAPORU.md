@@ -14,9 +14,11 @@ PROJE: KOZMOGENİS  ·  SÜRÜM: V30  ·  Tarih: 20 Kasım 2026  ·  Ortam: Linu
 | §15 Koloni / endüstri (temel) | `colony`, `economy`, `game` | 8 test |
 | §16 Araştırma + görev akışı (temel) | `research`, `game` | 3 test |
 | §12 NOVA AI — çevrimdışı çekirdek | `nova`: Türkçe ayrıştırma, bağlam, kaynaklı bilgi, roket/pencere/koloni/araştırma tavsiyesi, onay zorunlu eylemler, çevrimiçi bağlayıcı arayüzü (anahtar gömülmez) | 6 test |
+| §6 Planet Engine + §7 Procedural Universe (veri/simülasyon katmanı) | `universe`: tohumlu deterministik galaksi (sarmal kollar), kütle-parlaklık/yarıçap, Stefan-Boltzmann sıcaklığı, spektral sınıf, ana dizi ömrü, yaşanabilir bölge, denge sıcaklığı, Chen & Kipping kütle-yarıçap, Jeans atmosfer tutma, 11 gezegen türü, gelgit kilidi, koloni puanı, prosedürel ad, A* yıldızlar arası rota | 6 test |
+| §6.3 + §18 Çevre, uzay havası, radyasyon | `environment`: ölçülmüş doz oranları (Ay/Mars/seyir/Dünya), NASA 600 mSv kariyer sınırı, güneş parçacık fırtınası, bölgesel/küresel Mars toz fırtınası, mikrometeoroid hasarı; kolonist dozu, sınırı aşanın işten çekilmesi, yolculuk dozu, kayıt | 4 test |
 | §19.3 Kayıt sistemi (temel) | `json` + `game`: tam durum, sürüm alanı, bozuk kayıt reddi, deterministik tekrar | 2 test |
 
-Toplam: **49 test, ~21.500 kontrol, 0 başarısız.** GCC, Clang, MSVC (GitHub Actions Windows), ayrıca
+Toplam: **59 test, ~60.000 kontrol, 0 başarısız.** GCC, Clang, MSVC (GitHub Actions Windows), ayrıca
 AddressSanitizer + UBSan; UE kısıtlarıyla (C++20, RTTI ve istisnalar kapalı, tek birim) derleme 0 hata / 0 uyarı.
 
 ### Bilimsel doğrulama özetleri (gerçek referanslara karşı)
@@ -29,6 +31,10 @@ AddressSanitizer + UBSan; UE kısıtlarıyla (C++20, RTTI ve istisnalar kapalı,
 | Dünya→Mars Hohmann | 259 gün, 44° faz, LEO'dan 3.6 km/s | 259 gün, ~44°, ~3.6 km/s |
 | Atmosfer 20 km (geometrik) yoğunluk | 0.0889 kg/m³ | 0.08891 (USSA 1976) |
 | 10 yörünge RK4 enerji hatası | < 1e-9 göreli | korunum |
+| Güneş (1 Msun) | 5772 K, G, 10 Gyr | IAU nominal 5772 K |
+| Dünya / Mars denge sıcaklığı | 254 K / 210 K | ~255 K / ~210 K |
+| Neptün / Jüpiter yarıçapı (kütleden) | 4.3 / 11.2 R_E | 3.88 / 11.21 R_E |
+| Mars transferi seyir dozu (259 gün) | ~476 mSv | MSL RAD oranı (1.84 mSv/gün) |
 
 Model sınırları: 2B fırlatma, küresel Dünya, rüzgâr yok, Cd sabit (Mach etkisi yok), ısınma yok.
 
@@ -47,8 +53,8 @@ Yok.
 
 ## KALAN İŞLER (gerçek liste)
 
-Grafik (§3), kokpit (§4), gezegen üretimi/yüzey (§6), prosedürel evren (§7), açık dünya/rover (§8), karakter (§9),
-diyalog (§11.2), uzay aracı kontrolü (§14.2), istasyonlar (§15.1), medeniyet (§17.2), çevre olayları/savunma (§18),
+Grafik (§3), kokpit (§4), gezegen yüzeyi/arazi ve 3B gösterimi (§6, UE tarafı), galaksi haritası 3B gösterimi (§7, UE tarafı), açık dünya/rover (§8), karakter (§9),
+diyalog (§11.2), uzay aracı kontrolü (§14.2), istasyonlar (§15.1), medeniyet (§17.2), savunma (§18.2),
 ses/UI/erişilebilirlik (§19), çok oyunculu, backend/web/Pixel Streaming (§20), UE optimizasyonu ve paketleme (§21.4),
 ekip/haklar (§22), AETHER-X mekaniklerinin C++'a taşınması (bkz. UE5_GECIS_PLANI.md).
 

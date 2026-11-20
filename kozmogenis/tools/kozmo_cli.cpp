@@ -14,6 +14,7 @@
 #include "kozmo/flight.hpp"
 #include "kozmo/game.hpp"
 #include "kozmo/nova.hpp"
+#include "kozmo/universe.hpp"
 
 using namespace kozmo;
 using colony::Job;
@@ -84,6 +85,7 @@ void help() {
         "  insa <koloni> <modül_no>      yerinde modül inşa (0 yaşam .. 8 klinik)\n"
         "  nova <soru>                   NOVA'ya sor (ör. nova Mars penceresi ne zaman) — harcama işlemleri onay ister\n"
         "  firlatma_sim <hafif|agir> <yük_t>   fırlatmayı fiziksel olarak simüle et (atmosfer, kademeler, yörünge)\n"
+        "  galaksi <tohum> [sistem]      prosedürel galaksi üret, en iyi koloni adaylarını listele\n"
         "  kaydet <dosya> | yukle <dosya>\n"
         "  cikis\n");
 }
@@ -252,6 +254,23 @@ int main(int argc, char** argv) {
             std::printf("  Sonuç: %s | yörünge %.0f x %.0f km | Max-Q %.1f kPa @ %.1f km | yerçekimi kaybı %.0f m/s %s\n",
                         r.value().orbit ? "YÖRÜNGE" : "BAŞARISIZ", o.periapsis_alt_m / 1000, o.apoapsis_alt_m / 1000,
                         r.value().max_q_pa / 1000, r.value().max_q_alt_m / 1000, r.value().gravity_loss_ms, r.value().failure.c_str());
+        } else if (cmd == "galaksi") {
+            unsigned long long seed = 1;
+            int count = 500;
+            in >> seed >> count;
+            universe::Galaxy gx(seed, std::clamp(count, 1, 20000));
+            int m = 0;
+            for (const auto& sys : gx.systems()) m += sys.star.spectral == universe::SpectralClass::M;
+            std::printf("Tohum %llu: %zu yıldız sistemi (%%%.0f M cücesi)\nEn iyi koloni adayları:\n", seed, gx.systems().size(),
+                        100.0 * m / static_cast<double>(std::max<std::size_t>(1, gx.systems().size())));
+            for (const auto& [sid, pi] : gx.best_colony_candidates(5)) {
+                const auto* sys = gx.find(sid);
+                const auto& p = sys->planets[pi];
+                std::printf("  %-12s (%s sınıfı, %.0f K) -> %-14s %-16s %.2f AU, %.0f K, %.2f g, puan %.2f%s\n", sys->name.c_str(),
+                            universe::to_string(sys->star.spectral), sys->star.temperature_k, p.name.c_str(),
+                            universe::to_string(p.type), p.semi_major_au, p.equilibrium_temp_k, p.surface_gravity_g, p.colony_score,
+                            p.in_habitable_zone ? " [yaşanabilir bölge]" : "");
+            }
         } else if (cmd == "kaydet") {
             std::string f;
             in >> f;
