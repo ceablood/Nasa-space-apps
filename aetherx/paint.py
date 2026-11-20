@@ -424,9 +424,9 @@ def get(kind, size, convert=True):
     img = SCENES[kind](w, h)
     img = painterly(img, seed=_h(kind) % 997, r=3 if w >= 1200 else 2)
     s = S3.to_surface(np.dstack([img.astype(np.uint8), np.full((h, w), 255, np.uint8)]))
-    if convert:
+    if convert or pygame.display.get_surface() is not None:
         try:
-            s = s.convert()
+            s = s.convert()          # opak: alfa kanallı tam ekran blit tarayıcıda ~19 ms, opak ~0,5 ms
         except pygame.error:
             pass
     try:

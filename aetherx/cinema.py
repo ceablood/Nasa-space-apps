@@ -47,15 +47,17 @@ def _rgba_surface(rgb, a=None):
 
 
 # ----------------------------------------------------------------- ışık huzmeleri
-def _rays_texture(size, color, seed):
-    key = ("rays", size, color, seed)
+def _rays_base(size, color, seed):
+    """Huzme dokusu tam parlaklıkta, YARI çözünürlükte, bir kez üretilir (renk 32'lik adımla)."""
+    key = ("raysb", size, color, seed)
     s = _CACHE.get(key)
     if s is not None:
         return s
+    hs = max(8, size // 2)
     r = np.random.default_rng(seed)
-    yy, xx = np.mgrid[0:size, 0:size].astype(F32) - size / 2
+    yy, xx = np.mgrid[0:hs, 0:hs].astype(F32) - hs / 2
     ang = np.arctan2(yy, xx)
-    rad = np.sqrt(xx * xx + yy * yy) / (size / 2)
+    rad = np.sqrt(xx * xx + yy * yy) / (hs / 2)
     k = 48
     pts = r.random(k + 1).astype(F32)
     pts[-1] = pts[0]
@@ -73,19 +75,40 @@ def _rays_texture(size, color, seed):
     fall = np.clip(1 - rad, 0, 1) ** 1.6
     core = np.exp(-rad * 9) * 0.6
     val = (beam * fall * 0.75 + core)[..., None]
-    rgb = val * np.array(color, F32)[None, None, :]
-    s = _rgba_surface(rgb)
+    s = _rgba_surface(val * np.array(color, F32)[None, None, :])
     _CACHE[key] = s
     return s
+
+
+_RAYS_LRU = []
+
+
+def _rays_texture(size, color, strength, seed):
+    """Parlaklığı uygulanmış tam boy huzme dokusu. Eskiden parlaklık her değiştiğinde 1800x1800 numpy
+    dokusu baştan üretiliyordu (tarayıcıda ~40 ms/kare); şimdi yarı çözünürlüklü taban dokuya ucuz bir
+    çarpma + yumuşak büyütme yapılır ve son birkaç sonuç saklanır."""
+    base_col = tuple(min(255, int(c) // 32 * 32 + 16) for c in color)
+    lvl = int(max(0.0, min(1.0, strength)) * 32 + 0.5)                 # 1/32 parlaklık adımı
+    key = (size, base_col, lvl, seed)
+    for k_, s_ in _RAYS_LRU:
+        if k_ == key:
+            return s_
+    base = _rays_base(size, base_col, seed)
+    m = int(255 * lvl / 32)
+    small = base.copy()
+    if m < 255:
+        small.fill((m, m, m), special_flags=pygame.BLEND_RGB_MULT)
+    big = pygame.transform.smoothscale(small, (size, size))
+    _RAYS_LRU.insert(0, (key, big))
+    del _RAYS_LRU[3:]
+    return big
 
 
 def god_rays(surf, pos, color=(255, 200, 140), strength=0.6, size=1400, t=0.0, clip=None):
     """Toplamsal (BLEND_RGB_ADD) ışık huzmeleri; pos ekran dışında olabilir (huzmeler kenardan girer)."""
     if not enabled() or strength <= 0.02:
         return
-    col = tuple(int(max(0, min(255, c * strength))) for c in color)
-    col = tuple(int(c) // 8 * 8 for c in col)          # önbellek dostu renk adımı
-    tex = _rays_texture(size, col, 3)
+    tex = _rays_texture(size, color, strength, 3)
     old = surf.get_clip()
     if clip is not None:
         surf.set_clip(clip)

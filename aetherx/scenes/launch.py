@@ -22,6 +22,7 @@ from .. import cinema
 from .. import rocket as R
 from .. import space3d as S3
 from ..config import C, H, W
+from ..fx import WEB
 from ..fx import (ParticleSystem, Shake, Starfield, clamp, draw_glow, ease_out_back, ease_out_cubic, lerp,
                   lerp_color, overlay, scale_color, vertical_gradient, soft_circle)
 from ..ui import UI, Button, draw_bar, draw_text, glass_panel
@@ -86,6 +87,7 @@ class LaunchScene(Scene):
         self.rep = R.analyze(g, self.design)
         self.app.mission = {"design": self.design, "rep": self.rep, "pad": pad, "start_min": g.minutes}
         self.t = 0.0
+        self._hz = None
         self.alt = 0.0
         self.vel = 0.0
         self.cam = 0.0
@@ -308,6 +310,17 @@ class LaunchScene(Scene):
         s.blit(img, (0, top))
 
     def horizon(self, R, cy, k):
+        """Önbellekli ufuk: irtifa ilerlemesi (k) 1/60, zaman 1/3 sn adımla değiştiğinde yeniden hesaplanır.
+        Eskiden her karede tam doku örneklemesi yapılıyordu (tarayıcıda kare başına ~400 ms)."""
+        key = (round(k * 60), int(self.t * 3), i18n.PREFS.get("quality"))
+        c = self.__dict__.get("_hz")
+        if c is None or c[0] != key:
+            img, top = self._horizon(R, cy, k)
+            c = self._hz = (key, img, top, cy)
+        # aynı adım içinde ufuk eğrisi gerçek cy ile birlikte kayar (kesintisiz yükseliş)
+        return c[1], c[2] + int(cy - c[3])
+
+    def _horizon(self, R, cy, k):
         """Uzaydan Dünya ufku: gerçek Dünya dokusu, eğrilik, atmosfer kuşağı, bulut gölgesi (1/4 çözünürlük)."""
         q = 1 if i18n.PREFS.get("quality") in ("ultra", "max") else 2
         top = int(cy - R - 30)
@@ -467,15 +480,28 @@ class LaunchScene(Scene):
     def draw_clouds(self, s, ox, oy, back):
         if self.night and self.alt < 200:
             return
+        # tarayıcıda büyük yumuşak bulutlar yarı çözünürlüklü katmana çizilip büyütülür (alfa karıştırma pahalı)
+        k = 0.5 if WEB else 1.0
+        dst = s
+        if WEB:
+            lay = self.__dict__.get("_cloud_lay")
+            if lay is None:
+                lay = self._cloud_lay = pygame.Surface((W // 2, H // 2), pygame.SRCALPHA)
+            lay.fill((0, 0, 0, 0))
+            dst = lay
+        used = False
         for i, (x, wy, r, a) in enumerate(self.clouds):
             if (i % 2 == 0) != back:
                 continue
             y = self.sy(wy) + oy
             if -200 < y < H + 200:
                 col = (236, 240, 248) if not self.night else (70, 80, 104)
-                sp = soft_circle(int(r), col, int(200 * a))
-                s.blit(sp, (x - r + ox, y - r))
-                s.blit(soft_circle(int(r * 0.7), col, int(200 * a)), (x - r * 0.2 + ox, y - r * 0.9))
+                sp = soft_circle(int(r * k), col, int(200 * a))
+                dst.blit(sp, ((x - r + ox) * k, (y - r) * k))
+                dst.blit(soft_circle(int(r * 0.7 * k), col, int(200 * a)), ((x - r * 0.2 + ox) * k, (y - r * 0.9) * k))
+                used = True
+        if WEB and used:
+            s.blit(pygame.transform.scale(dst, (W, H)), (0, 0))      # bulut zaten yumuşak: en yakın komşu yeterli
 
     def draw_rocket(self, s, ox, oy):
         x = W // 2 + ox

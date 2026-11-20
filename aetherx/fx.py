@@ -128,6 +128,16 @@ _SOFT_CACHE = {}
 _RING_CACHE = {}
 
 
+def _to_display(s, alpha):
+    """Sprite'ı ekran piksel formatına çevirir (hızlı karıştırma yolu); ekran yoksa olduğu gibi."""
+    try:
+        if pygame.display.get_surface() is not None:
+            return s.convert_alpha() if alpha else s.convert()
+    except pygame.error:
+        pass
+    return s
+
+
 def glow_sprite(radius, color, intensity=1.0):
     """BLEND_ADD ile basılacak, siyah zeminli radyal ışıma."""
     radius = max(2, int(radius))
@@ -148,6 +158,7 @@ def glow_sprite(radius, color, intensity=1.0):
         k = (1 - i / steps)
         k = (k ** 1.8) * intensity
         pygame.draw.circle(s, scale_color(color, k), (radius, radius), max(1, int(r)))
+    s = _to_display(s, False)
     _GLOW_CACHE[key] = s
     if len(_GLOW_CACHE) > 900:
         _GLOW_CACHE.clear()
@@ -157,6 +168,8 @@ def glow_sprite(radius, color, intensity=1.0):
 def soft_circle(radius, color, alpha=255):
     """Normal alfa ile basılan yumuşak kenarlı daire (duman, bulut)."""
     radius = max(2, int(radius))
+    if radius > 16:                       # büyüyen duman her karede yeni yarıçap üretiyordu: önbellek ıskası
+        radius = radius // 4 * 4 if radius < 64 else radius // 8 * 8
     alpha = int(clamp(alpha, 0, 255) // 8 * 8)
     key = (radius, color, alpha)
     s = _SOFT_CACHE.get(key)
@@ -169,6 +182,7 @@ def soft_circle(radius, color, alpha=255):
         r = radius * i / steps
         k = (1 - i / steps) ** 1.3
         pygame.draw.circle(s, (color[0], color[1], color[2], int(alpha * k)), (radius, radius), max(1, int(r)))
+    s = _to_display(s, True)
     _SOFT_CACHE[key] = s
     if len(_SOFT_CACHE) > 900:
         _SOFT_CACHE.clear()
@@ -575,6 +589,7 @@ class ParticleSystem:
         self.p = []
         self.cap = cap
         self.rings = []
+        self._smoke = None
 
     def clear(self):
         self.p.clear()
@@ -697,7 +712,22 @@ class ParticleSystem:
         self.rings = [r for r in self.rings if r[4] < r[5]]
 
     def draw(self, surf, ox=0, oy=0):
-        add = pygame.BLEND_ADD
+        add = pygame.BLEND_RGB_ADD
+        smoke_layer = None
+        if WEB and len(self.p) > 120:
+            # tarayıcıda çok sayıda büyük alfa duman pahalı (piksel başı ~13 ns): duman çeyrek çözünürlükte
+            # ayrı bir katmana çizilip yumuşak büyütülür (duman zaten çok yumuşak; fark edilmez)
+            sz = (max(1, int(surf.get_width() * SMOKE_K)), max(1, int(surf.get_height() * SMOKE_K)))
+            smoke_layer = self._smoke
+            if smoke_layer is None or smoke_layer.get_size() != sz:
+                smoke_layer = self._smoke = pygame.Surface(sz, pygame.SRCALPHA)
+            smoke_layer.fill((0, 0, 0, 0))
+            self._smoke_used = False
+        self._draw_parts(surf, ox, oy, add, smoke_layer)
+        if smoke_layer is not None:
+            surf.blit(pygame.transform.smoothscale(smoke_layer, surf.get_size()), (0, 0))
+
+    def _draw_parts(self, surf, ox, oy, add, smoke_layer):
         for q in self.p:
             t = 1 - q.life / q.max
             x, y = q.x + ox, q.y + oy
@@ -707,6 +737,12 @@ class ParticleSystem:
                 surf.blit(g, (x - g.get_width() / 2, y - g.get_height() / 2), special_flags=add)
             elif q.kind == "smoke":
                 a = q.alpha * (1 - t) * min(1.0, t * 6 + 0.2)
+                if a < 6:
+                    continue                      # görünmez kuyruk
+                if smoke_layer is not None:
+                    g = soft_circle(max(3, int(q.size * SMOKE_K)), q.color, a)
+                    smoke_layer.blit(g, (x * SMOKE_K - g.get_width() / 2, y * SMOKE_K - g.get_height() / 2))
+                    continue
                 g = soft_circle(max(3, int(q.size)), q.color, a)
                 surf.blit(g, (x - g.get_width() / 2, y - g.get_height() / 2))
             elif q.kind == "spark":
@@ -803,6 +839,7 @@ _OVERLAY = {}
 # tarayıcıda (WebAssembly, SIMD yok) piksel başı alfa tam ekran ~19 ms; opak yüzey + yüzey alfası ~2 ms.
 # Masaüstünde (SIMD) tam tersi: piksel başı alfa daha hızlı. Yol platforma göre seçilir.
 WEB = sys.platform == "emscripten"
+SMOKE_K = 0.25                 # tarayıcıda duman katmanı ölçeği
 
 
 def overlay(surf, rgba, size=None):
