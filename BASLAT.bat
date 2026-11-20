@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-title AETHER-X
+title KOZMOGENIS
 cd /d "%~dp0"
 set "PY="
 where py >nul 2>nul && set "PY=py -3"

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // OYUN VERİSİ
+KOZMOGENİS // OYUN VERİSİ
 12 alanlık üs, roket parçaları (7 gövde, 6 motor, 5 elektrik, 4 anten, 4 yük),
 araştırma ağacı, 5 astronot tipi, gezegenler, madenler, görev şablonları,
 başarımlar, olaylar ve diplomasi ortakları.

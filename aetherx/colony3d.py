@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // 3B KOLONİ GÖRÜNÜMÜ
+KOZMOGENİS // 3B KOLONİ GÖRÜNÜMÜ
 2B koloni sahnesinin yerini alan, yazılımla çizilen (numpy + pygame) 3B sahne.
 
 Sahne hiyerarşisi (Unity/Godot karşılığı):

@@ -1,4 +1,4 @@
-# AETHER-X'i tarayıcı sürümü olarak derler (pygbag / WebAssembly) ve GitHub Pages'te yayınlar.
+# KOZMOGENİS'i tarayıcı sürümü olarak derler (pygbag / WebAssembly) ve GitHub Pages'te yayınlar.
 # Bir kez: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions" seçilmeli.
 name: Web sürümünü yayınla (GitHub Pages)
 
@@ -31,7 +31,7 @@ jobs:
           mkdir -p web_src/aetherx-x
           cp -r main.py aetherx web_src/aetherx-x/
           find web_src -name __pycache__ -prune -exec rm -rf {} +
-          python -m pygbag --build --title AETHER-X --app_name aetherx web_src/aetherx-x
+          python -m pygbag --build --title KOZMOGENIS --app_name aetherx web_src/aetherx-x
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web_src/aetherx-x/build/web

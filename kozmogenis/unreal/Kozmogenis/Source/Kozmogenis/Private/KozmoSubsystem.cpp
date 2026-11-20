@@ -34,6 +34,8 @@ void UKozmoSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Nova = MakeUnique<kozmo::nova::Nova>(*Game);      // Game nesnesi yeni oyun/yüklemede yerinde güncellenir
 	SubscribeEvents();
 	NewGame(TEXT("AETHER"));
+	LoadPresetDesign(TEXT("f9"));
+	SetQuality(KozmoGraphics::Recommend(QualityReason));   // ilk açılışta donanıma göre öneri
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UKozmoSubsystem::TickGame));
 }
 
@@ -278,4 +280,153 @@ FString UKozmoSubsystem::LoadFromSlot(const FString& SlotName)
 	if (!R.ok()) return KozmoStr(R.error().message);
 	Push(FString::Printf(TEXT("Yüklendi: %s"), *SlotName));
 	return FString();
+}
+
+// ------------------------------------------------------------------------------------------------
+// Roket tasarımcısı
+namespace
+{
+const char* const kTargets[] = {"leo", "moon", "mars"};
+// motor döngüsünde gösterilecek kademe motorları (iyon/SRB çekirdek kademe için uygun değil)
+const char* const kStageEngines[] = {"kerolox_gg", "kerolox_vac", "methalox_fc", "methalox_vac", "hydrolox_exp", "ntr"};
+}  // namespace
+
+void UKozmoSubsystem::DesignChanged() { OnDesignChanged.Broadcast(Design); }
+
+void UKozmoSubsystem::LoadPresetDesign(const FString& Preset)
+{
+	if (Preset == TEXT("heavy"))
+	{
+		Design = kozmo::preset_heavy_rocket("moon", 40.0, 0);
+	}
+	else
+	{
+		Design = kozmo::preset_light_rocket("leo", 22.0);
+		if (Preset == TEXT("f9_srb"))
+		{
+			Design.boosters.count = 2;
+			Design.boosters.propellant_t = 150.0;
+			Design.boosters.diameter_m = 2.5;
+			Design.payload_t = 30.0;
+		}
+	}
+	DesignChanged();
+}
+
+void UKozmoSubsystem::CycleStageEngine(int32 Stage, int32 Direction)
+{
+	if (Stage < 0 || Stage >= static_cast<int32>(Design.stages.size())) return;
+	const int32 N = UE_ARRAY_COUNT(kStageEngines);
+	int32 Cur = 0;
+	for (int32 i = 0; i < N; ++i)
+		if (Design.stages[Stage].engine == kStageEngines[i]) Cur = i;
+	Design.stages[Stage].engine = kStageEngines[(Cur + (Direction >= 0 ? 1 : N - 1)) % N];
+	DesignChanged();
+}
+
+void UKozmoSubsystem::AdjustStage(int32 Stage, int32 EngineDelta, float PropellantFactor, float DiameterDelta)
+{
+	if (Stage < 0 || Stage >= static_cast<int32>(Design.stages.size())) return;
+	kozmo::prop::Stage& S = Design.stages[Stage];
+	S.engine_count = FMath::Clamp(S.engine_count + EngineDelta, 1, 40);
+	S.propellant_t = FMath::Clamp(S.propellant_t * (PropellantFactor > 0.f ? PropellantFactor : 1.f), 1.0, 6000.0);
+	S.diameter_m = FMath::Clamp(S.diameter_m + DiameterDelta, 1.0, 12.0);
+	DesignChanged();
+}
+
+void UKozmoSubsystem::AddStage()
+{
+	if (Design.stages.size() >= 4) return;
+	kozmo::prop::Stage Top = Design.stages.empty() ? kozmo::prop::Stage{"kerolox_vac", 1, 50.0, 0.06, 3.7} : Design.stages.back();
+	Top.engine = "hydrolox_exp";
+	Top.engine_count = 1;
+	Top.propellant_t = FMath::Max(5.0, Top.propellant_t * 0.25);
+	Design.stages.push_back(Top);
+	DesignChanged();
+}
+
+void UKozmoSubsystem::RemoveTopStage()
+{
+	if (Design.stages.size() <= 1) return;
+	Design.stages.pop_back();
+	DesignChanged();
+}
+
+void UKozmoSubsystem::AdjustBoosters(int32 CountDelta, float PropellantDeltaT)
+{
+	Design.boosters.count = FMath::Clamp(Design.boosters.count + CountDelta, 0, 8);
+	if (Design.boosters.count > 0 && Design.boosters.propellant_t <= 0) Design.boosters.propellant_t = 150.0;
+	Design.boosters.propellant_t = FMath::Clamp(Design.boosters.propellant_t + PropellantDeltaT, 10.0, 700.0);
+	DesignChanged();
+}
+
+void UKozmoSubsystem::AdjustPayload(float DeltaT)
+{
+	Design.payload_t = FMath::Clamp(Design.payload_t + DeltaT, 0.1, 500.0);
+	DesignChanged();
+}
+
+void UKozmoSubsystem::CycleTarget()
+{
+	int32 Cur = 0;
+	for (int32 i = 0; i < 3; ++i)
+		if (Design.target == kTargets[i]) Cur = i;
+	Design.target = kTargets[(Cur + 1) % 3];
+	DesignChanged();
+}
+
+FString UKozmoSubsystem::GetDesignReport() const
+{
+	FString S = FString::Printf(TEXT("Hedef: %s  |  Yük %.1f t"), *KozmoStr(Design.target), Design.payload_t);
+	for (int32 i = 0; i < static_cast<int32>(Design.stages.size()); ++i)
+	{
+		const auto& St = Design.stages[i];
+		auto E = kozmo::prop::find_engine(St.engine);
+		S += FString::Printf(TEXT("\n%d. kademe: %d x %s, %.0f t yakıt, Ø %.1f m"), i + 1, St.engine_count,
+			E.ok() ? *KozmoStr(E.value()->name_tr) : *KozmoStr(St.engine), St.propellant_t, St.diameter_m);
+	}
+	if (Design.boosters.count > 0)
+		S += FString::Printf(TEXT("\nGüçlendirici: %d x %.0f t katı yakıt"), Design.boosters.count, Design.boosters.propellant_t);
+	auto R = Game->evaluate(Design);
+	if (!R.ok()) return S + TEXT("\n! ") + KozmoStr(R.error().message);
+	const auto& Rep = R.value();
+	S += FString::Printf(TEXT("\n\nKalkış %.0f t, TWR %.2f, delta-v %.2f / gereken %.2f km/s, başarı %%%.1f, maliyet %.0f"),
+		Rep.liftoff_mass_t, Rep.liftoff_twr, Rep.total_dv_ms / 1000.0, Rep.required_dv_ms / 1000.0, Rep.success_p * 100.0, Rep.cost_mcr);
+	S += Rep.feasible ? TEXT("  [UYGUN]") : TEXT("  [YETERSİZ]");
+	for (const auto& P : Rep.problems) S += TEXT("\n! ") + KozmoStr(P);
+	auto G = kozmo::vehicle::geometry(Design);
+	if (G.ok())
+	{
+		const auto& X = G.value();
+		S += FString::Printf(TEXT("\nBoy %.1f m, incelik %.1f, kütle merkezi %.1f m, basınç merkezi %.1f m, fairing %.1f t"), X.total_height_m,
+			X.fineness, X.center_of_mass_m, X.center_of_pressure_m, X.fairing_mass_t);
+		for (const auto& N : X.notes) S += TEXT("\n• ") + KozmoStr(N);
+	}
+	return S;
+}
+
+FString UKozmoSubsystem::SimulateDesignAscent() const
+{
+	auto R = kozmo::flight::simulate_ascent(Design, kozmo::flight::AscentConfig{});
+	if (!R.ok()) return KozmoStr(R.error().message);
+	const auto& X = R.value();
+	FString S;
+	for (const auto& E : X.events)
+		S += FString::Printf(TEXT("T+%.0f s  %s  %.1f km\n"), E.t_s, *KozmoStr(kozmo::flight::event_name(E.type)), E.altitude_m / 1000.0);
+	S += FString::Printf(TEXT("%s — %.0f x %.0f km, Max-Q %.1f kPa, en yüksek %.1f g"), X.orbit ? TEXT("YÖRÜNGE") : TEXT("BAŞARISIZ"),
+		X.final_orbit.periapsis_alt_m / 1000.0, X.final_orbit.apoapsis_alt_m / 1000.0, X.max_q_pa / 1000.0, X.max_accel_g);
+	return S;
+}
+
+void UKozmoSubsystem::SetQuality(EKozmoQuality Q)
+{
+	KozmoGraphics::Apply(Q);
+	Push(FString::Printf(TEXT("Grafik profili: %s"), KozmoGraphics::Get(Q).Name));
+}
+
+FString UKozmoSubsystem::GetQualityText() const
+{
+	const auto& P = KozmoGraphics::Get(KozmoGraphics::Current());
+	return FString::Printf(TEXT("Grafik: %s (iç çözünürlük %%%.0f, Lumen %s)%s%s"), P.Name, P.ScreenPercentage,
+		P.GlobalIllumination == 1 ? TEXT("açık") : TEXT("kapalı"), QualityReason.IsEmpty() ? TEXT("") : TEXT(" — öneri: "), *QualityReason);
 }

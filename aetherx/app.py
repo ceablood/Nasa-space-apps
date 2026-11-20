@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // UYGULAMA
+KOZMOGENİS // UYGULAMA
 Pencere, ana döngü, sahne yöneticisi, üst bar (HUD), olay pencereleri,
 bildirimler, NOVA balonu ve sahne geçişleri.
 """
@@ -156,7 +156,7 @@ class App:
             b = int(80 + 120 * (0.5 + 0.5 * math.sin(t * rng.uniform(0.5, 2.0) + x)))
             surf.set_at((x, y), (b, b, min(255, b + 30)))
         draw_glow(surf, (W // 2, H // 2 - 60), 260, C["cyan"], 0.25)
-        draw_text(surf, "AETHER-X", (W // 2, H // 2 - 120), 96, C["white"], bold=True, anchor="center", glow=C["cyan"],
+        draw_text(surf, "KOZMOGENİS", (W // 2, H // 2 - 120), 96, C["white"], bold=True, anchor="center", glow=C["cyan"],
                   raw=True)
         n = max(1, len(self.load_steps))
         frac = min(1.0, (self.load_done + 0.5) / n)

@@ -1,2 +1,2 @@
-"""AETHER-X: Uzay Ajansı Simülasyonu."""
+"""KOZMOGENİS: Uzay Ajansı Simülasyonu."""
 __version__ = "4.0.0"

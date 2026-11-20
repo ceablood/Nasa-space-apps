@@ -67,8 +67,8 @@ TEST("flight: vakumda yanma Tsiolkovsky denklemine eşit") {
     CHECK(std::fabs(dv - ideal) / ideal < 1e-6);
 }
 
-TEST("flight: Falcon 9 sınıfı fırlatma gerçek profile yakın, ~22.8 t LEO") {
-    auto r = simulate_ascent(f9(22.8), AscentConfig{});
+TEST("flight: Falcon 9 sınıfı fırlatma gerçek profile yakın (fairing dahil ~22 t LEO; gerçek 22.8 t)") {
+    auto r = simulate_ascent(f9(22.0), AscentConfig{});
     CHECK(r.ok());
     const auto& x = r.value();
     CHECK(x.orbit);

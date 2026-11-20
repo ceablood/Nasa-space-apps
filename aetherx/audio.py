@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // SES VE MÜZİK
+KOZMOGENİS // SES VE MÜZİK
 Hiçbir ses dosyası gerekmez: tüm efektler ve müzikler numpy ile prosedürel
 olarak sentezlenir.
 

@@ -225,7 +225,7 @@ class IntroScene(Scene):
         getattr(self, "draw_" + self.stage)(surf, t)
 
     def draw_logo(self, surf, y, t, scale=1.0):
-        word = "AETHER-X"
+        word = "KOZMOGENİS"
         fs = int(120 * scale)
         tw = sum(render_text(ch, fs, C["text"], True).get_width() for ch in word)
         x = W // 2 - tw // 2
@@ -234,7 +234,7 @@ class IntroScene(Scene):
             d = clamp(self.k * 2.4 - i * 0.12, 0, 1)
             img = render_text(ch, fs, C["text"], True)
             off = (1 - ease_out_back(d)) * 60
-            col = C["cyan"] if ch != "-" else C["magenta"]
+            col = C["cyan"] if ch not in "İ" else C["magenta"]   # İ noktası vurgulu
             draw_glow(surf, (x + img.get_width() / 2, y + fs * 0.55 + off), fs * 0.5, col, 0.35 * d)
             surf.blit(render_text(ch, fs, scale_color(col, 0.5), True), (x + 3, y + 4 + off))
             surf.blit(img, (x, y + off))

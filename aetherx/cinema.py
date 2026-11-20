@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // SİNEMATİK GÖRÜNTÜ KATMANI
+KOZMOGENİS // SİNEMATİK GÖRÜNTÜ KATMANI
 "Elle boyanmış Arcane tarzı + parlak stilize AAA malzeme" yönergesinin oyun içi karşılığı.
 Sahnelerin dünya katmanına (arayüzden önce) uygulanır, böylece yazılar keskin kalır:
 

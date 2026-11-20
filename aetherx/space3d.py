@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // 3B GÖK CİSİMLERİ (numpy yazılım çizici)
+KOZMOGENİS // 3B GÖK CİSİMLERİ (numpy yazılım çizici)
 
 - Prosedürel eş-dikdörtgen dokular (3B gürültü küre üzerinde: dikişsiz)
 - Dünya: kıta çokgenlerinden harita, okyanus parlaması, bulut katmanı,

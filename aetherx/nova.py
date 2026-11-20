@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // NOVA
+KOZMOGENİS // NOVA
 AI Kontrol Merkezi'nde yaşayan yapay zekâ. Oyuncunun kişisel adını asla
 kullanmaz; her cümlede AJANS ADINI kullanır.
 

@@ -6,7 +6,7 @@
 # ]
 # ///
 """
-AETHER-X  //  Uzay Ajansı Komuta Simülasyonu
+KOZMOGENİS  //  Uzay Ajansı Komuta Simülasyonu
 
 En kolay başlatma:
     Windows : BASLAT.bat dosyasına çift tıkla
@@ -77,10 +77,10 @@ def pip_install(*pkgs):
 
 def ensure_deps():
     if sys.version_info < (3, 8):
-        msg = (f"Python {sys.version.split()[0]} çok eski. AETHER-X için Python 3.8 veya üstü gerekir.\n"
+        msg = (f"Python {sys.version.split()[0]} çok eski. KOZMOGENİS için Python 3.8 veya üstü gerekir.\n"
                "https://www.python.org/downloads/ adresinden güncel sürümü kur.")
         say(msg)
-        popup("AETHER-X", msg)
+        popup("KOZMOGENİS", msg)
         pause()
         sys.exit(1)
     need = []
@@ -99,7 +99,7 @@ def ensure_deps():
             msg = ("Gerekli kütüphaneler kurulamadı.\nKomut satırında şunu çalıştır:\n\n"
                    f'  "{sys.executable}" -m pip install pygame-ce numpy\n\nsonra oyunu yeniden aç.')
             say(msg)
-            popup("AETHER-X", msg)
+            popup("KOZMOGENİS", msg)
             pause()
             sys.exit(1)
         import importlib
@@ -111,7 +111,7 @@ def ensure_deps():
             msg = ("Kütüphaneler kuruldu ama yüklenemedi. Oyunu kapatıp yeniden aç.\n"
                    "Sorun sürerse:  python -m pip uninstall -y pygame  ve ardından  python -m pip install pygame-ce numpy")
             say(msg)
-            popup("AETHER-X", msg)
+            popup("KOZMOGENİS", msg)
             pause()
             sys.exit(1)
 
@@ -140,9 +140,9 @@ def main():
                 f.write(info + tb)
         except Exception:
             pass
-        say("\nAETHER-X bir hatayla kapandı:\n" + tb)
+        say("\nKOZMOGENİS bir hatayla kapandı:\n" + tb)
         say(f"Ayrıntılar şu dosyaya yazıldı: {LOG}")
-        popup("AETHER-X hata", "Oyun bir hatayla kapandı.\n\n" + tb.strip().splitlines()[-1] +
+        popup("KOZMOGENİS hata", "Oyun bir hatayla kapandı.\n\n" + tb.strip().splitlines()[-1] +
               f"\n\nAyrıntılar: {LOG}\nBu dosyayı geliştiriciyle paylaşabilirsin.")
         try:
             import pygame

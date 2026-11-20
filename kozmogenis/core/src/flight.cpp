@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "kozmo/astro.hpp"
+#include "kozmo/vehicle.hpp"
 
 namespace kozmo::flight {
 
@@ -26,6 +27,8 @@ const char* event_name(EventType e) {
         case EventType::OrbitAchieved: return "Yörüngeye ulaşıldı";
         case EventType::Crash: return "Yere çarptı";
         case EventType::OutOfPropellant: return "Yakıt bitti";
+        case EventType::BoosterSeparation: return "Güçlendirici ayrılması";
+        case EventType::FairingSeparation: return "Burun konisi (fairing) ayrılması";
     }
     return "?";
 }
@@ -139,6 +142,22 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
     s.v = {-omega * Re, 0};             // saat yönü tersine dönüş: (0, Re) noktasında doğu = -x
     s.mass_kg = res.payload_kg;
     for (const auto& x : st) s.mass_kg += x.prop + x.dry;
+    // burun konisi (fairing): atmosfer üstünde atılır
+    if (auto geo = vehicle::geometry(design)) res.fairing_kg = geo.value().fairing_mass_t * 1000.0;
+    s.mass_kg += res.fairing_kg;
+    bool fairing_on = res.fairing_kg > 0;
+    // yan güçlendiriciler (paralel, kısılamaz)
+    const prop::Engine* beng = nullptr;
+    double b_prop = 0, b_inert = 0, b_mdot = 0;
+    if (design.boosters.count > 0) {
+        auto be = prop::find_engine(design.boosters.engine);
+        if (!be) return be.error();
+        beng = be.value();
+        b_prop = design.boosters.propellant_t * 1000.0 * design.boosters.count;
+        b_inert = b_prop * design.boosters.inert_fraction + beng->mass_t * 1000.0 * design.boosters.count;
+        b_mdot = beng->thrust_vac_kn * 1000.0 * design.boosters.count / (beng->isp_vac_s * prop::kG0);
+        s.mass_kg += b_prop + b_inert;
+    }
 
     std::size_t stage = 0;
     double prop_left = st[0].prop;
@@ -151,6 +170,12 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
     auto ev = [&](EventType type) {
         res.events.push_back({type, t, s.r.norm() - Re, s.v.norm(), static_cast<int>(stage) + 1});
     };
+    double liftoff_twr = 0;
+    {
+        double f = st[0].e->thrust_sl_kn() * 1000.0 * st[0].n;
+        if (beng) f += beng->thrust_sl_kn() * 1000.0 * design.boosters.count;
+        liftoff_twr = f / (s.mass_kg * prop::kG0);
+    }
     ev(EventType::Liftoff);
 
     while (t < cfg.max_time_s && phase != Phase::Done) {
@@ -192,7 +217,9 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
             if (phase == Phase::GravityTurn) {
                 // tekme anında yön, sonra hava-göreli hız vektörünü izle (sıfır hücum açısı)
                 const Vec2 east{-up.y, up.x};          // dönüş yönü (doğu)
-                const double k = cfg.pitch_kick_deg * astro::kPi / 180.0;
+                // yüksek itki/ağırlıkta roket hızla dikleşir: tekme açısı kalkış TWR'sine göre büyütülür
+                const double k = cfg.pitch_kick_deg * std::pow(std::max(1.0, liftoff_twr / 1.35), cfg.kick_twr_exponent) *
+                                 astro::kPi / 180.0;
                 const Vec2 kick_dir = up * std::cos(k) + east * std::sin(k);
                 dir = (air_v.unit().dot(up) > std::cos(k)) ? kick_dir : air_v.unit();
             }
@@ -252,7 +279,14 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
             const double limit = cfg.max_accel_g * prop::kG0 * s.mass_kg;
             if (full > limit) mdot *= std::max(cfg.min_throttle, limit / full);
         }
-        const double thrust = mdot * isp * prop::kG0;
+        // güçlendiriciler: ilk kademeyle birlikte, yakıtları bitene dek
+        double b_burn_rate = 0, b_thrust = 0;
+        if (beng && b_prop > 0 && stage == 0 && thrusting) {
+            const double bisp = beng->isp_vac_s - (beng->isp_vac_s - beng->isp_sl_s) * atm.pressure_pa / p0;
+            b_burn_rate = b_mdot;
+            b_thrust = b_mdot * bisp * prop::kG0;
+        }
+        const double thrust = mdot * isp * prop::kG0 + b_thrust;
         last_thrust_accel = thrust > 0 ? thrust / s.mass_kg : last_thrust_accel;
 
         // --- RK4 (kütle adım içinde doğrusal azalır)
@@ -268,7 +302,8 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
         };
         const double h = cfg.dt_s;
         const double burn = std::min(mdot * h, prop_left);
-        const double m0 = s.mass_kg, m1 = s.mass_kg - burn;
+        const double bburn = std::min(b_burn_rate * h, b_prop);
+        const double m0 = s.mass_kg, m1 = s.mass_kg - burn - bburn;
         Vec2 r1, v1, r2, v2, r3, v3, r4, v4;
         deriv(s.r, s.v, m0, r1, v1);
         deriv(s.r + r1 * (h / 2), s.v + v1 * (h / 2), 0.5 * (m0 + m1), r2, v2);
@@ -286,6 +321,19 @@ Result<AscentResult> simulate_ascent(const prop::Design& design, const AscentCon
         s.v = s.v + (v1 + v2 * 2 + v3 * 2 + v4) * (h / 6);
         s.mass_kg = m1;
         prop_left -= burn;
+        if (bburn > 0) {
+            b_prop -= bburn;
+            if (b_prop <= 1e-6) {
+                s.mass_kg -= b_inert;               // boş güçlendiriciler atılır
+                b_inert = 0;
+                ev(EventType::BoosterSeparation);
+            }
+        }
+        if (fairing_on && s.r.norm() - Re > 110e3 && q < 50.0) {
+            s.mass_kg -= res.fairing_kg;
+            fairing_on = false;
+            ev(EventType::FairingSeparation);
+        }
         t += h;
         if (t - last_tel >= cfg.telemetry_every_s) {
             last_tel = t;

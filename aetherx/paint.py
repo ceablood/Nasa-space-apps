@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // BOYALI ARKA PLANLAR (matte painting)
+KOZMOGENİS // BOYALI ARKA PLANLAR (matte painting)
 Fotogerçekçi ama elle boyanmış gibi görünen arka planlar: bilimsel olarak doğru
 gökyüzü ve gök cisimleri, katmanlı (paralaks) kompozisyon, ardından boya
 filtresi (Kuwahara fırça yumuşatması + yönlü fırça darbesi dokusu + tuval

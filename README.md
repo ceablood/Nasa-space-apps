@@ -1,4 +1,15 @@
-# AETHER-X · Uzay Ajansı Komuta Simülasyonu (Python / pygame)
+# KOZMOGENİS · Uzay Ajansı ve Medeniyet Simülasyonu
+
+**Ana oyun: Unreal Engine 5 sürümü** → [`kozmogenis/`](kozmogenis/) (C++ çekirdek KozmoCore + UE5 istemcisi).
+Durum: çekirdek derlenip test edildi (64 test, 0 başarısız, Linux + Windows MSVC CI); UE5 istemcisi yazıldı
+ama UE5 kurulu bir bilgisayar olmadığı için **henüz derlenmedi** — ilk derleme ve Windows EXE hedef PC'de yapılacak.
+Ayrıntı: [`kozmogenis/docs/V30_DURUM_RAPORU.md`](kozmogenis/docs/V30_DURUM_RAPORU.md).
+
+Aşağıdaki tarayıcı sürümü (Python/pygame) ilk prototiptir ve oynanabilir durumdadır.
+
+---
+
+## Tarayıcı prototipi (Python / pygame, eski adı AETHER-X)
 
 ## ▶ Tarayıcıda oyna
 
