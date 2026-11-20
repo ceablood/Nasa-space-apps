@@ -17,11 +17,16 @@
 
 #include "kozmo/game.hpp"
 
+namespace kozmo::world {
+class Expedition;
+}
+
 namespace kozmo::nova {
 
 enum class Intent {
     Unknown, Help, Status, PlanetInfo, LaunchWindow, RocketAdvice, ColonyAdvice, ResearchAdvice,
-    StartResearch, LaunchColonyKit, Confirm, Cancel, Economy
+    StartResearch, LaunchColonyKit, Confirm, Cancel, Economy,
+    VehicleStatus, PlanetRisk, ProductionDiagnosis, Evacuate      // V41: sefer (araç/gezegen/koloni) bağlamı
 };
 const char* intent_name(Intent i);
 
@@ -64,6 +69,8 @@ public:
     explicit Nova(Game& game) : game_(game) {}
     Reply ask(const std::string& text);
     void set_online(std::shared_ptr<OnlineConnector> c) { online_ = std::move(c); }
+    // V41: etkin sefere bağlan (araç durumu, gezegen riski, üretim teşhisi, tahliye). nullptr: bağlantıyı kes.
+    void attach(world::Expedition* e) { expedition_ = e; }
     const std::vector<PendingAction>& pending() const { return pending_; }
     // proaktif uyarılar (her oyun günü UI tarafından sorulabilir)
     std::vector<std::string> warnings() const;
@@ -76,12 +83,17 @@ private:
     Reply rocket_advice(const std::string& key, double payload) const;
     Reply colony_advice() const;
     Reply research_advice() const;
+    Reply vehicle_status() const;
+    Reply planet_risk() const;
+    Reply production_diagnosis() const;
+    Reply evacuate();
     Reply propose(const std::string& description, std::function<std::string()> fn);
     Reply confirm();
     Reply cancel();
 
     Game& game_;
     std::shared_ptr<OnlineConnector> online_;
+    world::Expedition* expedition_ = nullptr;
     std::vector<PendingAction> pending_;
     int next_id_ = 1;
 };

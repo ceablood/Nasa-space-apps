@@ -21,6 +21,7 @@ const char* job_name(Job j) {
         case Job::Scientist: return "Bilim insanı";
         case Job::Medic: return "Doktor";
         case Job::Pilot: return "Pilot";
+        case Job::Security: return "Güvenlik görevlisi";
     }
     return "?";
 }
@@ -91,6 +92,7 @@ int Colony::add_colonist(const std::string& name, Job job, double skill, Rng& rn
     c.needs.hunger = rng.uniform(0.05, 0.3);
     c.needs.fatigue = rng.uniform(0.05, 0.3);
     c.needs.morale = rng.uniform(0.6, 0.85);
+    c.personality = Personality::random(rng);
     colonists_.push_back(c);
     return c.id;
 }
@@ -121,6 +123,71 @@ double Colony::average_morale() const {
     return n ? s / n : 0.0;
 }
 
+Personality Personality::random(Rng& rng) {
+    Personality p;
+    for (double* x : {&p.courage, &p.curiosity, &p.patience, &p.diligence, &p.sociability, &p.leadership, &p.competitiveness,
+                      &p.helpfulness, &p.caution})
+        *x = std::clamp(0.5 + (rng.uniform(0.0, 1.0) + rng.uniform(0.0, 1.0) - 1.0) * 0.6, 0.0, 1.0);   // üçgen dağılım
+    return p;
+}
+
+std::vector<std::string> Personality::traits() const {
+    std::vector<std::string> t;
+    auto axis = [&](double v, const char* hi, const char* lo) {
+        if (v > 0.68) t.push_back(hi);
+        else if (v < 0.32) t.push_back(lo);
+    };
+    axis(courage, "Cesur", "Korkak");
+    axis(curiosity, "Meraklı", "İlgisiz");
+    axis(patience, "Sabırlı", "Aceleci");
+    axis(diligence, "Çalışkan", "Tembel");
+    axis(sociability, "Sosyal", "İçine kapanık");
+    if (leadership > 0.68) t.push_back("Lider ruhlu");
+    if (competitiveness > 0.68) t.push_back("Rekabetçi");
+    if (helpfulness > 0.68) t.push_back("Yardımsever");
+    axis(caution, "Dikkatli", "Risk alan");
+    return t;
+}
+
+Status Colony::order(int id, Activity a, double hours) {
+    Colonist* c = colonist(id);
+    if (!c || !c->alive) return make_error(ErrorCode::NotFound, "Kolonist yok");
+    c->activity = a;
+    c->activity_hours_left = std::max(0.0, hours);
+    c->ordered = hours > 0;
+    return ok_status();
+}
+
+Colonist* Colony::colonist(int id) {
+    for (auto& c : colonists_)
+        if (c.id == id) return &c;
+    return nullptr;
+}
+
+void Colony::repair(ModuleType t, double amount) {
+    for (auto& m : modules_)
+        if (m.type == t && m.condition < 1.0) {
+            m.condition = std::min(1.0, m.condition + amount);
+            return;
+        }
+}
+
+void Colony::damage_module(ModuleType t, double amount) {
+    for (auto& m : modules_)
+        if (m.type == t) m.condition = std::clamp(m.condition - amount, 0.0, 1.0);
+}
+
+double Colony::module_condition(ModuleType t) const {
+    double s = 0;
+    int n = 0;
+    for (const auto& m : modules_)
+        if (m.type == t) {
+            s += m.condition;
+            ++n;
+        }
+    return n ? s / n : 1.0;
+}
+
 Activity Colony::choose_activity(const Colonist& c, double h) const {
     const bool night = h < 6.0 || h >= 22.0;
     const bool day_shift = h >= 8.0 && h < 18.0;
@@ -135,18 +202,20 @@ Activity Colony::choose_activity(const Colonist& c, double h) const {
             a = act;
         }
     };
+    const Personality& p = c.personality;
     consider(Activity::Sleep, c.needs.fatigue * 1.2 + (night ? 0.55 : 0.0));
     if (food) consider(Activity::Eat, c.needs.hunger * 1.4);
     if (!c.dose_limit_reached)
-        consider(Activity::Work, (day_shift ? 0.75 : 0.15) * (1.0 - c.needs.fatigue) * (0.6 + 0.4 * c.needs.health));
-    consider(Activity::Socialize, (1.0 - c.needs.morale) * 0.8 + (!day_shift && !night ? 0.2 : 0.0));
-    if (clinic) consider(Activity::Treatment, (1.0 - c.needs.health) * 1.6);
+        consider(Activity::Work, (day_shift ? 0.75 : 0.15) * (1.0 - c.needs.fatigue) * (0.6 + 0.4 * c.needs.health) * (0.8 + 0.4 * p.diligence));
+    consider(Activity::Socialize, ((1.0 - c.needs.morale) * 0.8 + (!day_shift && !night ? 0.2 : 0.0)) * (0.6 + 0.8 * p.sociability));
+    if (clinic) consider(Activity::Treatment, (1.0 - c.needs.health) * (1.3 + 0.6 * p.caution));
     return a;
 }
 
 void Colony::tick_npc_full(Colonist& c, double dt, double h, Rng& rng, bool food_ok) {
     Needs& n = c.needs;
     if (c.activity_hours_left <= 0.0) {
+        c.ordered = false;
         c.activity = choose_activity(c, h);
         switch (c.activity) {
             case Activity::Work: c.activity_hours_left = 4.0; break;
@@ -207,7 +276,10 @@ void Colony::tick_npc_coarse(Colonist& c, double dt, bool food_ok) {
         n.morale = std::max(0.0, n.morale - 0.15 * d);
     }
     n.fatigue += (0.3 - n.fatigue) * std::min(1.0, d * 2.0);
-    if (!c.dose_limit_reached) {
+    if (c.ordered && c.activity_hours_left > 0) {
+        c.activity_hours_left -= dt;            // emir (tahliye/onarım) süresince kendi işine dönmez
+        if (c.activity_hours_left <= 0) c.ordered = false;
+    } else if (!c.dose_limit_reached) {
         c.hours_worked += 8.0 * d;
         c.activity = Activity::Work;
     } else {
@@ -216,7 +288,8 @@ void Colony::tick_npc_coarse(Colonist& c, double dt, bool food_ok) {
     if (n.hunger > 0.85) n.health = std::max(0.0, n.health - 0.1 * d);
 }
 
-TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, SimDetail detail) {
+TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, SimDetail detail, double crew_hour) {
+    if (crew_hour < 0) crew_hour = local_hour;
     TickReport rep;
     if (dt <= 0) return rep;
     const double d = dt / 24.0;
@@ -337,7 +410,7 @@ TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, S
     const double crowd = housing() > 0 ? static_cast<double>(pop) / housing() : 2.0;
     for (auto& c : colonists_) {
         if (!c.alive) continue;
-        if (detail == SimDetail::Full) tick_npc_full(c, dt, local_hour, rng, food_ok);
+        if (detail == SimDetail::Full) tick_npc_full(c, dt, crew_hour, rng, food_ok);
         else tick_npc_coarse(c, dt, food_ok);
         if (!o2_ok) c.needs.health -= 0.25 * dt;                 // oksijensizlik saatler içinde öldürür
         if (!water_ok) c.needs.health -= 0.012 * dt;             // susuzluk ~3-4 gün
@@ -424,6 +497,12 @@ json::Value Colony::to_json() const {
         o.set("health", c.needs.health);
         o.set("dose", c.dose_msv);
         o.set("dose_limit", c.dose_limit_reached);
+        o.set("ordered", c.ordered);
+        const Personality& p = c.personality;
+        json::Value pj = json::Value::array();
+        for (double x : {p.courage, p.curiosity, p.patience, p.diligence, p.sociability, p.leadership, p.competitiveness, p.helpfulness, p.caution})
+            pj.push(x);
+        o.set("pers", pj);
         cols.push(o);
     }
     v.set("colonists", cols);
@@ -450,7 +529,7 @@ Result<Colony> Colony::from_json(const json::Value& v) {
         k.name = o["name"].as_string();
         const int j = o["job"].as_int(-1);
         const int a = o["act"].as_int(0);
-        if (j < 0 || j > static_cast<int>(Job::Pilot) || a < 0 || a > static_cast<int>(Activity::Treatment))
+        if (j < 0 || j > static_cast<int>(Job::Security) || a < 0 || a > static_cast<int>(Activity::Treatment))
             return make_error(ErrorCode::Parse, "Geçersiz kolonist kaydı");
         k.job = static_cast<Job>(j);
         k.activity = static_cast<Activity>(a);
@@ -464,6 +543,14 @@ Result<Colony> Colony::from_json(const json::Value& v) {
         k.needs.health = o["health"].as_number(1.0);
         k.dose_msv = o["dose"].as_number();
         k.dose_limit_reached = o["dose_limit"].as_bool(false);
+        k.ordered = o["ordered"].as_bool(false);
+        const auto& pa = o["pers"].as_array();
+        if (pa.size() == 9) {
+            double* f[] = {&k.personality.courage, &k.personality.curiosity, &k.personality.patience, &k.personality.diligence,
+                           &k.personality.sociability, &k.personality.leadership, &k.personality.competitiveness,
+                           &k.personality.helpfulness, &k.personality.caution};
+            for (std::size_t i = 0; i < 9; ++i) *f[i] = std::clamp(pa[i].as_number(0.5), 0.0, 1.0);
+        }
         c.colonists_.push_back(k);
     }
     for (const auto& [j, q] : v["labor"].as_object()) {

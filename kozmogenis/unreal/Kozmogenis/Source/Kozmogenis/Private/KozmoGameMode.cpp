@@ -6,7 +6,9 @@
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpectatorPawn.h"
+#include "KozmoExpedition.h"
 #include "KozmoLaunchSite.h"
+#include "SKozmoExpeditionHud.h"
 #include "KozmoRocketAssembly.h"
 #include "KozmoSolarSystem.h"
 #include "KozmoSubsystem.h"
@@ -142,3 +144,59 @@ void AKozmoGameMode::Tick(float DeltaSeconds)
 	Pawn->SetActorLocation(FMath::VInterpTo(Pawn->GetActorLocation(), Desired, DeltaSeconds, 2.5f));
 	PC->SetControlRotation((Target - Pawn->GetActorLocation()).Rotation());
 }
+
+namespace
+{
+// sefer sahnesi diğer sahnelerden uzakta (300 km aşağıda; büyük dünya koordinatları)
+const FVector GExpeditionOrigin(0.f, 0.f, -30000000.f);
+}
+
+void AKozmoGameMode::SetPanelsVisible(bool bVisible)
+{
+	const EVisibility V = bVisible ? EVisibility::Visible : EVisibility::Collapsed;
+	if (Dashboard.IsValid()) Dashboard->SetVisibility(V);
+	if (Designer.IsValid()) Designer->SetVisibility(V);
+}
+
+FString AKozmoGameMode::StartExpedition(const FString& Body)
+{
+	UKozmoSubsystem* Kozmo = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKozmoSubsystem>() : nullptr;
+	UWorld* World = GetWorld();
+	if (!Kozmo || !World) return TEXT("Oyun çekirdeği yok");
+	EndExpedition();
+	const FString Err = Kozmo->StartExpedition(Body, true);
+	if (!Err.IsEmpty()) return Err;
+	ShowLaunchSite(false);
+	if (SolarSystem) SolarSystem->SetActorHiddenInGame(true);
+	if (APlayerController* PC = World->GetFirstPlayerController()) SpectatorPawn = PC->GetPawn();
+	ExpeditionScene = World->SpawnActor<AKozmoExpeditionScene>(GExpeditionOrigin, FRotator::ZeroRotator);
+	SetPanelsVisible(false);
+	if (GEngine && GEngine->GameViewport)
+	{
+		SAssignNew(ExpeditionHud, SKozmoExpeditionHud).Subsystem(Kozmo).GameMode(this);
+		ExpeditionHudContainer = SNew(SWeakWidget).PossiblyNullContent(ExpeditionHud.ToSharedRef());
+		GEngine->GameViewport->AddViewportWidgetContent(ExpeditionHudContainer.ToSharedRef(), 12);
+	}
+	return FString();
+}
+
+void AKozmoGameMode::EndExpedition()
+{
+	UKozmoSubsystem* Kozmo = GetGameInstance() ? GetGameInstance()->GetSubsystem<UKozmoSubsystem>() : nullptr;
+	if (ExpeditionScene)
+	{
+		ExpeditionScene->Destroy();
+		ExpeditionScene = nullptr;
+	}
+	if (Kozmo) Kozmo->EndExpedition();
+	if (GEngine && GEngine->GameViewport && ExpeditionHudContainer.IsValid())
+		GEngine->GameViewport->RemoveViewportWidgetContent(ExpeditionHudContainer.ToSharedRef());
+	ExpeditionHud.Reset();
+	ExpeditionHudContainer.Reset();
+	if (APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+		if (SpectatorPawn && PC->GetPawn() != SpectatorPawn) PC->Possess(SpectatorPawn);
+	SetPanelsVisible(true);
+	if (SolarSystem) SolarSystem->SetActorHiddenInGame(false);
+}
+
+FString AKozmoGameMode::GetExpeditionFeedback() const { return ExpeditionScene ? ExpeditionScene->GetFeedback() : FString(); }

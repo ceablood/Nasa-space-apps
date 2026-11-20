@@ -94,8 +94,48 @@ void UKozmoSubsystem::SetTimeScale(float InDaysPerSecond) { DaysPerSecond = FMat
 double UKozmoSubsystem::GetDay() const { return Game ? Game->day() : 0.0; }
 double UKozmoSubsystem::GetCredits() const { return Game ? Game->wallet().balance() : 0.0; }
 
+FString UKozmoSubsystem::StartExpedition(const FString& Body, bool bInOrbit)
+{
+	EndExpedition();
+	const std::string B = KozmoStd(Body);
+	SliceGame = MakeUnique<kozmo::Game>(41);
+	SliceGame->new_game("KOZMOGENİS", 1e6);
+	if (B == "moon")
+	{
+		auto St = SliceGame->found_outpost("moon", kozmo::vertical_slice_outpost());
+		if (!St.ok()) return KozmoStr(St.error().message);
+		SliceGame->advance(9.375);   // Ay sabahı, mürettebat 09:00
+	}
+	Expedition = MakeUnique<kozmo::world::Expedition>(*SliceGame, B, kozmo::craft::preset("lander"));
+	auto St = Expedition->init(bInOrbit);
+	if (!St.ok())
+	{
+		const FString Err = KozmoStr(St.error().message);
+		EndExpedition();
+		return Err;
+	}
+	SliceNova = MakeUnique<kozmo::nova::Nova>(*SliceGame);
+	SliceNova->attach(Expedition.Get());
+	Push(FString::Printf(TEXT("Sefer başladı: %s"), *KozmoStr(Expedition->env().name)));
+	return FString();
+}
+
+void UKozmoSubsystem::EndExpedition()
+{
+	if (SliceNova) SliceNova->attach(nullptr);
+	SliceNova.Reset();
+	Expedition.Reset();
+	SliceGame.Reset();
+}
+
 bool UKozmoSubsystem::TickGame(float DeltaTime)
 {
+	if (Expedition)
+	{
+		// sefer sürerken kampanya zamanı durur; sefer kendi senaryo oyununu ilerletir (kare başına en çok 1 oyun saati)
+		Expedition->tick(FMath::Min<double>(DeltaTime * ExpeditionTimeScale, 3600.0));
+		return true;
+	}
 	if (Game && DaysPerSecond > 0.f)
 	{
 		// kare başına en fazla 2 oyun günü: yavaş karelerde simülasyon patlamasın
@@ -213,7 +253,8 @@ FString UKozmoSubsystem::GetStatusText() const
 
 FString UKozmoSubsystem::AskNova(const FString& Text)
 {
-	const kozmo::nova::Reply R = Nova->ask(KozmoStd(Text));
+	kozmo::nova::Nova& N = SliceNova ? *SliceNova : *Nova;   // seferdeyken NOVA sefere bağlıdır
+	const kozmo::nova::Reply R = N.ask(KozmoStd(Text));
 	FString Out = KozmoStr(R.text);
 	for (const std::string& Src : R.sources) Out += TEXT("\n[kaynak] ") + KozmoStr(Src);
 	Push(TEXT("NOVA: ") + KozmoStr(R.text).Left(120));

@@ -9,6 +9,8 @@ class SKozmoDashboard;
 class SKozmoDesigner;
 class AKozmoSolarSystem;
 class AKozmoLaunchSite;
+class AKozmoExpeditionScene;
+class SKozmoExpeditionHud;
 
 UCLASS()
 class KOZMOGENIS_API AKozmoGameMode : public AGameModeBase
@@ -27,6 +29,11 @@ public:
 	/** Tasarımı rampada fırlatır (gerekirse rampaya geçer); özet metin döner. */
 	FString PlayDesignAscent();
 
+	/** V41 dikey dilim: "moon" (gezilebilir koloni) ya da "mars". Hata metni ya da boş. */
+	FString StartExpedition(const FString& Body);
+	void EndExpedition();
+	FString GetExpeditionFeedback() const;
+
 private:
 	TSharedPtr<SKozmoDashboard> Dashboard;
 	TSharedPtr<class SWidget> DashboardContainer;
@@ -34,5 +41,10 @@ private:
 	TSharedPtr<class SWidget> DesignerContainer;
 	UPROPERTY() TObjectPtr<AKozmoSolarSystem> SolarSystem;
 	UPROPERTY() TObjectPtr<AKozmoLaunchSite> LaunchSite;
+	UPROPERTY() TObjectPtr<AKozmoExpeditionScene> ExpeditionScene;
+	UPROPERTY() TObjectPtr<APawn> SpectatorPawn;
+	TSharedPtr<SKozmoExpeditionHud> ExpeditionHud;
+	TSharedPtr<class SWidget> ExpeditionHudContainer;
+	void SetPanelsVisible(bool bVisible);
 	void MovePawn(const FVector& Location, const FVector& LookAt, float Speed);
 };

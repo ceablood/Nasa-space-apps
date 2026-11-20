@@ -16,6 +16,7 @@
 #include "kozmo/nova.hpp"
 #include "kozmo/universe.hpp"
 #include "kozmo/vehicle.hpp"
+#include "kozmo/world.hpp"
 
 using namespace kozmo;
 using colony::Job;
@@ -161,10 +162,79 @@ int run_demo() {
     return ok ? 0 : 1;
 }
 
+// V41 dikey dilim: kokpit -> Ay'a iniş -> araçtan çıkış -> koloni -> NPC -> NOVA -> acil durum
+int run_slice() {
+    Game g(41);
+    g.new_game("KOZMOGENİS", 1e6);
+    if (!g.found_outpost("moon", vertical_slice_outpost())) return 1;
+    g.advance(9.375);   // Ay sabahı (güneş saati ~07:40) ve mürettebat saati 09:00; Ay gecesi ~14 Dünya günü sürer
+    world::Expedition e(g, "moon", craft::preset("lander"));
+    if (!e.init()) return 1;
+    nova::Nova n(g);
+    n.attach(&e);
+    auto say = [](const std::string& who, const std::string& t) { std::printf("%s> %s\n", who.c_str(), t.c_str()); };
+    (void)e.sit();
+    (void)e.begin_descent();
+    (void)e.craft().set_engines(true);
+    (void)e.craft().set_mode(craft::FlightMode::LandingAssist);
+    for (int i = 0; i < 1200 && e.craft().phase() == craft::FlightPhase::Flying; ++i) {
+        e.tick(1.0);
+        if (i % 60 == 0) {
+            const auto in = e.craft().instruments();
+            std::printf("KOKPİT T+%3ds  İRTİFA %7.0f m  HIZ %6.1f m/s  YAKIT %%%3.0f  MOTOR %4.0f K  MOD %s\n", i, in.altitude_m, in.speed_ms,
+                        in.fuel_fraction * 100, in.engine_temp_k, craft::to_string(in.mode));
+        }
+    }
+    const bool landed = e.craft().phase() == craft::FlightPhase::Landed;
+    std::printf("%s (temas %.2f m/s)\n", landed ? "İNİŞ TAMAM" : "İNİŞ BAŞARISIZ", e.craft().touchdown_speed());
+    (void)e.stand();
+    auto ex = e.exit_craft();
+    std::printf("Araçtan çıkış: %s\n", ex ? "evet" : ex.error().message.c_str());
+    say("NOVA", n.ask("gezegen riski ne?").text);
+    const auto* admin = e.settlement().find(life::District::Admin);
+    (void)e.walk_to(admin->id);
+    while (e.walking()) e.tick(1.0);
+    (void)e.enter_building(admin->id);
+    std::printf("Yönetim merkezi / nüfus ekranı:\n%s\n", e.use("admin_pop").value().c_str());
+    say("OYUNCU", "NOVA, koloninin durumu nasıl?");
+    say("NOVA", n.ask("NOVA, koloninin durumu nasıl?").text);
+    e.tick(1800);
+    for (const auto& npc : e.society().npcs()) {
+        const auto* k = e.colony()->colonist(npc.id);
+        std::printf("  %-7s %-20s %-18s %s\n", k->name.c_str(), colony::job_name(k->job), life::to_string(npc.intent), npc.reason.c_str());
+    }
+    e.fail_power();
+    e.tick(600);
+    say("OYUNCU", "Neden üretim yavaşladı?");
+    say("NOVA", n.ask("Neden üretim yavaşladı?").text);
+    const auto* power = e.settlement().find(life::District::Power);
+    (void)e.walk_to(power->id);
+    while (e.walking()) e.tick(1.0);
+    (void)e.enter_building(power->id);
+    for (int id : e.npcs_here()) {
+        say(e.colony()->colonist(id)->name, e.talk(id, "iş").value());
+        break;
+    }
+    auto fix = e.use("power_panel");
+    std::printf("Enerji paneli: %s\n", fix ? fix.value().c_str() : fix.error().message.c_str());
+    say("OYUNCU", "Bütün NPC'leri güvenli alana gönder");
+    auto ev = n.ask("Bütün NPC'leri güvenli alana gönder");
+    say("NOVA", ev.text);
+    say("NOVA", n.ask("onayla").text);
+    e.tick(300);
+    int shelter = 0;
+    for (const auto& npc : e.society().npcs()) shelter += npc.intent == life::Intent::Shelter;
+    std::printf("Sığınaktaki NPC: %d / %zu\n", shelter, e.society().npcs().size());
+    const bool ok = landed && ex.ok() && fix.ok() && shelter > 0;
+    std::printf("\nDİKEY DİLİM %s\n", ok ? "BAŞARILI" : "BAŞARISIZ");
+    return ok ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--demo") return run_demo();
+    if (argc > 1 && std::string(argv[1]) == "--dilim") return run_slice();
     Game g(static_cast<std::uint64_t>(std::time(nullptr)));
     g.bus().subscribe<colony::ColonistDied>([](const colony::ColonistDied& e) {
         std::printf("  [!] %s hayatını kaybetti (%s)\n", e.name.c_str(), e.cause.c_str());

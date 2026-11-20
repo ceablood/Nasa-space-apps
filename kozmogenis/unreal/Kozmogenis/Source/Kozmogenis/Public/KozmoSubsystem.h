@@ -13,6 +13,7 @@ THIRD_PARTY_INCLUDES_START
 #include "kozmo/nova.hpp"
 #include "kozmo/universe.hpp"
 #include "kozmo/vehicle.hpp"
+#include "kozmo/world.hpp"
 THIRD_PARTY_INCLUDES_END
 
 #include "KozmoGraphics.h"
@@ -106,6 +107,16 @@ public:
 	const kozmo::prop::Design& GetDesign() const { return Design; }
 	FKozmoDesignChanged OnDesignChanged;
 
+	// --- V41 dikey dilim: ayrı senaryo oyunu (kampanyayı etkilemez) ---
+	/** Ay ("moon", gezilebilir 8 kişilik koloniyle) ya da Mars ("mars", iniş + çevre) seferi başlatır. Hata metni ya da boş. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Expedition") FString StartExpedition(const FString& Body, bool bInOrbit = true);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Expedition") void EndExpedition();
+	UFUNCTION(BlueprintPure, Category = "Kozmo|Expedition") bool HasExpedition() const { return Expedition.IsValid(); }
+	/** Sefer zaman ölçeği (oyun saniyesi / gerçek saniye). Uçuş ve yürüyüş 1, bekleme için yükseltilebilir. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Expedition") void SetExpeditionTimeScale(float Scale) { ExpeditionTimeScale = FMath::Clamp(Scale, 0.f, 3600.f); }
+	kozmo::world::Expedition* GetExpedition() { return Expedition.Get(); }
+	const kozmo::world::Expedition* GetExpedition() const { return Expedition.Get(); }
+
 	// --- Grafik kalite profilleri (V30 §27) ---
 	UFUNCTION(BlueprintCallable, Category = "Kozmo|Graphics") void SetQuality(EKozmoQuality Q);
 	UFUNCTION(BlueprintPure, Category = "Kozmo|Graphics") FString GetQualityText() const;
@@ -130,6 +141,10 @@ private:
 	FTSTicker::FDelegateHandle TickHandle;
 	TArray<FString> Messages;
 	kozmo::prop::Design Design;
+	TUniquePtr<kozmo::Game> SliceGame;
+	TUniquePtr<kozmo::world::Expedition> Expedition;
+	TUniquePtr<kozmo::nova::Nova> SliceNova;
+	float ExpeditionTimeScale = 1.f;
 	FString QualityReason;
 	void DesignChanged();
 };
