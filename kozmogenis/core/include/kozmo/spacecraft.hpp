@@ -9,6 +9,7 @@
 // mikrometeoroid/ısı kalkanıdır (bilimkurgu enerji kalkanı yok).
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <vector>
 

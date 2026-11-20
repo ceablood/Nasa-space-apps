@@ -1,4 +1,5 @@
-﻿#include <cmath>
+﻿#include <algorithm>
+#include <cmath>
 
 #include "kozmo/nova.hpp"
 #include "kozmo/world.hpp"
