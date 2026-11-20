@@ -1,0 +1,32 @@
+# KozmoCore (KOZMOGENİS oyun çekirdeği): Linux/GCC ve Windows/MSVC'de derle, testleri ve demoyu çalıştır.
+# MSVC, Unreal Engine'in Windows'ta kullandığı derleyicidir; çekirdeğin UE uyumluluğunu Unreal kurmadan doğrular.
+name: KozmoCore CI
+
+on:
+  push:
+    paths: ["kozmogenis/**", ".github/workflows/kozmo-core.yml"]
+  pull_request:
+    paths: ["kozmogenis/**"]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Yapılandır
+        run: cmake -S kozmogenis -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Derle
+        run: cmake --build build --config Release --parallel
+      - name: Testler
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Uçtan uca demo (Linux)
+        if: runner.os == 'Linux'
+        run: ./build/kozmo_cli --demo
+      - name: Uçtan uca demo (Windows)
+        if: runner.os == 'Windows'
+        run: .\build\Release\kozmo_cli.exe --demo

@@ -1,0 +1,14 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "",
+	"Description": "KOZMOGENİS — gerçekçi uzay ajansı, koloni ve NPC simülasyonu (KozmoCore C++ çekirdeği üzerinde)",
+	"Modules": [
+		{
+			"Name": "Kozmogenis",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine", "Slate", "SlateCore" ]
+		}
+	]
+}

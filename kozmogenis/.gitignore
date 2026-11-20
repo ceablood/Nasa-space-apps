@@ -1,0 +1,7 @@
+build/
+unreal/Kozmogenis/Binaries/
+unreal/Kozmogenis/Intermediate/
+unreal/Kozmogenis/Saved/
+unreal/Kozmogenis/DerivedDataCache/
+unreal/Kozmogenis/.vs/
+*.sln
