@@ -154,6 +154,13 @@ Status Expedition::walk_to(const std::string& id) {
     return ok_status();
 }
 
+void Expedition::set_player_position(double x, double y) {
+    if (player_.mode != PlayerMode::OnFoot && player_.mode != PlayerMode::InBuilding) return;
+    player_.x = x;
+    player_.y = y;
+    player_.route.clear();
+}
+
 Status Expedition::enter_building(const std::string& id) {
     const life::Building* b = settlement_.find(id);
     if (!b) return make_error(ErrorCode::NotFound, "Bina yok: " + id);

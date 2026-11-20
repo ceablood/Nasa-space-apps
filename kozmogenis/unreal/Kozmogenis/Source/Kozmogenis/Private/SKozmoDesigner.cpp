@@ -102,6 +102,8 @@ void SKozmoDesigner::Construct(const FArguments& InArgs)
 					SNew(SWrapBox).UseAllottedSize(true)
 					+ SWrapBox::Slot()[Btn(TEXT("Rampa görünümü"), [GM]() { if (GM.IsValid()) GM->ShowLaunchSite(true); })]
 					+ SWrapBox::Slot()[Btn(TEXT("Güneş Sistemi"), [GM]() { if (GM.IsValid()) GM->ShowLaunchSite(false); })]
+					+ SWrapBox::Slot()[Btn(TEXT("SEFER: Ay (koloni)"), [this, GM]() { if (GM.IsValid()) FlightText = FText::FromString(GM->StartExpedition(TEXT("moon"))); })]
+					+ SWrapBox::Slot()[Btn(TEXT("SEFER: Mars"), [this, GM]() { if (GM.IsValid()) FlightText = FText::FromString(GM->StartExpedition(TEXT("mars"))); })]
 					+ SWrapBox::Slot()[Btn(TEXT("FIRLAT (simülasyon)"), [this, GM]() {
 						if (GM.IsValid()) FlightText = FText::FromString(GM->PlayDesignAscent());
 					})]

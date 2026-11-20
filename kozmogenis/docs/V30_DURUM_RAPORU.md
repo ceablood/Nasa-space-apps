@@ -1,4 +1,4 @@
-# İlerleme raporu (V30 §30.3 biçimi)
+﻿# İlerleme raporu (V30 §30.3 biçimi)
 
 PROJE: KOZMOGENİS  ·  SÜRÜM: V30  ·  Tarih: 20 Kasım 2026  ·  Ortam: Linux bulut kapsayıcısı (UE5 yok)
 
@@ -19,7 +19,7 @@ PROJE: KOZMOGENİS  ·  SÜRÜM: V30  ·  Tarih: 20 Kasım 2026  ·  Ortam: Linu
 | §6.3 + §18 Çevre, uzay havası, radyasyon | `environment`: ölçülmüş doz oranları (Ay/Mars/seyir/Dünya), NASA 600 mSv kariyer sınırı, güneş parçacık fırtınası, bölgesel/küresel Mars toz fırtınası, mikrometeoroid hasarı; kolonist dozu, sınırı aşanın işten çekilmesi, yolculuk dozu, kayıt | 4 test |
 | §19.3 Kayıt sistemi (temel) | `json` + `game`: tam durum, sürüm alanı, bozuk kayıt reddi, deterministik tekrar | 2 test |
 
-Toplam: **64 test, 60.245 kontrol, 0 başarısız.** GCC, Clang, MSVC (GitHub Actions Windows), ayrıca
+Toplam: **89 test, 60.468 kontrol, 0 başarısız** (V41 eklemeleri dahil; bkz. V41_DURUM_RAPORU.md). GCC, Clang, MSVC (GitHub Actions Windows), ayrıca
 AddressSanitizer + UBSan; UE kısıtlarıyla (C++20, RTTI ve istisnalar kapalı, tek birim) derleme 0 hata / 0 uyarı.
 
 ### Bilimsel doğrulama özetleri (gerçek referanslara karşı)

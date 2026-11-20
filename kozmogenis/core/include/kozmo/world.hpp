@@ -64,6 +64,8 @@ public:
 
     // --- yüzey ve koloni
     Status walk_to(const std::string& building_id);
+    // 3B istemci oyuncuyu kendisi yürütür: konumu buraya yazar (yalnız yürürken/bina içindeyken)
+    void set_player_position(double x, double y);
     bool walking() const { return !player_.route.empty(); }
     Status enter_building(const std::string& id);
     Status leave_building();
