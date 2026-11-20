@@ -1,0 +1,100 @@
+﻿// KOZMOGENİS — KozmoCore oyun çekirdeğini Unreal Engine'e bağlayan GameInstance alt sistemi.
+// Oyun durumu (zaman, görevler, koloniler, NPC'ler, ekonomi, araştırma) tamamen çekirdektedir;
+// bu sınıf zamanı ilerletir, olayları Blueprint/Slate'e iletir ve kaydı Saved/ klasörüne yazar.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Containers/Ticker.h"
+#include "Subsystems/GameInstanceSubsystem.h"
+
+THIRD_PARTY_INCLUDES_START
+#include "kozmo/game.hpp"
+THIRD_PARTY_INCLUDES_END
+
+#include "KozmoSubsystem.generated.h"
+
+DECLARE_LOG_CATEGORY_EXTERN(LogKozmo, Log, All);
+
+USTRUCT(BlueprintType)
+struct FKozmoColonySummary
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly) FString Id;
+	UPROPERTY(BlueprintReadOnly) FString Body;
+	UPROPERTY(BlueprintReadOnly) int32 Population = 0;
+	UPROPERTY(BlueprintReadOnly) int32 Housing = 0;
+	UPROPERTY(BlueprintReadOnly) float Morale = 0.f;
+	UPROPERTY(BlueprintReadOnly) float OxygenT = 0.f;
+	UPROPERTY(BlueprintReadOnly) float WaterT = 0.f;
+	UPROPERTY(BlueprintReadOnly) float FoodT = 0.f;
+	UPROPERTY(BlueprintReadOnly) float SolarFluxWm2 = 0.f;
+};
+
+USTRUCT(BlueprintType)
+struct FKozmoBodyInfo
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly) FString Key;
+	UPROPERTY(BlueprintReadOnly) FString Name;
+	UPROPERTY(BlueprintReadOnly) FString Parent;
+	UPROPERTY(BlueprintReadOnly) float DiameterKm = 0.f;
+	UPROPERTY(BlueprintReadOnly) float DistanceMkm = 0.f;
+	UPROPERTY(BlueprintReadOnly) float PeriodDays = 0.f;
+	UPROPERTY(BlueprintReadOnly) float GravityMs2 = 0.f;
+	UPROPERTY(BlueprintReadOnly) float MeanTempC = 0.f;
+	UPROPERTY(BlueprintReadOnly) int32 Moons = 0;
+	UPROPERTY(BlueprintReadOnly) FString Source;
+};
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKozmoMessageSignature, const FString&, Message);
+
+UCLASS()
+class KOZMOGENIS_API UKozmoSubsystem : public UGameInstanceSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") void NewGame(const FString& Agency);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") void SetTimeScale(float InDaysPerSecond);
+	UFUNCTION(BlueprintPure, Category = "Kozmo") float GetTimeScale() const { return DaysPerSecond; }
+	UFUNCTION(BlueprintPure, Category = "Kozmo") double GetDay() const;
+	UFUNCTION(BlueprintPure, Category = "Kozmo") double GetCredits() const;
+
+	/** Ağır roketle 3 kişilik koloni kiti fırlatır. Başarıda boş metin, aksi halde hata nedeni döner. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString LaunchColonyKit(const FString& Target);
+	/** Ağır roket tasarımının hedef için analizini insan okunur metin olarak döner. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString EvaluateHeavyRocket(const FString& Target, float PayloadT, int32 Crew) const;
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString StartResearch(const FString& TechKey);
+	UFUNCTION(BlueprintPure, Category = "Kozmo") FString GetWindowText(const FString& Target) const;
+
+	UFUNCTION(BlueprintPure, Category = "Kozmo") TArray<FKozmoColonySummary> GetColonies() const;
+	UFUNCTION(BlueprintPure, Category = "Kozmo") TArray<FKozmoBodyInfo> GetBodies() const;
+	UFUNCTION(BlueprintPure, Category = "Kozmo") float GetBodyLongitudeDeg(const FString& Key) const;
+	UFUNCTION(BlueprintPure, Category = "Kozmo") FString GetStatusText() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") bool SaveToSlot(const FString& SlotName);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString LoadFromSlot(const FString& SlotName);
+
+	UPROPERTY(BlueprintAssignable, Category = "Kozmo") FKozmoMessageSignature OnMessage;
+
+	const TArray<FString>& GetRecentMessages() const { return Messages; }
+	kozmo::Game& GetGame() { return *Game; }
+
+private:
+	bool TickGame(float DeltaTime);
+	void Push(const FString& Msg);
+	void SubscribeEvents();
+	FString SlotPath(const FString& SlotName) const;
+
+	TUniquePtr<kozmo::Game> Game;
+	float DaysPerSecond = 0.25f;
+	FTSTicker::FDelegateHandle TickHandle;
+	TArray<FString> Messages;
+};
+
+/** std::string (UTF-8) <-> FString dönüşümleri */
+inline FString KozmoStr(const std::string& S) { return FString(UTF8_TO_TCHAR(S.c_str())); }
+inline std::string KozmoStd(const FString& S) { return std::string(TCHAR_TO_UTF8(*S)); }
