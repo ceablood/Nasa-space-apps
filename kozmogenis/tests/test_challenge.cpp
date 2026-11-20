@@ -1,4 +1,5 @@
-﻿#include "kozmo/challenge.hpp"
+﻿#include <algorithm>
+#include "kozmo/challenge.hpp"
 #include "test_framework.hpp"
 
 using namespace kozmo;
