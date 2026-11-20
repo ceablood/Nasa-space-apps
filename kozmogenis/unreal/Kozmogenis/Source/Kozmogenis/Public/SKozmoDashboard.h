@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/Input/SEditableTextBox.h"
 
 class UKozmoSubsystem;
 
@@ -25,8 +26,11 @@ private:
 	FReply Evaluate(FString Target);
 	FReply Save();
 	FReply Load();
+	FReply AscentSim();
+	void OnNovaCommitted(const FText& Text, ETextCommit::Type CommitType);
 	TSharedRef<SWidget> MakeButton(const FString& Label, FOnClicked Handler);
 
 	TWeakObjectPtr<UKozmoSubsystem> Subsystem;
 	FText Feedback;
+	TSharedPtr<SEditableTextBox> NovaInput;
 };

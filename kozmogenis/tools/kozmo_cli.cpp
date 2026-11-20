@@ -11,7 +11,9 @@
 #include <sstream>
 #include <string>
 
+#include "kozmo/flight.hpp"
 #include "kozmo/game.hpp"
+#include "kozmo/nova.hpp"
 
 using namespace kozmo;
 using colony::Job;
@@ -26,29 +28,11 @@ std::string fmt_g(double v) {
 }
 
 prop::Design preset(const std::string& name, const std::string& target, double payload, int crew) {
-    prop::Design d;
-    d.target = target;
-    d.payload_t = payload;
-    d.crew = crew;
-    d.land = true;
-    if (name == "hafif") {
-        d.name = "Hafif (kerosen, 2 kademe)";
-        d.stages = {{"kerolox_gg", 9, 411.0, 0.052}, {"kerolox_vac", 1, 107.5, 0.033}};
-    } else {
-        d.name = "Ağır (metan/LOX + hidrojen iniş kademesi)";
-        d.stages = {{"methalox_fc", 33, 3400.0, 0.06}, {"methalox_vac", 3, 1200.0, 0.06}, {"hydrolox_exp", 4, 140.0, 0.10}};
-    }
-    return d;
+    if (name == "hafif") return preset_light_rocket(target, payload);
+    return preset_heavy_rocket(target, payload, crew);
 }
 
-Payload colony_kit() {
-    Payload p;
-    p.modules = {ModuleType::Habitat, ModuleType::Greenhouse, ModuleType::Electrolyzer, ModuleType::SolarArray,
-                 ModuleType::SolarArray, ModuleType::Lab};
-    p.cargo = {{"water", 3.0}, {"oxygen", 0.3}, {"food", 0.3}};
-    p.crew = {{"Ada", Job::Farmer}, {"Can", Job::Engineer}, {"Ece", Job::Scientist}};
-    return p;
-}
+Payload colony_kit() { return standard_colony_kit(); }
 
 void print_report(const prop::Report& r) {
     std::printf("  Kalkış kütlesi %.0f t | itki/ağırlık %.2f | delta-v %.2f / %.2f km/s (pay %+.0f m/s)\n",
@@ -98,6 +82,8 @@ void help() {
         "  bekle <gün>                   zamanı ilerlet\n"
         "  al|sat <piyasa> <emtia> <miktar>\n"
         "  insa <koloni> <modül_no>      yerinde modül inşa (0 yaşam .. 8 klinik)\n"
+        "  nova <soru>                   NOVA'ya sor (ör. nova Mars penceresi ne zaman) — harcama işlemleri onay ister\n"
+        "  firlatma_sim <hafif|agir> <yük_t>   fırlatmayı fiziksel olarak simüle et (atmosfer, kademeler, yörünge)\n"
         "  kaydet <dosya> | yukle <dosya>\n"
         "  cikis\n");
 }
@@ -151,8 +137,14 @@ int run_demo() {
     }
     auto w = g.window_to("mars");
     std::printf("\nSonraki Mars penceresi: %.0f gün sonra (sinodik periyot %.0f gün)\n", w.value().days_until, w.value().synodic_days);
+    nova::Nova n(g);
+    std::printf("\nNOVA> koloni durumu\n%s\n", n.ask("koloni durumu").text.c_str());
+    auto asc = flight::simulate_ascent(preset_light_rocket("leo", 22.8), flight::AscentConfig{});
+    const bool asc_ok = asc.ok() && asc.value().orbit;
+    std::printf("\nFalcon 9 sınıfı fırlatma simülasyonu (22.8 t LEO): %s, Max-Q %.1f kPa\n", asc_ok ? "yörünge" : "BAŞARISIZ",
+                asc.ok() ? asc.value().max_q_pa / 1000 : 0.0);
     const auto* c = g.colonies().empty() ? nullptr : &g.colonies().begin()->second;
-    const bool ok = c && c->population() >= 3 && deaths == 0;
+    const bool ok = c && c->population() >= 3 && deaths == 0 && asc_ok;
     std::printf("\nDEMO %s\n", ok ? "BAŞARILI" : "BAŞARISIZ");
     return ok ? 0 : 1;
 }
@@ -171,6 +163,7 @@ int main(int argc, char** argv) {
         std::printf("  [+] Araştırma tamamlandı: %s\n", e.key.c_str());
     });
     g.new_game("AETHER");
+    nova::Nova nova_ai(g);
     std::printf("KOZMOGENİS — çekirdek simülasyon (KozmoCore)\n");
     help();
     std::string line;
@@ -240,6 +233,25 @@ int main(int argc, char** argv) {
             if (t < 0 || t > 8) { std::printf("Modül 0-8 arası\n"); continue; }
             auto r = g.build_module(c, static_cast<ModuleType>(t));
             std::printf("%s\n", r ? "İnşa edildi" : r.error().message.c_str());
+        } else if (cmd == "nova") {
+            std::string rest;
+            std::getline(in, rest);
+            auto r = nova_ai.ask(rest);
+            std::printf("NOVA: %s\n", r.text.c_str());
+            for (const auto& src : r.sources) std::printf("   [kaynak] %s\n", src.c_str());
+        } else if (cmd == "firlatma_sim") {
+            std::string kind;
+            double pay = 10;
+            in >> kind >> pay;
+            const prop::Design d = kind == "hafif" ? preset_light_rocket("leo", pay) : preset_heavy_rocket("leo", pay, 0);
+            auto r = flight::simulate_ascent(d, flight::AscentConfig{});
+            if (!r) { std::printf("%s\n", r.error().message.c_str()); continue; }
+            for (const auto& e : r.value().events)
+                std::printf("  T+%6.1f s  %-34s %7.1f km  %6.0f m/s\n", e.t_s, flight::event_name(e.type), e.altitude_m / 1000, e.speed_ms);
+            const auto& o = r.value().final_orbit;
+            std::printf("  Sonuç: %s | yörünge %.0f x %.0f km | Max-Q %.1f kPa @ %.1f km | yerçekimi kaybı %.0f m/s %s\n",
+                        r.value().orbit ? "YÖRÜNGE" : "BAŞARISIZ", o.periapsis_alt_m / 1000, o.apoapsis_alt_m / 1000,
+                        r.value().max_q_pa / 1000, r.value().max_q_alt_m / 1000, r.value().gravity_loss_ms, r.value().failure.c_str());
         } else if (cmd == "kaydet") {
             std::string f;
             in >> f;

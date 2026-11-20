@@ -74,6 +74,17 @@ void SKozmoDashboard::Construct(const FArguments& InArgs)
 					+ SWrapBox::Slot()[MakeButton(TEXT("Kaydet"), FOnClicked::CreateSP(this, &SKozmoDashboard::Save))]
 					+ SWrapBox::Slot()[MakeButton(TEXT("Yükle"), FOnClicked::CreateSP(this, &SKozmoDashboard::Load))]
 				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SWrapBox).UseAllottedSize(true)
+					+ SWrapBox::Slot()[MakeButton(TEXT("Fırlatma simülasyonu (F9 sınıfı, 22.8 t)"), FOnClicked::CreateSP(this, &SKozmoDashboard::AscentSim))]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)
+				[
+					SAssignNew(NovaInput, SEditableTextBox)
+					.HintText(LOCTEXT("NovaHint", "NOVA'ya sor: ör. 'Mars penceresi ne zaman?' ya da 'onayla'"))
+					.OnTextCommitted(this, &SKozmoDashboard::OnNovaCommitted)
+				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f)
 				[
 					SNew(STextBlock).Text(this, &SKozmoDashboard::GetFeedback).Font(Body).AutoWrapText(true)
@@ -152,6 +163,19 @@ FReply SKozmoDashboard::Load()
 		Feedback = FText::FromString(Err.IsEmpty() ? TEXT("Kayıt yüklendi.") : Err);
 	}
 	return FReply::Handled();
+}
+
+FReply SKozmoDashboard::AscentSim()
+{
+	if (Subsystem.IsValid()) Feedback = FText::FromString(Subsystem->SimulateAscent(false, 22.8f));
+	return FReply::Handled();
+}
+
+void SKozmoDashboard::OnNovaCommitted(const FText& Text, ETextCommit::Type CommitType)
+{
+	if (CommitType != ETextCommit::OnEnter || !Subsystem.IsValid() || Text.IsEmpty()) return;
+	Feedback = FText::FromString(Subsystem->AskNova(Text.ToString()));
+	if (NovaInput.IsValid()) NovaInput->SetText(FText::GetEmpty());
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -8,7 +8,9 @@
 #include "Subsystems/GameInstanceSubsystem.h"
 
 THIRD_PARTY_INCLUDES_START
+#include "kozmo/flight.hpp"
 #include "kozmo/game.hpp"
+#include "kozmo/nova.hpp"
 THIRD_PARTY_INCLUDES_END
 
 #include "KozmoSubsystem.generated.h"
@@ -75,6 +77,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Kozmo") float GetBodyLongitudeDeg(const FString& Key) const;
 	UFUNCTION(BlueprintPure, Category = "Kozmo") FString GetStatusText() const;
 
+	/** NOVA'ya Türkçe soru/komut. Kaynak harcayan işlemler "onayla" denene kadar uygulanmaz. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|NOVA") FString AskNova(const FString& Text);
+	UFUNCTION(BlueprintPure, Category = "Kozmo|NOVA") TArray<FString> GetNovaWarnings() const;
+	/** Hafif/ağır roketin fiziksel fırlatma simülasyonu (atmosfer, kademeler, yörünge); özet metin döner. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Flight") FString SimulateAscent(bool bHeavy, float PayloadT);
+
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") bool SaveToSlot(const FString& SlotName);
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString LoadFromSlot(const FString& SlotName);
 
@@ -90,6 +98,7 @@ private:
 	FString SlotPath(const FString& SlotName) const;
 
 	TUniquePtr<kozmo::Game> Game;
+	TUniquePtr<kozmo::nova::Nova> Nova;
 	float DaysPerSecond = 0.25f;
 	FTSTicker::FDelegateHandle TickHandle;
 	TArray<FString> Messages;
