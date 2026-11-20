@@ -12,6 +12,7 @@ import pygame
 
 from . import Scene
 from .. import cinema
+from .. import archviz
 from .. import art
 from .. import data as D
 from ..config import C, H, TOPBAR_H, W
@@ -144,30 +145,43 @@ class BaseScene(Scene):
 
     # ------------------------------------------------------------- statik zemin
     def build_static(self, night):
+        """Zemin: dokulu çim/sulak alan, asfalt yollar, beton bina parselleri (gerçekçi, ızgarasız)."""
         s = pygame.Surface((W, H))
-        top = lerp_color((46, 52, 66), (10, 14, 26), night)
-        bot = lerp_color((60, 58, 62), (8, 10, 20), night)
-        s.blit(vertical_gradient((W, H), top, bot), (0, 0))
         if HAS_NUMPY:
             rng = np.random.default_rng(3)
-            n = rng.random((W // 4, H // 4)).astype(np.float32)
-            n = pygame.surfarray.make_surface((np.stack([n, n, n], -1) * 255).astype(np.uint8))
-            n = pygame.transform.smoothscale(n, (W, H))
-            n.set_alpha(18)
-            s.blit(n, (0, 0))
-        # ızgara
-        gc = lerp_color((70, 76, 92), (22, 30, 54), night)
-        for x in range(0, W, 48):
-            pygame.draw.line(s, gc, (x, TOPBAR_H), (x, H))
-        for y in range(TOPBAR_H, H, 48):
-            pygame.draw.line(s, gc, (0, y), (W, y))
+
+            def fbm(sh, octs):
+                out = np.zeros(sh, np.float32)
+                amp, tot = 1.0, 0.0
+                for o in range(octs):
+                    k = 2 ** (octs - o + 1)
+                    g = rng.random((sh[1] // k + 2, sh[0] // k + 2)).astype(np.float32)
+                    gs = pygame.surfarray.make_surface((np.dstack([g, g, g]) * 255).astype(np.uint8))
+                    gs = pygame.transform.smoothscale(gs, ((sh[1] // k + 2) * k, (sh[0] // k + 2) * k))
+                    g = pygame.surfarray.array3d(gs)[:sh[1], :sh[0], 0].T.astype(np.float32) / 255
+                    out += g * amp
+                    tot += amp
+                    amp *= 0.55
+                return out / tot
+            n = fbm((H, W), 6)
+            fine = rng.random((H, W)).astype(np.float32)
+            day_g = np.array((70, 92, 62), np.float32)            # bastırılmış, doğal çim yeşili
+            dry_g = np.array((104, 104, 74), np.float32)          # kuru ot
+            night_g = np.array((18, 26, 36), np.float32)
+            base = day_g[None, None, :] * (1 - n[..., None]) + dry_g[None, None, :] * n[..., None]
+            base = base * (0.9 + 0.12 * fine[..., None])
+            base = base * (1 - night) + night_g[None, None, :] * night * (0.85 + 0.3 * n[..., None])
+            arr = np.clip(base, 0, 255).astype(np.uint8).transpose(1, 0, 2)
+            pygame.surfarray.blit_array(s, arr)
+        else:
+            s.blit(vertical_gradient((W, H), (70, 90, 62), (60, 80, 58)), (0, 0))
         # çevre çiti
-        fence = lerp_color((140, 140, 150), (60, 70, 100), night)
+        fence = lerp_color((150, 150, 146), (54, 62, 86), night)
         pygame.draw.rect(s, fence, (150, 200, W - 170, H - 214), 2, border_radius=30)
-        # yollar
-        road = lerp_color((34, 36, 44), (16, 18, 28), night)
-        edge = lerp_color((90, 92, 100), (40, 50, 80), night)
-        lane = lerp_color((230, 200, 90), (150, 130, 60), night)
+        # yollar: kenar şeridi + asfalt + soluk şerit çizgisi
+        road = lerp_color((64, 66, 70), (20, 22, 30), night)
+        edge = lerp_color((112, 112, 106), (40, 46, 66), night)
+        lane = lerp_color((206, 186, 120), (120, 108, 70), night)
         pts = RING + [RING[0]]
         for a, b in zip(pts, pts[1:]):
             pygame.draw.line(s, edge, a, b, 34)
@@ -187,13 +201,13 @@ class BaseScene(Scene):
             best = min(targets, key=lambda p: math.dist(p, c))
             pygame.draw.line(s, edge, c, best, 20)
             pygame.draw.line(s, road, c, best, 14)
-        # temeller
+        # beton parseller (bina temelleri)
         for key, r in self.rects.items():
             base = r.inflate(26, 22)
-            pygame.draw.rect(s, lerp_color((76, 80, 92), (26, 32, 50), night), base, border_radius=14)
-            pygame.draw.rect(s, lerp_color((110, 112, 124), (40, 52, 84), night), base, 2, border_radius=14)
+            pygame.draw.rect(s, lerp_color((96, 100, 98), (30, 36, 52), night), base, border_radius=6)
+            pygame.draw.rect(s, lerp_color((80, 84, 82), (26, 30, 46), night), base, 2, border_radius=6)
         # giriş kapısı
-        pygame.draw.rect(s, lerp_color((90, 92, 100), (34, 40, 64), night), (GATE[0] - 30, GATE[1] - 60, 60, 120),
+        pygame.draw.rect(s, lerp_color((110, 112, 110), (34, 40, 64), night), (GATE[0] - 30, GATE[1] - 60, 60, 120),
                          border_radius=8)
         return s
 
@@ -469,25 +483,20 @@ class BaseScene(Scene):
         col = b["color"]
         hov = (self.hover == key) or (self.selected == key)
         dim = 0.35 if lv == 0 else 1.0
-        # gölge
-        sh = self.shadows.get(key)
-        if sh is None:
-            sh = soft_circle(max(r.w, r.h) // 2, (0, 0, 0), 90)
-            sh = pygame.transform.smoothscale(sh, (r.w + 40, r.h + 30))
-            self.shadows[key] = sh
-        s.blit(sh, (r.x - 14, r.y - 4))
-        fn = getattr(self, "b_" + key, None)
-        if fn:
+        # gerçekçi 3B bina modeli (önbellekli) + oyun durumuna bağlı hareketli katman
+        extra = {}
+        if key == "pads":
+            extra["centers"] = tuple((round(self.pad_center(i)[0] - r.x), round(self.pad_center(i)[1] - r.y),
+                                      (58, 74, 92)[i]) for i in range(3))
+        elif key == "fuel":
+            extra["n"] = 2 + lv
+        img, (ox, oy) = archviz.building(key, r.size, lv, night, self.game.color, **extra)
+        s.blit(img, (r.x - ox, r.y - oy))
+        fn = getattr(self, "d_" + key, None)
+        if fn and (lv > 0 or key == "pads"):
             fn(s, r, lv, col, night, t, dim)
-        else:
-            pygame.draw.rect(s, scale_color(col, 0.4 * dim), r, border_radius=10)
         if lv == 0:
-            ov = pygame.Surface(r.size, pygame.SRCALPHA)
-            ov.fill((10, 14, 28, 120))
-            for i in range(-r.h, r.w, 18):
-                pygame.draw.line(ov, (255, 206, 84, 70), (i, r.h), (i + r.h, 0), 4)
-            s.blit(ov, r)
-            draw_icon(s, "lock", r.center, 26, C["gold"])
+            draw_icon(s, "lock", (r.centerx, r.centery - 30), 26, C["gold"])
         # hover çerçevesi
         if hov:
             k = 0.6 + 0.4 * math.sin(t * 5)
@@ -515,6 +524,143 @@ class BaseScene(Scene):
             pygame.draw.polygon(s, C["gold"], [(r.right - 6, ay - 10), (r.right + 4, ay), (r.right - 16, ay)])
             pygame.draw.rect(s, C["gold"], (r.right - 9, ay, 6, 8))
             draw_glow(s, (r.right - 6, ay - 2), 14, C["gold"], 0.6)
+
+    # ------------------------------------------------------------- hareketli katmanlar (modelin üstü)
+    @staticmethod
+    def _top(r, fx, fy, z):
+        """Ayak izindeki (fx, fy oranı) noktanın z yüksekliğindeki ekran konumu (archviz izdüşümü)."""
+        return (r.x + r.w * fx - z * archviz.KX, r.y + r.h * fy - z * archviz.KZ)
+
+    def d_pads(self, s, r, lv, col, night, t, dim):
+        g = self.game
+        for i in range(3):
+            cx, cy = self.pad_center(i)
+            open_ = lv >= i + 1
+            size = (58, 74, 92)[i]
+            pr = pygame.Rect(0, 0, size, size)
+            pr.center = (int(cx), int(cy))
+            label = "ABC"[i]
+            draw_text(s, f"RAMPA {label}", (pr.centerx, pr.bottom + 6), 11,
+                      C["gold"] if open_ else C["text_mute"], bold=True, anchor="midtop")
+            if not open_:
+                draw_icon(s, "lock", pr.center, 18, C["text_mute"])
+                continue
+            # kule tepesinde uçak ikaz lambası
+            zt = 40 + 18 * i + 3
+            tx = pr.right + 2 + max(7, size * 0.14) / 2 - zt * archviz.KX
+            ty = pr.y + size * 0.2 - zt * archviz.KZ
+            if (t * 1.3 + i * 0.3) % 1 < 0.5:
+                draw_glow(s, (tx, ty), 12, (255, 70, 60), 0.9)
+            pad = g.s["pads"][i]
+            if pad:
+                bo, _ = art.render_booster(min(3, i + 1), g.name, g.color, 0.24)
+                s.blit(bo, (pr.centerx - bo.get_width() // 2 - 2, pr.centery - bo.get_height() + 10))
+                if pad["prep"] > 0:
+                    frac = 1 - pad["prep"] / D.PAD_PREP_SEC[i + 1]
+                    radial_progress(s, (pr.centerx, pr.centery + 6), size // 2 + 6, frac, C["orange"], 3)
+                else:
+                    k = 0.5 + 0.5 * math.sin(t * 6)
+                    draw_glow(s, pr.center, size * 0.7, C["green"], 0.35 * k)
+                    draw_text(s, "HAZIR", (pr.centerx, pr.y - 26), 12, C["green"], bold=True, anchor="midtop")
+
+    def d_research(self, s, r, lv, col, night, t, dim):
+        c = self._top(r, 0.5, 0.5, 30 + 6 * lv + min(r.w, r.h) * 0.12)
+        if lv >= 3:
+            draw_glow(s, c, min(r.w, r.h) * 0.5, (110, 200, 235), 0.18 + 0.08 * math.sin(t * 2))
+        if self.game.s["research"]["active"]:
+            k = self.game.research_progress()[1]
+            radial_progress(s, c, min(r.w, r.h) // 2 + 8, k, C["cyan"], 3)
+
+    def d_astro(self, s, r, lv, col, night, t, dim):
+        for i in range(min(4, len(self.game.s["crew"]))):
+            c = self.game.s["crew"][i]
+            if c["status"] == "ready":
+                art.draw_astronaut(s, r.x + 26 + i * 22, r.bottom + 2, c["type"], 0.36, t)
+
+    def d_depot(self, s, r, lv, col, night, t, dim):
+        used = self.game.depot_used() / max(1, self.game.depot_cap())
+        rng = random.Random(5)
+        for i in range(int(2 + used * 8)):                       # önde istiflenmiş sandıklar
+            bx = r.x + 10 + rng.random() * (r.w - 40)
+            by = r.bottom - 12 + rng.random() * 6
+            pygame.draw.rect(s, rng.choice([(150, 116, 74), (132, 102, 66), (166, 132, 84)]), (bx, by - 10, 14, 10))
+            pygame.draw.rect(s, (80, 60, 40), (bx, by - 10, 14, 10), 1)
+        fx = r.x + 20 + (math.sin(t * 0.7) * 0.5 + 0.5) * (r.w - 60)
+        pygame.draw.rect(s, (206, 168, 84), (fx, r.bottom + 4, 20, 11), border_radius=3)
+        if night > 0.4:
+            draw_glow(s, (fx + 24, r.bottom + 9), 14, (255, 236, 200), 0.5)
+
+    def d_board(self, s, r, lv, col, night, t, dim):
+        # çatıdaki LED pano: görevler kayar
+        z = 22
+        scr = pygame.Rect(0, 0, int(r.w * 0.8), int(r.h * 0.56))
+        tl = self._top(r, 0.1, 0.2, z)
+        scr.topleft = (int(tl[0]), int(tl[1]))
+        pygame.draw.rect(s, (10, 14, 22), scr, border_radius=4)
+        pygame.draw.rect(s, scale_color(col, 0.6), scr, 1, border_radius=4)
+        q = self.game.s["quests"]
+        items = [it["text"] for it in q["daily"] + q["weekly"]] or ["GÖREV YOK"]
+        old = s.get_clip()
+        s.set_clip(scr.inflate(-6, -6))
+        off = (t * 22) % (len(items) * 20)
+        for i in range(len(items) * 2):
+            it = items[i % len(items)]
+            draw_text(s, "> " + tr(it), (scr.x + 6, scr.y + 4 + i * 20 - off), 11, (150, 220, 120), bold=True,
+                      shadow=False, raw=True, max_w=scr.w - 12)
+        s.set_clip(old)
+
+    def d_nova(self, s, r, lv, col, night, t, dim):
+        c = self._top(r, 0.5, 0.48, 40 + 8 * lv)
+        k = 0.7 + 0.3 * math.sin(t * 2)
+        draw_glow(s, c, r.w * 0.34, scale_color(col, 0.8), 0.45 * k)
+        px = c[0] + math.sin(t * 0.8) * r.w * 0.08
+        pygame.draw.circle(s, lerp_color(col, (230, 240, 245), 0.4), (int(px), int(c[1])), max(4, int(r.h * 0.06)))
+        for i in range(lv):
+            a = t * (1 + i * 0.5) + i
+            rr = int(r.w * 0.3 + i * 7)
+            pygame.draw.arc(s, scale_color(col, 0.7), (c[0] - rr, c[1] - rr * 0.8, rr * 2, rr * 1.6), a, a + 1.2, 2)
+
+    def d_control(self, s, r, lv, col, night, t, dim):
+        if self.game.s["storms"] and self.game.storm_active():
+            draw_glow(s, r.center, r.w * 0.6, C["red"], 0.3 + 0.2 * math.sin(t * 8))
+
+    def d_fuel(self, s, r, lv, col, night, t, dim):
+        full = self.game.s["fuel"] / max(1, self.game.fuel_cap())
+        draw_bar(s, (r.x + 10, r.bottom + 4, r.w - 20, 6), full, C["orange"], glow=False)
+        if full > 0.95:
+            draw_glow(s, (r.right - 14, r.bottom + 7), 12, C["green"], 0.7)
+
+    def d_comms(self, s, r, lv, col, night, t, dim):
+        z = 44 + 8 * lv + 3
+        tip = self._top(r, 0.44, 0.42, z)
+        tip = (tip[0] + 4, tip[1])
+        a = t * 0.5
+        dw = r.w * 0.5
+        dh = r.h * 0.26 * (0.4 + 0.6 * abs(math.cos(a)))
+        dish = pygame.Rect(0, 0, int(dw), int(max(4, dh)))
+        dish.center = (int(tip[0]), int(tip[1]))
+        pygame.draw.ellipse(s, (188, 192, 196), dish)
+        pygame.draw.ellipse(s, (120, 126, 136), dish, 2)
+        pygame.draw.ellipse(s, (150, 156, 166), dish.inflate(-dish.w * 0.45, -dish.h * 0.45), 1)
+        feed = (dish.centerx + math.sin(a) * 16, dish.centery - 22)
+        pygame.draw.line(s, (160, 164, 170), dish.center, feed, 2)
+        draw_glow(s, feed, 12, col, 0.7)
+        for i in range(lv):
+            rr = int(20 + ((t * 40 + i * 30) % 90))
+            fade = 1 - rr / 110
+            if fade > 0.3:                     # sönük halkalar koyu çizgiye dönüşmesin
+                pygame.draw.circle(s, scale_color(col, fade), (int(feed[0]), int(feed[1])), rr, 1)
+
+    def d_medical(self, s, r, lv, col, night, t, dim):
+        sick = [c for c in self.game.s["crew"] if c["status"] == "sick"]
+        if sick:
+            draw_text(s, f"{len(sick)}", (r.right - 8, r.y - 40), 13, C["red"], bold=True, anchor="topright")
+            draw_icon(s, "medic", (r.right - 26, r.y - 32), 14, C["red"])
+
+    def d_rec(self, s, r, lv, col, night, t, dim):
+        rest = [c for c in self.game.s["crew"] if c["status"] == "resting"]
+        for i, c in enumerate(rest[:3]):
+            art.draw_astronaut(s, r.x + r.w * 0.6 + i * 22, r.y + r.h * 0.7, c["type"], 0.36, t)
 
     # ------------------------------------------------------------- bina çizimleri
     def _roof(self, s, r, base, dim, radius=10):

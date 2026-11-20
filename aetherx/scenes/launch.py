@@ -495,7 +495,7 @@ class LaunchScene(Scene):
                 continue
             y = self.sy(wy) + oy
             if -200 < y < H + 200:
-                col = (236, 240, 248) if not self.night else (70, 80, 104)
+                col = (222, 226, 232) if not self.night else (70, 80, 104)
                 sp = soft_circle(int(r * k), col, int(200 * a))
                 dst.blit(sp, ((x - r + ox) * k, (y - r) * k))
                 dst.blit(soft_circle(int(r * 0.7 * k), col, int(200 * a)), ((x - r * 0.2 + ox) * k, (y - r * 0.9) * k))

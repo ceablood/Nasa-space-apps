@@ -223,7 +223,7 @@ def building_mesh(key, cx, cz, y, w, d, planet, seed=0):
                      _v(cx + i * 0.3 + 0.13, yb + 0.55, cz + d * 0.3 + 0.01), _v(cx + i * 0.3 - 0.13, yb + 0.55, cz + d * 0.3 + 0.01)],
                     (60, 90, 130), emit=1.0)
         m.cyl(cx - w * 0.3, cz - d * 0.3, yb, 0.05, 0.9, (150, 150, 160), seg=5)
-        m.dome(cx - w * 0.3, cz - d * 0.3, yb + 0.9, 0.28, (230, 232, 240), seg=8, rings=2)
+        m.dome(cx - w * 0.3, cz - d * 0.3, yb + 0.9, 0.28, (212, 214, 218), seg=8, rings=2)
         lights.append((cx, yb + 0.5, cz + d * 0.36, (150, 210, 255)))
     elif key == "hospital":          # beyaz blok + kırmızı haç
         m.box(cx, cz, yb, w * 0.8, d * 0.72, 0.95, (240, 242, 246), side_col=(224, 228, 234))

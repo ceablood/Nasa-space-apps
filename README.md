@@ -16,6 +16,17 @@ Kendi uzay ajansını kur, 12 alanlı fırlatma üssünü büyüt, roket tasarla
 fırlat, yolculuğu yönet, gezegenlere in, koloni kur ve en sonunda
 **Jüpiter'de dev koloniyi** kur.
 
+## Sürüm 3.1 yenilikleri
+
+- **Gerçekçi fırlatma üssü:** Üs binaları artık üç çeyrek bakışta gerçek 3B modeller: beton/çelik/cam
+  malzemeler, panel derzleri, pencere bantları, çatı üniteleri, yere düşen gölge, gece yanan pencereler.
+  Montaj Hangarı dev kapılı Araç Montaj Binası tarzında; kilitli binalar iskeleli inşaat alanı olarak görünür.
+  Zemin dokulu çim, asfalt yollar ve derzli beton rampa sahası.
+- **Uyumlu renk paleti:** Saf beyazlar kırık beyaza ve sıcak açık griye çekildi; aşırı parlayan yüzey yok.
+- **Optimizasyon:** Masaüstünde ekranlar 2–5 kat hızlı; tarayıcıda menü ~2×, fırlatma ~4× hızlı
+  (piksel formatı uyumu, opak sinematik katmanlar, önbellekli arka plan/ufuk/huzme, 3B koloni paketleme).
+- **NASA verileri:** Uydu sayıları NASA'nın Ekim 2026 toplamıyla (461) uyumlu.
+
 ## Sürüm 3 yenilikleri
 
 - **Tarayıcı sürümü:** Oyun pygbag ile WebAssembly'ye derlenip GitHub Pages'te yayınlanır (`.github/workflows/pages.yml`).

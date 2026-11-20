@@ -292,7 +292,7 @@ def render_booster(size, agency, color, scale=1.0):
         s = pygame.Surface((W0, H0), pygame.SRCALPHA)
         cx = W0 // 2
         body = pygame.Rect(cx - bw // 2, 0, bw, bh)
-        s.blit(metal_gradient(bw, bh, (236, 238, 244)), body)
+        s.blit(metal_gradient(bw, bh, (224, 226, 228)), body)
         # bantlar
         for yy in (0.18, 0.6):
             pygame.draw.rect(s, (30, 32, 40), (body.x, body.y + bh * yy, bw, 10 * scale))
