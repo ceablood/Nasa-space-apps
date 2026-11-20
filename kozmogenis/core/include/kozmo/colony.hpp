@@ -24,7 +24,7 @@ constexpr double kFoodPerPersonDay_t = 1.8e-3;     // ton
 // Ortalama güneş ışınımı (W/m^2): 1361 / d_AU^2
 double solar_flux(double distance_1e6km_from_sun);
 
-enum class Job { Farmer, Engineer, Miner, Scientist, Medic, Pilot };
+enum class Job { Farmer, Engineer, Miner, Scientist, Medic, Pilot, Security };
 const char* job_name(Job j);
 
 enum class Activity { Idle, Work, Eat, Sleep, Socialize, Treatment };
@@ -35,6 +35,14 @@ struct Needs {
     double fatigue = 0.2;  // 0 dinç .. 1 bitkin
     double morale = 0.7;   // 0 .. 1
     double health = 1.0;   // 0 ölü .. 1 sağlıklı
+};
+
+// Kişilik (V41 §5.2): 0..1 eksenler; davranış ağırlıklarını değiştirir (oyun varsayımı)
+struct Personality {
+    double courage = 0.5, curiosity = 0.5, patience = 0.5, diligence = 0.5, sociability = 0.5;
+    double leadership = 0.5, competitiveness = 0.5, helpfulness = 0.5, caution = 0.5;
+    static Personality random(Rng& rng);
+    std::vector<std::string> traits() const;   // "Cesur", "Meraklı", "Tembel" ...
 };
 
 struct Colonist {
@@ -49,6 +57,8 @@ struct Colonist {
     double hours_worked = 0.0;
     double dose_msv = 0.0;           // birikmiş radyasyon dozu
     bool dose_limit_reached = false; // kariyer sınırı aşıldı: çalışma görevlerinden çekilir
+    Personality personality;
+    bool ordered = false;            // dış emir (alarm/tahliye/onarım): süre bitene kadar kendi seçimini yapmaz
 };
 
 enum class ModuleType { Habitat, Greenhouse, Electrolyzer, SolarArray, FissionReactor, Mine, Sabatier, Lab, Clinic };
@@ -110,8 +120,10 @@ public:
     double average_morale() const;
     double solar_flux() const { return solar_flux_; }
 
-    // dt_hours: simülasyon adımı (saat). local_hour: 0..24 koloni yerel saati (uyku düzeni için).
-    TickReport tick(double dt_hours, double local_hour, Rng& rng, EventBus* bus, SimDetail detail = SimDetail::Full);
+    // dt_hours: simülasyon adımı (saat). local_hour: 0..24 güneş yerel saati (güneş paneli).
+    // crew_hour: mürettebatın 24 saatlik çalışma/uyku saati (<0 ise local_hour). Ay'da güneş günü ~29.5 Dünya
+    // günüdür; mürettebat Dünya saatine (UTC) göre yaşar. Mars'ta görevler yerel güneş saatini (sol) kullanır.
+    TickReport tick(double dt_hours, double local_hour, Rng& rng, EventBus* bus, SimDetail detail = SimDetail::Full, double crew_hour = -1.0);
 
     // tam durum kaydı (modüller, kolonistler, stok, iş gücü)
     json::Value to_json() const;
@@ -125,6 +137,13 @@ public:
         env_dose_ = outside_dose_msv_per_day;
     }
     void add_dose(int colonist_id, double msv);
+    // dış emir (NPC davranış katmanı / NOVA tahliye): kolonisti belirli süre bir etkinliğe yönlendirir
+    Status order(int colonist_id, Activity a, double hours);
+    Colonist* colonist(int colonist_id);
+    // bakım: modül durumunu onar (mühendis emek-saati ile; oyun varsayımı)
+    void repair(ModuleType t, double amount);
+    void damage_module(ModuleType t, double amount);   // belirli tür modüllerin tümüne hasar (arıza senaryosu)
+    double module_condition(ModuleType t) const;        // o türün ortalama durumu (yoksa 1)
     // rastgele bir modüle hasar (mikrometeoroid vb.)
     void damage_random_module(double amount, Rng& rng, EventBus* bus);
 

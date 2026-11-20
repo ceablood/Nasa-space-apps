@@ -1,5 +1,7 @@
 ﻿#include "kozmo/nova.hpp"
 
+#include "kozmo/world.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -22,6 +24,10 @@ const char* intent_name(Intent i) {
         case Intent::Confirm: return "Onay";
         case Intent::Cancel: return "İptal";
         case Intent::Economy: return "Ekonomi";
+        case Intent::VehicleStatus: return "Araç durumu";
+        case Intent::PlanetRisk: return "Gezegen riski";
+        case Intent::ProductionDiagnosis: return "Üretim teşhisi";
+        case Intent::Evacuate: return "Tahliye";
     }
     return "?";
 }
@@ -135,6 +141,10 @@ Parsed parse(const std::string& text) {
     else if (any(w, {"iptal", "vazgec", "hayir"})) p.intent = Intent::Cancel;
     else if (any(w, {"yardim", "komut"}) || f.find("neler yapabilir") != std::string::npos) p.intent = Intent::Help;
     else if (any(w, {"firlat", "gonder"}) && any(w, {"koloni", "kit"})) p.intent = Intent::LaunchColonyKit;
+    else if (any(w, {"tahliye", "siginak"}) || f.find("guvenli alan") != std::string::npos) p.intent = Intent::Evacuate;
+    else if (any(w, {"uretim"}) && any(w, {"neden", "yavas", "dustu", "azal", "sorun"})) p.intent = Intent::ProductionDiagnosis;
+    else if (any(w, {"risk", "tehlike", "zorluk"}) || f.find("inis riski") != std::string::npos || any(w, {"cevre"})) p.intent = Intent::PlanetRisk;
+    else if (any(w, {"arac", "gemi", "kokpit", "govde", "kabin"}) || f.find("ariza") != std::string::npos) p.intent = Intent::VehicleStatus;
     else if (!p.tech.empty() && any(w, {"arastir", "baslat"})) p.intent = Intent::StartResearch;
     else if (any(w, {"pencere"})) p.intent = Intent::LaunchWindow;
     else if (any(w, {"roket", "tasarim", "delta", "itki"}) || f.find("yakit hesab") != std::string::npos) p.intent = Intent::RocketAdvice;
@@ -243,7 +253,65 @@ std::vector<std::string> Nova::warnings() const {
     return w;
 }
 
+Reply Nova::vehicle_status() const {
+    if (!expedition_) return {"Etkin bir sefer yok; araç verisine erişemiyorum.", {}, std::nullopt, false};
+    return {expedition_->vehicle_report(), {"Araç sensörleri (oyun içi canlı veri)"}, std::nullopt, false};
+}
+
+Reply Nova::planet_risk() const {
+    if (!expedition_) return {"Etkin bir sefer yok. Bir gezegene inmeden yüzey riskini hesaplayamam.", {}, std::nullopt, false};
+    const auto& e = expedition_->env();
+    std::vector<std::string> src = {"NASA NSSDC Planetary Fact Sheet (yerçekimi, basınç, sıcaklık)", "Radyasyon: " + e.dose_source};
+    std::string t = expedition_->environment_report();
+    t += "\n(Zorluk ağırlıkları ve ekipman katsayıları oyun varsayımıdır; bilimsel tahmin değildir.)";
+    return {t, src, std::nullopt, false};
+}
+
+Reply Nova::production_diagnosis() const {
+    const colony::Colony* c = expedition_ ? expedition_->colony() : nullptr;
+    if (!c) {
+        if (game_.colonies().empty()) return {"Henüz koloni yok.", {}, std::nullopt, false};
+        c = &game_.colonies().begin()->second;
+    }
+    // 1 tesisler, 2 personel, 3 enerji/girdi, 4 eksik bileşen, 5 çözüm
+    const auto d = life::diagnose_production(*c);
+    std::string t = c->id() + " üretim teşhisi (ortalama verim %" + fmt("%.0f", d.average_efficiency * 100) + "):";
+    for (const auto& f : d.findings) t += "\n- " + f;
+    if (expedition_)
+        for (const auto& i : expedition_->society().issues(*c)) t += "\n- Personel: " + i;
+    if (!d.suggestions.empty()) {
+        t += "\nÖnerilerim:";
+        for (const auto& x : d.suggestions) t += "\n* " + x;
+    }
+    return {t, {"Koloni tesis telemetrisi (oyun içi veri)"}, std::nullopt, false};
+}
+
+Reply Nova::evacuate() {
+    if (!expedition_ || !expedition_->colony()) return {"Tahliye edilecek koloni bağlı değil.", {}, std::nullopt, false};
+    auto* e = expedition_;
+    const auto& s = e->settlement();
+    int cap = 0;
+    for (const auto& b : s.buildings())
+        if (b.shelter) cap += b.capacity;
+    const int pop = e->colony()->population();
+    std::string danger = e->society().alarm() ? std::string("Etkin tehlike: ") + life::to_string(e->society().last_event()) : "Şu an doğrulanmış bir tehlike yok";
+    for (const auto& w : e->weather()) danger += std::string(", ") + challenge::to_string(w.kind);
+    const std::string desc = danger + ". Sığınak kapasitesi " + std::to_string(cap) + ", nüfus " + std::to_string(pop) +
+                             (cap >= pop ? " (yeterli)" : " (YETERSİZ)") + ". Tahliye üretimi durdurur. Tüm NPC'ler güvenli alana gönderilecek.";
+    return propose(desc, [e] {
+        e->evacuate();
+        return std::string("Tahliye emri verildi: güvenlik ekibi bölgeleri kontrol ediyor, siviller sığınaklara gidiyor.");
+    });
+}
+
 Reply Nova::colony_advice() const {
+    if (expedition_ && expedition_->colony()) {
+        auto w = warnings();
+        std::string t = expedition_->colony_report();
+        for (const auto& x : w) t += "\n- " + x;
+        for (const auto& i : expedition_->society().issues(*expedition_->colony())) t += "\n- " + i;
+        return {t, {"Yaşam desteği tüketimi: NASA referans değerleri mertebesi (mühendislik yaklaşımı)"}, std::nullopt, false};
+    }
     if (game_.colonies().empty()) return {"Henüz koloni yok. 'Ay'a koloni kiti fırlat' diyebilirsin.", {}, std::nullopt, false};
     auto w = warnings();
     std::string t = w.empty() ? "Kolonilerde kritik sorun görünmüyor." : "Dikkat:";
@@ -305,7 +373,7 @@ Reply Nova::ask(const std::string& text) {
     switch (p.intent) {
         case Intent::Help:
             return {"Sorabileceklerin: durum, '<gezegen> hakkında bilgi', '<gezegen> penceresi', 'Mars roketi 30 ton', "
-                    "koloni durumu, ne araştırmalıyım, '<teknoloji> araştır', '<gezegen>'a koloni kiti fırlat', piyasa fiyatları. "
+                    "koloni durumu, neden üretim yavaşladı, gezegen riski, araç durumu, NPC'leri güvenli alana gönder, ne araştırmalıyım, '<teknoloji> araştır', '<gezegen>'a koloni kiti fırlat', piyasa fiyatları. "
                     "Kaynak harcayan işlemler senin onayın olmadan yapılmaz.",
                     {}, std::nullopt, false};
         case Intent::Status: return status();
@@ -354,6 +422,10 @@ Reply Nova::ask(const std::string& text) {
                                                            fmt("%.1f", m.arrive_day - m.depart_day) + " gün sonra.";
             });
         }
+        case Intent::VehicleStatus: return vehicle_status();
+        case Intent::PlanetRisk: return planet_risk();
+        case Intent::ProductionDiagnosis: return production_diagnosis();
+        case Intent::Evacuate: return evacuate();
         case Intent::Confirm: return confirm();
         case Intent::Cancel: return cancel();
         case Intent::Unknown: break;

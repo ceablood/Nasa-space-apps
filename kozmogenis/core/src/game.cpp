@@ -54,6 +54,18 @@ Payload standard_colony_kit() {
     return p;
 }
 
+Payload vertical_slice_outpost() {
+    using colony::Job;
+    using colony::ModuleType;
+    Payload p;
+    p.modules = {ModuleType::Habitat, ModuleType::Habitat, ModuleType::Greenhouse, ModuleType::Electrolyzer, ModuleType::SolarArray,
+                 ModuleType::SolarArray, ModuleType::SolarArray, ModuleType::SolarArray, ModuleType::Lab, ModuleType::Clinic, ModuleType::Mine};
+    p.cargo = {{"water", 8.0}, {"oxygen", 0.6}, {"food", 1.2}, {"medicine", 0.5}};
+    p.crew = {{"Ada", Job::Farmer}, {"Can", Job::Engineer}, {"Ece", Job::Scientist}, {"Deniz", Job::Medic},
+              {"Mert", Job::Miner}, {"Selin", Job::Pilot}, {"Kaan", Job::Security}, {"Zeynep", Job::Engineer}};
+    return p;
+}
+
 double payload_mass_t(const Payload& p) {
     double m = 0;
     for (auto t : p.modules) m += module_mass_t(t);
@@ -114,6 +126,11 @@ double Game::local_hour(const std::string& body) const {
     const double day_h = std::fabs(b.value()->day_h);         // güneş günü uzunluğu (NASA "Length of Day")
     const double h = std::fmod(day_ * 24.0, day_h);
     return h / day_h * 24.0;
+}
+
+double Game::crew_hour(const std::string& body) const {
+    if (body == "mars" || body == "earth") return local_hour(body);
+    return std::fmod(day_ * 24.0, 24.0);
 }
 
 Result<prop::Report> Game::evaluate(const prop::Design& d) const { return prop::analyze(d, tree_.unlocked_list()); }
@@ -209,6 +226,20 @@ void Game::arrive(Mission& m) {
     bus_.publish(MissionArrived{m.id, m.target});
 }
 
+Status Game::found_outpost(const std::string& body, const Payload& p) {
+    if (!astro::find(body)) return make_error(ErrorCode::NotFound, "Bilinmeyen gök cismi: " + body);
+    Mission m;
+    m.id = next_mission_++;
+    m.design_name = "Senaryo başlangıcı";
+    m.target = body;
+    m.payload = p;
+    m.depart_day = m.arrive_day = day_;
+    arrive(m);
+    m.state = MissionState::Arrived;
+    missions_.push_back(m);
+    return ok_status();
+}
+
 Status Game::build_module(const std::string& colony_id, colony::ModuleType t) {
     colony::Colony* c = colony(colony_id);
     if (!c) return make_error(ErrorCode::NotFound, "Koloni yok: " + colony_id);
@@ -262,9 +293,9 @@ void Game::advance(double days) {
             c.set_environment(env_.solar_factor(c.body(), day_),
                               (base ? base.value() : env::cruise_dose_msv_per_day()) + env_.extra_dose(c.body(), day_));
             if (id == focus_) {
-                c.tick(step_h, local_hour(c.body()), rng_, &bus_, colony::SimDetail::Full);
+                c.tick(step_h, local_hour(c.body()), rng_, &bus_, colony::SimDetail::Full, crew_hour(c.body()));
             } else if (hour_index % 6 == 0) {
-                c.tick(6.0, local_hour(c.body()), rng_, &bus_, colony::SimDetail::Coarse);
+                c.tick(6.0, local_hour(c.body()), rng_, &bus_, colony::SimDetail::Coarse, crew_hour(c.body()));
             }
             const double rp = c.take("rp", 1e9);
             if (rp > 0) tree_.add_points(rp, &bus_);

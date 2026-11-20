@@ -29,6 +29,7 @@ double module_mass_t(colony::ModuleType t);               // oyun varsayımı
 prop::Design preset_heavy_rocket(const std::string& target, double payload_t, int crew);   // metan/LOX + hidrojen iniş
 prop::Design preset_light_rocket(const std::string& target, double payload_t);             // Falcon 9 sınıfı
 Payload standard_colony_kit();                                                              // 3 kişilik başlangıç kolonisi
+Payload vertical_slice_outpost();   // V41 dikey dilim: 8 kişilik, hastaneli, madenli küçük koloni (senaryo başlangıcı)
 double payload_mass_t(const Payload& p);                  // mürettebat kapsülü hariç (analiz ekler)
 
 enum class MissionState { InTransit, Arrived, Lost };
@@ -75,11 +76,15 @@ public:
     double longitude(const std::string& body) const;
     Result<astro::TransferWindow> window_to(const std::string& target) const;
     double local_hour(const std::string& body) const;
+    double crew_hour(const std::string& body) const;     // mürettebat saati (Mars: sol, diğerleri: Dünya saati)
 
     // --- eylemler
     Result<prop::Report> evaluate(const prop::Design& d) const;
     Result<int> launch(const prop::Design& d, const Payload& p);
-    Status build_module(const std::string& colony_id, colony::ModuleType t);   // koloniden yerinde inşa (demir + kredi)
+    Status build_module(const std::string& colony_id, colony::ModuleType t);
+    // Senaryo başlangıcı (dikey dilim / görev senaryoları): yükü fırlatma yapmadan varmış sayar.
+    // Normal oyunda koloniler launch() + yolculuk ile kurulur; bu yol yalnız senaryo kurulumu içindir.
+    Status found_outpost(const std::string& body, const Payload& p);   // koloniden yerinde inşa (demir + kredi)
     Result<econ::Trade> trade(const std::string& market_id, const std::string& commodity, double qty, bool buy);
 
     // --- zaman: days kadar ilerlet (odak koloni saatlik tam simülasyon, diğerleri 6 saatlik kaba)
