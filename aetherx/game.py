@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // OYUN MANTIĞI
+KOZMOGENİS // OYUN MANTIĞI
 Ajans durumu, saat, üs binaları, araştırma, astronotlar, depo, yakıt,
 koloniler, günlük/haftalık görevler, başarımlar, güneş fırtınası takvimi,
 rastgele olaylar, diplomasi ve kayıt sistemi.

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using UnrealBuildTool;
 
 public class Kozmogenis : ModuleRules
@@ -7,7 +7,7 @@ public class Kozmogenis : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "RenderCore" });
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
 
 		// KozmoCore: Unreal'den bağımsız, standart C++17 oyun çekirdeği (kozmogenis/core).

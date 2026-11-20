@@ -32,6 +32,7 @@ ctest --test-dir build --output-on-failure     # 59 test
 | NPC | Kolonist ihtiyaçları (açlık, yorgunluk, moral, sağlık), meslek, fayda tabanlı yapay zekâ, uyku düzeni, beceri gelişimi; **ölçeklenebilir** tam/kaba simülasyon | Oyun varsayımı |
 | `gare` | Çalışma zamanı: modül kaydı/bağımlılık, sabit-değişken adım, zaman hızlandırma, olay kuyruğu, servisler, ayarlar, tanılama | — |
 | `flight` | Fırlatma fiziği: RK4, USSA 1976 atmosfer, sürüklenme, yerçekimi dönüşü, kademe, motor kısma, yörüngeye giriş | Fizik + mühendislik yaklaşımı |
+| `vehicle` | Roket gövdesi: yakıt yoğunlukları, tank boyları, fairing, kütle/basınç merkezi, kararlılık; katı yakıtlı yan güçlendiriciler (paralel kademe) | Gerçek yoğunluklar + mühendislik yaklaşımı |
 | `nova` | NOVA çevrimdışı çekirdeği: Türkçe komut, kaynaklı bilgi, tavsiye, onay zorunlu eylemler, isteğe bağlı çevrimiçi bağlayıcı | — |
 | `universe` | Tohumlu prosedürel galaksi: yıldız fiziği, yaşanabilir bölge, gezegen türleri, atmosfer tutma, koloni puanı, A* rota | Astrofizik bağıntılar + oyun varsayımı (dağılımlar) |
 | `environment` | Uzay havası ve radyasyon: ölçülmüş doz oranları, NASA kariyer sınırı, güneş fırtınası, Mars toz fırtınası, mikrometeoroid | Ölçümler (Chang'e-4, Curiosity RAD, MSL) + oyun varsayımı (sıklık) |
@@ -41,7 +42,9 @@ ctest --test-dir build --output-on-failure     # 59 test
 ### Doğrulanan gerçek değerler (testler)
 
 * Falcon 9 sınıfı roket: kalkış ~571 t, itki/ağırlık 1.33, LEO için ~9.4 km/s, 1. kademe ~162 s yanma
-* Fizik tabanlı fırlatma simülasyonunda Falcon 9 sınıfı LEO kapasitesi ~23 t (gerçek 22.8 t), Max-Q ~11 km
+* Fizik tabanlı fırlatma simülasyonunda Falcon 9 sınıfı LEO kapasitesi ~22 t, fairing dahil (gerçek 22.8 t, fark ~%3.5), Max-Q ~11 km
+* Falcon 9 sınıfı gövde: boy ~73 m (gerçek ~70), 1. kademe ~42 m (gerçek ~41); kerosen/hidrojen/metan karışım yoğunluğu 1023/361/833 kg/m³
+* F9 + 2 katı güçlendirici (2×150 t): 35 t LEO'ya çıkar, güçlendiricisiz çıkamaz; güçlendirici ayrılması 1. kademe bitmeden
 * Dünya→Mars Hohmann: ~259 gün, v∞ 2.94 km/s, faz açısı 44°, LEO'dan ~3.6 km/s, sinodik periyot ~780 gün
 * Dünya→Ay transfer yanması ~3.1 km/s, yolculuk ~5 gün
 * NASA tablosundaki yerçekimi ve kaçış hızları kütle/çaptan hesaplananla tutarlı (gaz devlerinde dönüşün merkezkaç etkisi dahil)

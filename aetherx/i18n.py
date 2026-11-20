@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // DİL MOTORU (Türkçe / English / Deutsch)
+KOZMOGENİS // DİL MOTORU (Türkçe / English / Deutsch)
 
 Oyunun kaynak dili Türkçedir. Metinler ekrana çizilmeden hemen önce
 tr() ile seçili dile çevrilir:

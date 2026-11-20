@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // PROSEDÜREL SANAT
+KOZMOGENİS // PROSEDÜREL SANAT
 Roket (gövde + motor + elektrik + anten + yük, gövdede ajans adı),
 fırlatma aracı, gölgelendirilmiş gezegenler, asteroitler, uydular,
 yakıt istasyonu, astronotlar ve koloni bayrağı.

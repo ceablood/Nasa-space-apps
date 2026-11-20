@@ -16,4 +16,5 @@ THIRD_PARTY_INCLUDES_START
 #include "../../../../../core/src/nova.cpp"
 #include "../../../../../core/src/universe.cpp"
 #include "../../../../../core/src/environment.cpp"
+#include "../../../../../core/src/vehicle.cpp"
 THIRD_PARTY_INCLUDES_END

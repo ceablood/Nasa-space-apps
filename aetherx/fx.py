@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // GÖRSEL EFEKTLER
+KOZMOGENİS // GÖRSEL EFEKTLER
 Derin uzay gradyanı, nefes alan nebula, yanıp sönen yıldızlar, kayan yıldızlar,
 parçacık sistemi (alev, duman, kıvılcım, plazma), ekran sarsıntısı, yumuşak
 geçişler ve ışıma (glow) yardımcıları.

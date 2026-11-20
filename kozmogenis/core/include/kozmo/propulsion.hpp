@@ -38,11 +38,22 @@ struct Stage {
     int engine_count = 1;
     double propellant_t = 0.0;
     double structure_fraction = 0.08;   // tank+yapı kütlesi / itki yakıtı (mühendislik yaklaşımı: 0.05-0.12)
+    double diameter_m = 3.7;            // gövde çapı (tank boyu ve aerodinamik için)
+};
+
+// Yan güçlendiriciler: ilk kademeyle PARALEL yanar, yakıtı bitince atılır (paralel kademe).
+struct Boosters {
+    std::string engine = "srb";        // her güçlendiricinin motoru (katı yakıtlı: motor = güçlendiricinin kendisi)
+    int count = 0;
+    double propellant_t = 0.0;          // HER güçlendirici için yakıt
+    double inert_fraction = 0.17;       // gövde+nozul / yakıt (Shuttle SRB: ~87 t / ~503 t)
+    double diameter_m = 3.7;
 };
 
 struct Design {
     std::string name;
     std::vector<Stage> stages;          // [0] = ilk (alt) kademe
+    Boosters boosters;                  // isteğe bağlı yan güçlendiriciler (count = 0: yok)
     double payload_t = 1.0;
     int crew = 0;
     std::string target = "moon";
@@ -51,6 +62,7 @@ struct Design {
 };
 
 struct StageReport {
+    std::string label;                  // "Güçlendirici + 1. kademe", "1. kademe", ...
     double m0_t, mf_t;                  // kademe yanma başı/sonu toplam kütle (üst kademeler + yük dahil)
     double isp_used_s;
     double dv_ms;

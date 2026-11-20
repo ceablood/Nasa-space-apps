@@ -77,7 +77,7 @@ void SKozmoDashboard::Construct(const FArguments& InArgs)
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SWrapBox).UseAllottedSize(true)
-					+ SWrapBox::Slot()[MakeButton(TEXT("Fırlatma simülasyonu (F9 sınıfı, 22.8 t)"), FOnClicked::CreateSP(this, &SKozmoDashboard::AscentSim))]
+					+ SWrapBox::Slot()[MakeButton(TEXT("Fırlatma simülasyonu (F9 sınıfı, 22 t)"), FOnClicked::CreateSP(this, &SKozmoDashboard::AscentSim))]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 6.f, 0.f, 0.f)
 				[
@@ -167,7 +167,7 @@ FReply SKozmoDashboard::Load()
 
 FReply SKozmoDashboard::AscentSim()
 {
-	if (Subsystem.IsValid()) Feedback = FText::FromString(Subsystem->SimulateAscent(false, 22.8f));
+	if (Subsystem.IsValid()) Feedback = FText::FromString(Subsystem->SimulateAscent(false, 22.0f));
 	return FReply::Handled();
 }
 

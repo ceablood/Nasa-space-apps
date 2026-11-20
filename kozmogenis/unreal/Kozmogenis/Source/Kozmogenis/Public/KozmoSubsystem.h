@@ -12,8 +12,10 @@ THIRD_PARTY_INCLUDES_START
 #include "kozmo/game.hpp"
 #include "kozmo/nova.hpp"
 #include "kozmo/universe.hpp"
+#include "kozmo/vehicle.hpp"
 THIRD_PARTY_INCLUDES_END
 
+#include "KozmoGraphics.h"
 #include "KozmoSubsystem.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogKozmo, Log, All);
@@ -50,6 +52,7 @@ struct FKozmoBodyInfo
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FKozmoMessageSignature, const FString&, Message);
+DECLARE_MULTICAST_DELEGATE_OneParam(FKozmoDesignChanged, const kozmo::prop::Design&);
 
 UCLASS()
 class KOZMOGENIS_API UKozmoSubsystem : public UGameInstanceSubsystem
@@ -87,6 +90,26 @@ public:
 	/** Tohumlu prosedürel galaksiden en iyi koloni adaylarını metin olarak döner. */
 	UFUNCTION(BlueprintCallable, Category = "Kozmo|Universe") FString DescribeGalaxy(int64 Seed, int32 Systems);
 
+	// --- Roket tasarımcısı (V30 §13): tek tasarım üzerinde gerçek çekirdek analizi ---
+	/** Hazır tasarım yükler: "f9" (Falcon 9 sınıfı), "heavy" (metan/LOX ağır), "f9_srb" (F9 + 2 katı güçlendirici). */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void LoadPresetDesign(const FString& Preset);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void CycleStageEngine(int32 Stage, int32 Direction);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void AdjustStage(int32 Stage, int32 EngineDelta, float PropellantFactor, float DiameterDelta);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void AddStage();
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void RemoveTopStage();
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void AdjustBoosters(int32 CountDelta, float PropellantDeltaT);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void AdjustPayload(float DeltaT);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Designer") void CycleTarget();
+	/** Analiz (delta-v, TWR, başarı, maliyet) + gövde geometrisi (boy, kütle/basınç merkezi) metni. */
+	UFUNCTION(BlueprintPure, Category = "Kozmo|Designer") FString GetDesignReport() const;
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Flight") FString SimulateDesignAscent() const;
+	const kozmo::prop::Design& GetDesign() const { return Design; }
+	FKozmoDesignChanged OnDesignChanged;
+
+	// --- Grafik kalite profilleri (V30 §27) ---
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Graphics") void SetQuality(EKozmoQuality Q);
+	UFUNCTION(BlueprintPure, Category = "Kozmo|Graphics") FString GetQualityText() const;
+
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") bool SaveToSlot(const FString& SlotName);
 	UFUNCTION(BlueprintCallable, Category = "Kozmo") FString LoadFromSlot(const FString& SlotName);
 
@@ -106,6 +129,9 @@ private:
 	float DaysPerSecond = 0.25f;
 	FTSTicker::FDelegateHandle TickHandle;
 	TArray<FString> Messages;
+	kozmo::prop::Design Design;
+	FString QualityReason;
+	void DesignChanged();
 };
 
 /** std::string (UTF-8) <-> FString dönüşümleri */

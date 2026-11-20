@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // ARAYÜZ
+KOZMOGENİS // ARAYÜZ
 Cam görünümlü, neon kenarlı, üstüne gelince büyüyen butonlar; kayan paneller,
 kaydırıcılar, sekmeler, metin girişi, barlar, prosedürel ikonlar, bildirimler.
 """

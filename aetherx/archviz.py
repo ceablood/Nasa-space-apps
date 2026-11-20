@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // MİMARİ GÖRSELLEŞTİRME (fırlatma üssü binaları)
+KOZMOGENİS // MİMARİ GÖRSELLEŞTİRME (fırlatma üssü binaları)
 
 Üs haritasındaki her bina, üç çeyrek eğik (oblique) bakışta gerçekçi bir 3B model olarak bir kez
 üretilir ve önbelleğe alınır:

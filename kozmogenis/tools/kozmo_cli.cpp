@@ -15,6 +15,7 @@
 #include "kozmo/game.hpp"
 #include "kozmo/nova.hpp"
 #include "kozmo/universe.hpp"
+#include "kozmo/vehicle.hpp"
 
 using namespace kozmo;
 using colony::Job;
@@ -141,10 +142,19 @@ int run_demo() {
     std::printf("\nSonraki Mars penceresi: %.0f gün sonra (sinodik periyot %.0f gün)\n", w.value().days_until, w.value().synodic_days);
     nova::Nova n(g);
     std::printf("\nNOVA> koloni durumu\n%s\n", n.ask("koloni durumu").text.c_str());
-    auto asc = flight::simulate_ascent(preset_light_rocket("leo", 22.8), flight::AscentConfig{});
+    auto asc = flight::simulate_ascent(preset_light_rocket("leo", 22.0), flight::AscentConfig{});
     const bool asc_ok = asc.ok() && asc.value().orbit;
-    std::printf("\nFalcon 9 sınıfı fırlatma simülasyonu (22.8 t LEO): %s, Max-Q %.1f kPa\n", asc_ok ? "yörünge" : "BAŞARISIZ",
+    std::printf("\nFalcon 9 sınıfı fırlatma simülasyonu (22 t LEO): %s, Max-Q %.1f kPa\n", asc_ok ? "yörünge" : "BAŞARISIZ",
                 asc.ok() ? asc.value().max_q_pa / 1000 : 0.0);
+    if (auto geo = vehicle::geometry(preset_light_rocket("leo", 22.0)); geo.ok())
+        std::printf("Gövde: boy %.1f m, 1. kademe %.1f m, kütle merkezi %.1f m, fairing %.1f t\n", geo.value().total_height_m,
+                    geo.value().stages[0].stage_length_m, geo.value().center_of_mass_m, geo.value().fairing_mass_t);
+    prop::Design srb = preset_light_rocket("leo", 30.0);
+    srb.boosters.count = 2;
+    srb.boosters.propellant_t = 150;
+    srb.boosters.diameter_m = 2.5;
+    auto asc2 = flight::simulate_ascent(srb, flight::AscentConfig{});
+    std::printf("F9 + 2 katı güçlendirici, 30 t LEO: %s\n", asc2.ok() && asc2.value().orbit ? "yörünge" : "BAŞARISIZ");
     const auto* c = g.colonies().empty() ? nullptr : &g.colonies().begin()->second;
     const bool ok = c && c->population() >= 3 && deaths == 0 && asc_ok;
     std::printf("\nDEMO %s\n", ok ? "BAŞARILI" : "BAŞARISIZ");

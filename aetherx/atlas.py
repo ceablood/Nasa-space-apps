@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // GEZEGEN ATLASI VERİSİ
+KOZMOGENİS // GEZEGEN ATLASI VERİSİ
 Güneş, 8 gezegen, uydular (Satürn için 19 uydu ayrıntılı) ve Dünya'nın yapay
 uyduları. Uzun bilgi metinleri üç dilde doğrudan burada tutulur.
 

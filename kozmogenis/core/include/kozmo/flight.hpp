@@ -50,7 +50,7 @@ struct State {
 };
 
 enum class EventType { Liftoff, PitchKick, MaxQ, StageBurnout, StageSeparation, ApoapsisTargetReached, CoastStart,
-                       CircularizeStart, OrbitAchieved, Crash, OutOfPropellant };
+                       CircularizeStart, OrbitAchieved, Crash, OutOfPropellant, BoosterSeparation, FairingSeparation };
 const char* event_name(EventType e);
 
 struct FlightEvent {
@@ -69,7 +69,8 @@ struct AscentConfig {
     double drag_coefficient = 0.30;          // mühendislik yaklaşımı (Mach'tan bağımsız sabit)
     double diameter_m = 3.7;
     double pitch_kick_speed_ms = 60.0;
-    double pitch_kick_deg = 5.0;
+    double pitch_kick_deg = 5.0;             // TWR 1.35 için; daha yüksek TWR'de üstel olarak büyür
+    double kick_twr_exponent = 2.0;
     double dt_s = 0.1;
     double max_time_s = 6000.0;
     double telemetry_every_s = 1.0;
@@ -84,6 +85,7 @@ struct AscentResult {
     double max_q_pa = 0, max_q_alt_m = 0, max_q_t_s = 0;
     double max_accel_g = 0;
     double payload_kg = 0;
+    double fairing_kg = 0;
     double remaining_propellant_kg = 0;
     double gravity_loss_ms = 0, drag_loss_ms = 0;
     std::vector<FlightEvent> events;

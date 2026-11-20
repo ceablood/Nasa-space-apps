@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AETHER-X // ROKET TASARIM ANALİZİ
+KOZMOGENİS // ROKET TASARIM ANALİZİ
 Kütle, taşıma kapasitesi, kaldırma gücü, roket sınıfı (küçük/orta/dev),
 yakıt ihtiyacı, elektrik dengesi, iletişim menzili, oksijen, mürettebat rolleri
 ve 3 barlı risk paneli (başarısızlık / kısmi / tam başarı).

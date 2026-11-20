@@ -17,6 +17,9 @@ const std::vector<Engine>& table() {
         {"methalox_vac", "Metan/LOX vakum (Raptor Vakum sınıfı)", "CH4/LOX", 0, 380, 2500, 1.80, 0.990, 14, "methalox"},
         {"ntr", "Nükleer termal (NERVA sınıfı)", "LH2 (nükleer)", 0, 841, 333, 18.0, 0.980, 60, "nuclear"},
         {"ion", "Elektrikli iyon itici (NEXT sınıfı)", "Xenon", 0, 4190, 0.000236, 0.06, 0.999, 9, "ion"},
+        // Katı yakıtlı güçlendirici: Uzay Mekiği SRB sınıfı (deniz seviyesi ~12.500 kN, Isp 242/268 s).
+        // "Motor kütlesi" 0: gövde kütlesi Boosters::inert_fraction ile hesaplanır.
+        {"srb", "Katı yakıtlı güçlendirici (Shuttle SRB sınıfı)", "APCP", 242, 268, 12500.0 * 268.0 / 242.0, 0.0, 0.998, 25, ""},
     };
     return t;
 }
@@ -99,12 +102,68 @@ Result<Report> analyze(const Design& d, const std::vector<std::string>& unlocked
         above_of[i] = above;
         above += st[i].prop + st[i].dry;
     }
-    r.liftoff_mass_t = above;
+    // yan güçlendiriciler
+    const Boosters& B = d.boosters;
+    const prop::Engine* be = nullptr;
+    double b_prop = 0, b_inert = 0;
+    if (B.count > 0) {
+        auto e = find_engine(B.engine);
+        if (!e) return e.error();
+        if (!has(unlocked, e.value()->research))
+            return make_error(ErrorCode::Locked, e.value()->name_tr + " için araştırma gerekli: " + e.value()->research);
+        if (B.count > 8 || B.propellant_t <= 0 || B.inert_fraction < 0.03 || B.inert_fraction > 0.5)
+            return make_error(ErrorCode::InvalidArgument, "Güçlendirici: adet 1-8, yakıt > 0, gövde oranı 0.03-0.5 olmalı");
+        be = e.value();
+        b_prop = B.propellant_t * B.count;
+        b_inert = b_prop * B.inert_fraction + be->mass_t * B.count;
+        r.cost_mcr += be->cost_mcr * B.count + b_prop * 0.003;
+    }
+    r.liftoff_mass_t = above + b_prop + b_inert;
 
     double success = 1.0;
+    if (be) success *= std::pow(be->reliability, B.count);      // katı yakıtlıda motor kaybı toleransı yok
     for (std::size_t i = 0; i < st.size(); ++i) {
         const S& s = st[i];
+        if (i == 0 && be) {
+            // PARALEL KADEME: A fazı (çekirdek + güçlendiriciler), B fazı (güçlendiriciler atıldıktan sonra çekirdek)
+            const double isp_c = s.e->isp_sl_s > 0 ? 0.25 * s.e->isp_sl_s + 0.75 * s.e->isp_vac_s : s.e->isp_vac_s * 0.3;
+            const double isp_b = 0.25 * be->isp_sl_s + 0.75 * be->isp_vac_s;
+            const double mdot_c = s.e->thrust_vac_kn * 1000.0 * s.n / (s.e->isp_vac_s * kG0) / 1000.0;   // t/s
+            const double mdot_b = be->thrust_vac_kn * 1000.0 * B.count / (be->isp_vac_s * kG0) / 1000.0;
+            const double tb = b_prop / mdot_b;                       // güçlendirici yanma süresi
+            const double tc = s.prop / mdot_c;
+            if (tb > tc) r.problems.push_back("Güçlendiriciler çekirdek kademeden uzun yanıyor (çekirdek yakıtını artır)");
+            const double tA = std::min(tb, tc);
+            const double burnedA = (mdot_c + mdot_b) * tA;
+            const double isp_eff = (mdot_c * isp_c + mdot_b * isp_b) / (mdot_c + mdot_b);   // kütle akışı ağırlıklı
+            StageReport a{};
+            a.label = "Güçlendiriciler + 1. kademe";
+            a.m0_t = r.liftoff_mass_t;
+            a.mf_t = a.m0_t - burnedA;
+            a.isp_used_s = isp_eff;
+            a.dv_ms = isp_eff * kG0 * std::log(a.m0_t / a.mf_t);
+            a.twr = (s.e->thrust_sl_kn() * s.n + be->thrust_sl_kn() * B.count) * 1000.0 / (a.m0_t * 1000.0 * kG0);
+            a.burn_s = tA;
+            r.total_dv_ms += a.dv_ms;
+            r.stages.push_back(a);
+            // güçlendiriciler (ve kalan yakıtları) atılır
+            const double b_left = std::max(0.0, b_prop - mdot_b * tA);
+            const double core_left = std::max(0.0, s.prop - mdot_c * tA);
+            StageReport c{};
+            c.label = "1. kademe (güçlendiriciler atıldı)";
+            c.m0_t = a.mf_t - b_inert - b_left;
+            c.mf_t = c.m0_t - core_left;
+            c.isp_used_s = s.e->isp_vac_s * 0.97;                   // ince üst atmosfer
+            c.dv_ms = c.isp_used_s * kG0 * std::log(c.m0_t / c.mf_t);
+            c.twr = s.e->thrust_vac_kn * s.n * 1000.0 / (c.m0_t * 1000.0 * kG0);
+            c.burn_s = core_left / mdot_c;
+            r.total_dv_ms += c.dv_ms;
+            success *= stage_reliability(s.e->reliability, s.n);
+            r.stages.push_back(c);
+            continue;
+        }
         StageReport sr{};
+        sr.label = std::to_string(i + 1) + ". kademe";
         sr.m0_t = above_of[i] + s.prop + s.dry;
         sr.mf_t = above_of[i] + s.dry;
         // ilk kademe atmosferde başlar ama yakıtın çoğunu ince üst atmosferde yakar: Isp ağırlığı %25 deniz
@@ -132,9 +191,14 @@ Result<Report> analyze(const Design& d, const std::vector<std::string>& unlocked
     if (r.margin_ms < 0)
         r.problems.push_back("Delta-v yetersiz: " + fmt(r.total_dv_ms / 1000.0, 2) + " / " +
                              fmt(r.required_dv_ms / 1000.0, 2) + " km/s");
-    for (std::size_t i = 1; i < r.stages.size(); ++i)
-        if (r.stages[i].twr < 0.02 && st[i].e->key != "ion")
+    for (std::size_t i = 1; i < st.size(); ++i) {
+        const StageReport& sr = r.stages[i + (be ? 1 : 0)];
+        if (sr.twr < 0.02 && st[i].e->key != "ion")
             r.problems.push_back("Kademe " + std::to_string(i + 1) + " itkisi çok düşük (yerçekimi kaybı)");
+    }
+    if (d.crew > 0 && be && r.liftoff_twr > 2.5)
+        r.problems.push_back("Katı güçlendiriciler kısılamaz: kalkış itki/ağırlık " + fmt(r.liftoff_twr, 2) +
+                             " mürettebat için fazla (ivme 4 g'yi aşar); güçlendirici sayısını/yakıtını azalt");
     if (d.crew > 0 && st.back().e->key == "ion")
         r.problems.push_back("Mürettebatlı görevde iyon itici ana tahrik olamaz (aylar sürer)");
 
