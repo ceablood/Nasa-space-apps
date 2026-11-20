@@ -12,6 +12,7 @@ Sahnelerin dünya katmanına (arayüzden önce) uygulanır, böylece yazılar ke
 Ayar: AJANS > Ayarlar > SİNEMATİK EFEKTLER (i18n.PREFS["cinematic"]).
 """
 import math
+import sys
 
 import numpy as np
 import pygame
@@ -21,6 +22,7 @@ from . import space3d as S3
 
 F32 = np.float32
 _CACHE = {}
+WEB = sys.platform == "emscripten"
 
 
 def enabled():
@@ -28,21 +30,34 @@ def enabled():
 
 
 def _rgba_surface(rgb, a=None):
+    """Sinematik katman yüzeyi. Alfa verilmezse OPAK ve ekran formatında döner: bu katmanlar yalnızca
+    BLEND_RGB_ADD / BLEND_RGB_MULT ile kullanılır. Piksel başı alfalı tam ekran karıştırma tarayıcıda
+    (WebAssembly, SIMD yok) ~19 ms, opak RGB karıştırma ~3,5 ms."""
     h, w, _ = rgb.shape
-    alpha = np.full((h, w), 255, np.uint8) if a is None else np.clip(a, 0, 255).astype(np.uint8)
+    if a is None:
+        s = pygame.image.frombuffer(np.ascontiguousarray(np.clip(rgb, 0, 255).astype(np.uint8)).tobytes(), (w, h), "RGB")
+        try:
+            if pygame.display.get_surface() is not None:
+                return s.convert()
+        except pygame.error:
+            pass
+        return s.copy()
+    alpha = np.clip(a, 0, 255).astype(np.uint8)
     return S3.to_surface(np.dstack([np.clip(rgb, 0, 255).astype(np.uint8), alpha]))
 
 
 # ----------------------------------------------------------------- ışık huzmeleri
-def _rays_texture(size, color, seed):
-    key = ("rays", size, color, seed)
+def _rays_base(size, color, seed):
+    """Huzme dokusu tam parlaklıkta, YARI çözünürlükte, bir kez üretilir (renk 32'lik adımla)."""
+    key = ("raysb", size, color, seed)
     s = _CACHE.get(key)
     if s is not None:
         return s
+    hs = max(8, size // 2)
     r = np.random.default_rng(seed)
-    yy, xx = np.mgrid[0:size, 0:size].astype(F32) - size / 2
+    yy, xx = np.mgrid[0:hs, 0:hs].astype(F32) - hs / 2
     ang = np.arctan2(yy, xx)
-    rad = np.sqrt(xx * xx + yy * yy) / (size / 2)
+    rad = np.sqrt(xx * xx + yy * yy) / (hs / 2)
     k = 48
     pts = r.random(k + 1).astype(F32)
     pts[-1] = pts[0]
@@ -60,23 +75,44 @@ def _rays_texture(size, color, seed):
     fall = np.clip(1 - rad, 0, 1) ** 1.6
     core = np.exp(-rad * 9) * 0.6
     val = (beam * fall * 0.75 + core)[..., None]
-    rgb = val * np.array(color, F32)[None, None, :]
-    s = _rgba_surface(rgb)
+    s = _rgba_surface(val * np.array(color, F32)[None, None, :])
     _CACHE[key] = s
     return s
 
 
+_RAYS_LRU = []
+
+
+def _rays_texture(size, color, strength, seed):
+    """Parlaklığı uygulanmış tam boy huzme dokusu. Eskiden parlaklık her değiştiğinde 1800x1800 numpy
+    dokusu baştan üretiliyordu (tarayıcıda ~40 ms/kare); şimdi yarı çözünürlüklü taban dokuya ucuz bir
+    çarpma + yumuşak büyütme yapılır ve son birkaç sonuç saklanır."""
+    base_col = tuple(min(255, int(c) // 32 * 32 + 16) for c in color)
+    lvl = int(max(0.0, min(1.0, strength)) * 32 + 0.5)                 # 1/32 parlaklık adımı
+    key = (size, base_col, lvl, seed)
+    for k_, s_ in _RAYS_LRU:
+        if k_ == key:
+            return s_
+    base = _rays_base(size, base_col, seed)
+    m = int(255 * lvl / 32)
+    small = base.copy()
+    if m < 255:
+        small.fill((m, m, m), special_flags=pygame.BLEND_RGB_MULT)
+    big = pygame.transform.smoothscale(small, (size, size))
+    _RAYS_LRU.insert(0, (key, big))
+    del _RAYS_LRU[3:]
+    return big
+
+
 def god_rays(surf, pos, color=(255, 200, 140), strength=0.6, size=1400, t=0.0, clip=None):
-    """Toplamsal (BLEND_ADD) ışık huzmeleri; pos ekran dışında olabilir (huzmeler kenardan girer)."""
+    """Toplamsal (BLEND_RGB_ADD) ışık huzmeleri; pos ekran dışında olabilir (huzmeler kenardan girer)."""
     if not enabled() or strength <= 0.02:
         return
-    col = tuple(int(max(0, min(255, c * strength))) for c in color)
-    col = tuple(int(c) // 8 * 8 for c in col)          # önbellek dostu renk adımı
-    tex = _rays_texture(size, col, 3)
+    tex = _rays_texture(size, color, strength, 3)
     old = surf.get_clip()
     if clip is not None:
         surf.set_clip(clip)
-    surf.blit(tex, (int(pos[0] - tex.get_width() / 2), int(pos[1] - tex.get_height() / 2)), special_flags=pygame.BLEND_ADD)
+    surf.blit(tex, (int(pos[0] - tex.get_width() / 2), int(pos[1] - tex.get_height() / 2)), special_flags=pygame.BLEND_RGB_ADD)
     surf.set_clip(old)
 
 
@@ -109,7 +145,7 @@ def motes(surf, rect, t, n=60, color=(255, 230, 190), seed=5, strength=1.0):
         tw = 0.55 + 0.45 * math.sin(t * (1.5 + sp * 2) + ph * 9)
         c = tuple(int(max(0, min(255, cc * tw * strength))) for cc in color)
         spr = _mote_sprite(1 + int(sz * 2.6), c)
-        surf.blit(spr, (int(x - spr.get_width() / 2), int(y - spr.get_height() / 2)), special_flags=pygame.BLEND_ADD)
+        surf.blit(spr, (int(x - spr.get_width() / 2), int(y - spr.get_height() / 2)), special_flags=pygame.BLEND_RGB_ADD)
     surf.set_clip(old)
 
 
@@ -128,7 +164,7 @@ def haze(surf, rect, color, strength=0.5, top=True):
         rgb = np.repeat((prof[:, None] * strength)[:, :, None] * np.array(color, F32)[None, None, :], w, 1)
         s = _rgba_surface(rgb)
         _CACHE[key] = s
-    surf.blit(s, rect.topleft, special_flags=pygame.BLEND_ADD)
+    surf.blit(s, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
 
 
 # ----------------------------------------------------------------- fırça + renk düzenleme
@@ -153,7 +189,7 @@ def brush(surf, rect):
     if not enabled():
         return
     rect = pygame.Rect(rect)
-    surf.blit(_brush_surface(rect.size), rect.topleft, special_flags=pygame.BLEND_MULT)
+    surf.blit(_brush_surface(rect.size), rect.topleft, special_flags=pygame.BLEND_RGB_MULT)
 
 
 def _grade_surfaces(size, warm, cool):
@@ -181,8 +217,8 @@ def grade(surf, rect, warm=(18, 10, 0), cool=(150, 140, 200)):
         return
     rect = pygame.Rect(rect)
     mul, add = _grade_surfaces(rect.size, warm, cool)
-    surf.blit(mul, rect.topleft, special_flags=pygame.BLEND_MULT)
-    surf.blit(add, rect.topleft, special_flags=pygame.BLEND_ADD)
+    surf.blit(mul, rect.topleft, special_flags=pygame.BLEND_RGB_MULT)
+    surf.blit(add, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
 
 
 def _combined(size, haze_col, haze_k, warm, cool):
@@ -215,11 +251,11 @@ def full_pass(surf, rect, t, sun=None, sun_col=(255, 200, 140), rays=0.5, mote_c
         return
     rect = pygame.Rect(rect)
     mul, add = _combined(rect.size, tuple(int(c) for c in haze_col) if haze_col else None, round(haze_k, 2), warm, cool)
-    surf.blit(add, rect.topleft, special_flags=pygame.BLEND_ADD)
+    surf.blit(add, rect.topleft, special_flags=pygame.BLEND_RGB_ADD)
     if sun is not None and rays > 0:
         god_rays(surf, sun, sun_col, rays, t=t, clip=rect)
     motes(surf, rect, t, n_motes, mote_col)
-    surf.blit(mul, rect.topleft, special_flags=pygame.BLEND_MULT)
+    surf.blit(mul, rect.topleft, special_flags=pygame.BLEND_RGB_MULT)
 
 
 # ===========================================================================
@@ -241,6 +277,39 @@ PALETTE_LIGHT = {
 }
 
 
+def space_layers(palette, vig, strength=1.0):
+    """Uzay arka planının durağan sinematik katmanları (önbellekli): toplama (pus + sıcak ışık) ve
+    çarpma (fırça dokusu × soğuk gölge × vinyet tek yüzeyde). Sinematik kapalıysa None."""
+    if not enabled():
+        return None
+    p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
+    key = ("spacel", palette, id(vig), round(strength, 2))
+    g = _CACHE.get(key)
+    if g is None:
+        size = vig.get_size()
+        add, mul = _combined(size, p["haze"], round(0.8 * strength, 2), p["warm"], p["cool"])
+        mulv = mul.copy()
+        mulv.blit(vig, (0, 0))                        # siyah alfa katmanı = (1 - a) ile çarpma
+        try:
+            mulv = mulv.convert()
+            add = add.convert()
+        except pygame.error:
+            pass
+        g = (add, mulv)
+        _CACHE[key] = g
+    return g
+
+
+def space_dynamic(surf, palette, t, strength=1.0):
+    """Uzay arka planının hareketli sinematik kısmı: ekran dışı yıldızdan huzmeler ve toz zerreleri."""
+    if not enabled():
+        return
+    p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
+    god_rays(surf, p["sun"], p["key"], 0.55 * strength, t=t, clip=surf.get_rect())
+    if i18n.PREFS.get("quality") != "standard":
+        motes(surf, surf.get_rect(), t, 38, p["mote"])
+
+
 def space_pass(surf, palette, t, strength=1.0):
     """Ortak uzay arka planı için tam sinematik geçiş: huzmeler, toz, pus, fırça + renk uyumu.
     Arka plan katmanına uygulanır; üstüne çizilen arayüz keskin kalır."""
@@ -253,24 +322,41 @@ def space_pass(surf, palette, t, strength=1.0):
               warm=p["warm"], cool=p["cool"])
 
 
+_BLOOM = {"n": 0, "big": None}
+
+
 def bloom(surf, strength=0.85, threshold=128):
     """Parlak alanlardan yumuşak ışık taşması (çok kademeli bulanık), toplamsal.
-    İnce yazılar küçültmede ortalanıp eşik altında kaldığı için keskin kalır."""
+    İnce yazılar küçültmede ortalanıp eşik altında kaldığı için keskin kalır.
+    Optimizasyon: şiddet çarpımı 1/4 çözünürlükte yapılır; bulanık katman iki karede bir yenilenir
+    (parlama hâlesi zaten çok yumuşak, bir karelik gecikme görünmez)."""
     if not enabled() or strength <= 0.02 or i18n.PREFS.get("quality") == "standard":
         return
     w, h = surf.get_size()
-    try:
-        s1 = pygame.transform.smoothscale(surf, (max(1, w // 8), max(1, h // 8)))
-    except (ValueError, pygame.error):
-        return
-    s1.fill((threshold,) * 3, special_flags=pygame.BLEND_RGB_SUB)
-    s2 = pygame.transform.smoothscale(s1, (max(1, w // 24), max(1, h // 24)))       # geniş hale
-    s2 = pygame.transform.smoothscale(s2, s1.get_size())
-    s1.blit(s2, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
-    s1 = pygame.transform.smoothscale(s1, (max(1, w // 4), max(1, h // 4)))
-    big = pygame.transform.smoothscale(s1, (w, h))
-    m = int(255 * min(1.0, strength))
-    big.fill((m, m, m), special_flags=pygame.BLEND_RGB_MULT)
+    B = _BLOOM
+    B["n"] += 1
+    big = B["big"]
+    if big is None or big.get_size() != (w, h) or B["n"] % 2 == 0 or B.get("k") != strength:
+        try:
+            s1 = pygame.transform.smoothscale(surf, (max(1, w // 8), max(1, h // 8)))
+        except (ValueError, pygame.error):
+            return
+        s1.fill((threshold,) * 3, special_flags=pygame.BLEND_RGB_SUB)
+        s2 = pygame.transform.smoothscale(s1, (max(1, w // 24), max(1, h // 24)))       # geniş hale
+        s2 = pygame.transform.smoothscale(s2, s1.get_size())
+        s1.blit(s2, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+        s1 = pygame.transform.smoothscale(s1, (max(1, w // 4), max(1, h // 4)))
+        m = int(255 * min(1.0, strength))
+        s1.fill((m, m, m), special_flags=pygame.BLEND_RGB_MULT)
+        if WEB:
+            # tarayıcıda tam ekran smoothscale ~4,5 ms: yarıya yumuşak, sonra 2x büyüt (~2 ms; hâle zaten bulanık)
+            half = pygame.transform.smoothscale(s1, (max(1, w // 2), max(1, h // 2)))
+            big = B["big"] = pygame.transform.scale(half, (w, h))
+        elif big is None or big.get_size() != (w, h):
+            big = B["big"] = pygame.transform.smoothscale(s1, (w, h))
+        else:
+            pygame.transform.smoothscale(s1, (w, h), big)
+        B["k"] = strength
     surf.blit(big, (0, 0), special_flags=pygame.BLEND_RGB_ADD)
 
 

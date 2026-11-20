@@ -876,4 +876,12 @@ class RingRocks:
 def to_surface(arr):
     import pygame
     h, w = arr.shape[:2]
-    return pygame.image.frombuffer(np.ascontiguousarray(arr).tobytes(), (w, h), "RGBA")
+    s = pygame.image.frombuffer(np.ascontiguousarray(arr).tobytes(), (w, h), "RGBA")
+    # ekran piksel düzenine (BGRA) çevir: RGBA yüzeyler her karıştırmada yavaş genel yola düşüyordu
+    # (tam ekran BLEND_ADD/MULT: ~13 ms -> ~0,5 ms)
+    try:
+        if pygame.display.get_surface() is not None:
+            return s.convert_alpha()
+    except pygame.error:
+        pass
+    return s
