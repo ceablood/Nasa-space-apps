@@ -11,4 +11,7 @@ THIRD_PARTY_INCLUDES_START
 #include "../../../../../core/src/colony.cpp"
 #include "../../../../../core/src/research.cpp"
 #include "../../../../../core/src/game.cpp"
+#include "../../../../../core/src/gare.cpp"
+#include "../../../../../core/src/flight.cpp"
+#include "../../../../../core/src/nova.cpp"
 THIRD_PARTY_INCLUDES_END

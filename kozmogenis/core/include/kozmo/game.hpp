@@ -23,6 +23,11 @@ struct Payload {
 };
 
 double module_mass_t(colony::ModuleType t);               // oyun varsayımı
+
+// Ortak hazır tasarımlar (CLI, NOVA ve UE5 istemcisi aynı tanımı kullanır)
+prop::Design preset_heavy_rocket(const std::string& target, double payload_t, int crew);   // metan/LOX + hidrojen iniş
+prop::Design preset_light_rocket(const std::string& target, double payload_t);             // Falcon 9 sınıfı
+Payload standard_colony_kit();                                                              // 3 kişilik başlangıç kolonisi
 double payload_mass_t(const Payload& p);                  // mürettebat kapsülü hariç (analiz ekler)
 
 enum class MissionState { InTransit, Arrived, Lost };

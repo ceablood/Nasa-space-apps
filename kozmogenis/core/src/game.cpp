@@ -22,6 +22,38 @@ double module_mass_t(colony::ModuleType t) {
     return 5.0;
 }
 
+prop::Design preset_heavy_rocket(const std::string& target, double payload_t, int crew) {
+    prop::Design d;
+    d.name = "Ağır (metan/LOX + hidrojen iniş kademesi)";
+    d.stages = {{"methalox_fc", 33, 3400.0, 0.06}, {"methalox_vac", 3, 1200.0, 0.06}, {"hydrolox_exp", 4, 140.0, 0.10}};
+    d.payload_t = payload_t;
+    d.crew = crew;
+    d.target = target;
+    d.land = true;
+    return d;
+}
+
+prop::Design preset_light_rocket(const std::string& target, double payload_t) {
+    prop::Design d;
+    d.name = "Hafif (kerosen, 2 kademe — Falcon 9 sınıfı)";
+    d.stages = {{"kerolox_gg", 9, 411.0, (25.6 - 9 * 0.47) / 411.0}, {"kerolox_vac", 1, 107.5, (4.0 - 0.49) / 107.5}};
+    d.payload_t = payload_t;
+    d.target = target;
+    d.land = true;
+    return d;
+}
+
+Payload standard_colony_kit() {
+    using colony::Job;
+    using colony::ModuleType;
+    Payload p;
+    p.modules = {ModuleType::Habitat, ModuleType::Greenhouse, ModuleType::Electrolyzer, ModuleType::SolarArray,
+                 ModuleType::SolarArray, ModuleType::Lab};
+    p.cargo = {{"water", 3.0}, {"oxygen", 0.3}, {"food", 0.3}};
+    p.crew = {{"Ada", Job::Farmer}, {"Can", Job::Engineer}, {"Ece", Job::Scientist}};
+    return p;
+}
+
 double payload_mass_t(const Payload& p) {
     double m = 0;
     for (auto t : p.modules) m += module_mass_t(t);

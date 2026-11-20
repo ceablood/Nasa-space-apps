@@ -8,29 +8,12 @@ DEFINE_LOG_CATEGORY(LogKozmo);
 
 namespace
 {
+// Hazır tasarımlar çekirdekte tek yerde tanımlıdır (kozmo/game.hpp)
 kozmo::prop::Design HeavyRocket(const std::string& Target, double PayloadT, int Crew)
 {
-	kozmo::prop::Design D;
-	D.name = "Ağır (metan/LOX + hidrojen iniş kademesi)";
-	D.stages = {{"methalox_fc", 33, 3400.0, 0.06}, {"methalox_vac", 3, 1200.0, 0.06}, {"hydrolox_exp", 4, 140.0, 0.10}};
-	D.payload_t = PayloadT;
-	D.crew = Crew;
-	D.target = Target;
-	D.land = true;
-	return D;
+	return kozmo::preset_heavy_rocket(Target, PayloadT, Crew);
 }
-
-kozmo::Payload ColonyKit()
-{
-	using kozmo::colony::Job;
-	using kozmo::colony::ModuleType;
-	kozmo::Payload P;
-	P.modules = {ModuleType::Habitat, ModuleType::Greenhouse, ModuleType::Electrolyzer, ModuleType::SolarArray,
-	             ModuleType::SolarArray, ModuleType::Lab};
-	P.cargo = {{"water", 3.0}, {"oxygen", 0.3}, {"food", 0.3}};
-	P.crew = {{"Ada", Job::Farmer}, {"Can", Job::Engineer}, {"Ece", Job::Scientist}};
-	return P;
-}
+kozmo::Payload ColonyKit() { return kozmo::standard_colony_kit(); }
 }  // namespace
 
 void UKozmoSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -48,6 +31,7 @@ void UKozmoSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		}
 	});
 	Game = MakeUnique<kozmo::Game>(static_cast<std::uint64_t>(FPlatformTime::Cycles64()));
+	Nova = MakeUnique<kozmo::nova::Nova>(*Game);      // Game nesnesi yeni oyun/yüklemede yerinde güncellenir
 	SubscribeEvents();
 	NewGame(TEXT("AETHER"));
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UKozmoSubsystem::TickGame));
@@ -57,6 +41,7 @@ void UKozmoSubsystem::Deinitialize()
 {
 	FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
 	kozmo::Log::set_sink(nullptr);
+	Nova.Reset();
 	Game.Reset();
 	Super::Deinitialize();
 }
@@ -221,6 +206,39 @@ FString UKozmoSubsystem::GetStatusText() const
 		S += FString::Printf(TEXT("%s: nüfus %d/%d, moral %.2f, O2 %.2f t, su %.2f t, gıda %.2f t\n"), *C.Id, C.Population,
 			C.Housing, C.Morale, C.OxygenT, C.WaterT, C.FoodT);
 	}
+	return S;
+}
+
+FString UKozmoSubsystem::AskNova(const FString& Text)
+{
+	const kozmo::nova::Reply R = Nova->ask(KozmoStd(Text));
+	FString Out = KozmoStr(R.text);
+	for (const std::string& Src : R.sources) Out += TEXT("\n[kaynak] ") + KozmoStr(Src);
+	Push(TEXT("NOVA: ") + KozmoStr(R.text).Left(120));
+	return Out;
+}
+
+TArray<FString> UKozmoSubsystem::GetNovaWarnings() const
+{
+	TArray<FString> Out;
+	for (const std::string& W : Nova->warnings()) Out.Add(KozmoStr(W));
+	return Out;
+}
+
+FString UKozmoSubsystem::SimulateAscent(bool bHeavy, float PayloadT)
+{
+	const kozmo::prop::Design D = bHeavy ? kozmo::preset_heavy_rocket("leo", PayloadT, 0) : kozmo::preset_light_rocket("leo", PayloadT);
+	auto R = kozmo::flight::simulate_ascent(D, kozmo::flight::AscentConfig{});
+	if (!R.ok()) return KozmoStr(R.error().message);
+	const auto& X = R.value();
+	FString S;
+	for (const auto& E : X.events)
+	{
+		S += FString::Printf(TEXT("T+%.0f s  %s  %.1f km  %.0f m/s\n"), E.t_s, *KozmoStr(kozmo::flight::event_name(E.type)),
+			E.altitude_m / 1000.0, E.speed_ms);
+	}
+	S += FString::Printf(TEXT("%s — yörünge %.0f x %.0f km, Max-Q %.1f kPa"), X.orbit ? TEXT("YÖRÜNGE") : TEXT("BAŞARISIZ"),
+		X.final_orbit.periapsis_alt_m / 1000.0, X.final_orbit.apoapsis_alt_m / 1000.0, X.max_q_pa / 1000.0);
 	return S;
 }
 
