@@ -20,7 +20,7 @@
 namespace kozmo::craft {
 
 enum class PartKind { Hull, Cockpit, Engine, Tank, Rcs, SolarPanel, Battery, Sensor, Radar, Science, Cargo, LifeSupport,
-                      LandingGear, RoboticArm, Comms, HeatShield, Wing, Cabin };
+                      LandingGear, RoboticArm, Comms, HeatShield, Wing, Cabin, Decelerator };
 const char* to_string(PartKind k);
 
 enum class CraftClass { Exploration, Transport, Research, Construction, Lander, Special };
@@ -153,6 +153,13 @@ public:
     // --- uçuş (gezegen yakını 2B: irtifa, yatay mesafe)
     void place_landed();
     void place_in_flight(double altitude_m, double horizontal_ms, double vertical_ms);
+    void place_in_orbit(const challenge::PlanetEnvironment& env, double altitude_m);   // dairesel yörünge
+    // iniş noktası (yatay konum, m): iniş desteği konumu da kontrol eder (yoksa yalnız hızı sıfırlar)
+    void set_landing_target(double x_m) { target_x_ = x_m; has_target_ = true; }
+    void clear_landing_target() { has_target_ = false; }
+    bool has_landing_target() const { return has_target_; }
+    double landing_target() const { return target_x_; }
+    bool decelerator_deployed() const;
     void step(double dt_s, const challenge::PlanetEnvironment& env, Rng& rng);
     FlightPhase phase() const { return phase_; }
     double altitude() const { return alt_; }
@@ -220,6 +227,8 @@ private:
     double o2_kg_ = 50, cabin_kpa_ = 101.3, battery_kwh_ = 0, leak_rate_kpa_h_ = 0;
     bool emergency_o2_used_ = false;
     double orbit_target_m_ = 0;
+    double target_x_ = 0;
+    bool has_target_ = false, decel_jettisoned_ = false;
     Docking dock_;
     double rcs_cmd_ = 0;
     std::vector<Fault> faults_;

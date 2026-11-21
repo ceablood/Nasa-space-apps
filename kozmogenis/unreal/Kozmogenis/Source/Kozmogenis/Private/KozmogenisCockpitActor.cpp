@@ -44,8 +44,10 @@ void AKozmogenisCockpitActor::Build(kozmo::craft::CockpitLevel InLevel)
 	}
 	Parts.Add(KozmoShapes::Add(this, Root, EKozmoShape::Cube, FVector(1.15f, 0, 1.95f), FVector(0.06f, 1.5f, 0.06f), Trim, 0.35f, 0.9f));
 	// kontrol kolu ve gaz kolu (hareketli: kokpit güncellemesinde döndürülür)
-	Parts.Add(KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, FVector(0.35f, 0.25f, 0.65f), FVector(0.04f, 0.04f, 0.3f), Trim, 0.4f, 0.8f));
-	Parts.Add(KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, FVector(0.35f, -0.35f, 0.65f), FVector(0.05f, 0.05f, 0.25f), FLinearColor(0.5f, 0.1f, 0.05f), 0.4f, 0.3f));
+	Stick = KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, FVector(0.35f, 0.25f, 0.65f), FVector(0.04f, 0.04f, 0.3f), Trim, 0.4f, 0.8f);
+	ThrottleLever = KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, FVector(0.35f, -0.35f, 0.65f), FVector(0.05f, 0.05f, 0.25f), FLinearColor(0.5f, 0.1f, 0.05f), 0.4f, 0.3f);
+	Parts.Add(Stick);
+	Parts.Add(ThrottleLever);
 
 	// göstergeler: V1'de yalnız temel 6 analog gösterge, V2+ dijital 12 gösterge
 	const int32 N = Level == CockpitLevel::Basic ? 6 : 12;
@@ -131,6 +133,12 @@ FString AKozmogenisCockpitActor::ButtonAction(const UPrimitiveComponent* Hit) co
 	for (const auto& [C, A] : Buttons)
 		if (C == Hit) return A;
 	return FString();
+}
+
+void AKozmogenisCockpitActor::SetLevers(double Throttle, float PitchDeg)
+{
+	if (ThrottleLever) ThrottleLever->SetRelativeRotation(FRotator(static_cast<float>(-40.0 + 80.0 * FMath::Clamp(Throttle, 0.0, 1.0)), 0.f, 0.f));
+	if (Stick) Stick->SetRelativeRotation(FRotator(FMath::Clamp((PitchDeg - 90.f) * 0.25f, -25.f, 25.f), 0.f, 0.f));
 }
 
 FVector AKozmogenisCockpitActor::GetEyeLocation() const { return GetActorTransform().TransformPosition(FVector(-5.f, 0.f, 125.f)); }

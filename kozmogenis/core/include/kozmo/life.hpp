@@ -34,6 +34,7 @@ struct Interactable {
 struct Room {
     std::string name;
     std::vector<Interactable> items;
+    int floor = 0;              // 0 zemin; yer altı düzeninde aşağı doğru sayılır (ad olarak "-1. kat")
 };
 struct Building {
     std::string id;
@@ -45,6 +46,8 @@ struct Building {
     bool pressurized = true, shelter = false;
     int capacity = 10;
     bool built = true;          // false: arsa / inşaat alanı (girilemez)
+    int floors = 1;
+    bool elevator = false;      // true: asansör (enerji gerekir); her katlı binada merdiven de vardır
 };
 
 enum class Layout { SurfaceDomes, Underground, Ocean, Polar, Orbital };

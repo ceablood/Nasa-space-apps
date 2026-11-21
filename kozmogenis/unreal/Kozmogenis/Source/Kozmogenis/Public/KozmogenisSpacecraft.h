@@ -41,6 +41,7 @@ private:
 	void SeatToggle();
 	void Throttle(float V);
 	void PitchInput(float V);
+	void Zoom(float V);
 	void Feedback(const FString& S);
 	class UKozmoSubsystem* Kozmo() const;
 
@@ -52,4 +53,8 @@ private:
 	UPROPERTY() TObjectPtr<UPointLightComponent> PlumeLight;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Plume;
 	float ShakeT = 0.f;
+	float PitchDeg = 90.f;          // manuel itki yönü (örnek başına; önceki sürümde paylaşılan static hatası düzeltildi)
+	float Fov = 85.f;
+	float CollisionKick = 0.f;
+	int32 LastFaultCount = 0;
 };

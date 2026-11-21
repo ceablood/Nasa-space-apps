@@ -37,6 +37,7 @@ const char* to_string(PartKind k) {
         case PartKind::HeatShield: return "Isı kalkanı";
         case PartKind::Wing: return "Kanat";
         case PartKind::Cabin: return "Mürettebat kabini";
+        case PartKind::Decelerator: return "Şişme yavaşlatıcı";
     }
     return "?";
 }
@@ -163,6 +164,8 @@ const std::vector<PartSpec>& parts() {
         {"robotic_arm", "Robot kol", PartKind::RoboticArm, 0.5, -1.0, 0},
         {"comms_hga", "Yüksek kazançlı anten", PartKind::Comms, 0.1, -0.2, 0},
         {"heat_shield", "PICA ısı kalkanı", PartKind::HeatShield, 1.0, 0, 0, 0, 0, 0, 10000.0},
+        // NASA LOFTID (2022, 6 m) ile Dünya'da denendi; Mars için 15-20 m HIAD konseptleri geliştirme aşamasında
+        {"hiad", "Şişme ısı kalkanı 18 m (HIAD, LOFTID sınıfı — geliştirmede)", PartKind::Decelerator, 2.5, 0, 18, 0, 0, 0, 1000.0},
         {"wings", "Kanatlar (atmosferde süzülme)", PartKind::Wing, 1.5, 0, 0},
         {"crew_cabin", "Mürettebat kabini (4 koltuk, uyku/yemek/tuvalet)", PartKind::Cabin, 2.0, -1.0, 4},
     };
@@ -391,6 +394,17 @@ std::string Spacecraft::window_view(const challenge::PlanetEnvironment& e) const
     return s;
 }
 
+bool Spacecraft::decelerator_deployed() const { return has_part(PartKind::Decelerator) && !decel_jettisoned_; }
+
+void Spacecraft::place_in_orbit(const challenge::PlanetEnvironment& e, double alt) {
+    const double R = e.radius_km * 1000.0;
+    phase_ = FlightPhase::Orbit;
+    alt_ = alt;
+    vv_ = 0;
+    vh_ = std::sqrt(e.gravity_ms2 * R * R / (R + alt));
+    engines_on_ = false;
+}
+
 void Spacecraft::place_landed() {
     phase_ = FlightPhase::Landed;
     alt_ = vv_ = vh_ = 0;
@@ -401,7 +415,9 @@ void Spacecraft::place_in_flight(double altitude_m, double horizontal_ms, double
     alt_ = altitude_m;
     vh_ = horizontal_ms;
     vv_ = vertical_ms;
+    x_ = 0;
     max_heat_kw_m2_ = 0;
+    decel_jettisoned_ = false;
 }
 
 double Spacecraft::mass_kg() const { return (specs().dry_t + fuel_t_ + cargo_t_) * 1000.0; }
@@ -427,6 +443,13 @@ void Spacecraft::landing_guidance(double g_eff, double amax, double& thr, double
     const double ff = (v_ref == v_sqrt && vv_ < 0 && h > 3.0) ? brake : 0.0;
     double av = (v_ref - vv_) / (h < 200 ? 0.6 : 1.5) + g_eff + ff;
     double ah = -vh_ / 3.0;
+    if (has_target_) {
+        // konum güdümü: kalan menzile göre yatay hız referansı (sabit frenleme profili)
+        const double rem = target_x_ - x_;
+        const double a_hb = std::max(0.2, 0.5 * amax);
+        const double vh_ref = (rem >= 0 ? 1.0 : -1.0) * std::sqrt(2.0 * a_hb * std::fabs(rem));
+        ah = (vh_ref - vh_) / 3.0;
+    }
     av = std::max(0.0, av);
     if (av >= amax) {
         av = amax;
@@ -464,8 +487,17 @@ void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng
             pitch = std::atan2(av, ah) * 180.0 / kPi;
         }
     } else if (fmax > 0 && phase_ == FlightPhase::Flying) {
-        if (mode_ == FlightMode::LandingAssist || mode_ == FlightMode::Emergency) landing_guidance(g_eff, amax, thr, pitch);
-        else if (mode_ == FlightMode::Autopilot) {
+        if (mode_ == FlightMode::LandingAssist || mode_ == FlightMode::Emergency) {
+            landing_guidance(g_eff, amax, thr, pitch);
+            // atmosfer girişi: yavaşlatıcı açıkken hipersonik hızda motor yakılmaz (aerodinamik frenleme)
+            // ateşleme irtifası: dikey durma mesafesi + yatay hızı öldürürken kaybedilecek irtifa + pay
+            if (decelerator_deployed() && std::sqrt(vh_ * vh_ + vv_ * vv_) > 450.0 && e.density_at(alt_) > 1e-7) {
+                const double net = std::max(0.3, amax - std::max(0.0, g_eff));
+                const double t_h = std::fabs(vh_) / std::max(0.1, 0.8 * amax);
+                const double h_ign = std::fabs(std::min(vv_, 0.0)) * t_h * 0.6 + vv_ * vv_ / net + 1500.0;
+                if (alt_ > h_ign) thr = 0.0;
+            }
+        } else if (mode_ == FlightMode::Autopilot) {
             // irtifa ve yatay hız tutma
             const double av = std::max(0.0, -vv_ / 2.0 + g_eff);
             const double ah = -vh_ / 20.0;
@@ -510,16 +542,27 @@ void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng
     const double v = std::sqrt(vh_ * vh_ + vv_ * vv_);
     if (rho > 0 && v > 0) {
         const Specs s = specs();
-        const double area = kPi * s.width_m * s.width_m / 4.0;
-        const double drag = 0.5 * rho * v * v * 1.2 * area / m;
+        double area = kPi * s.width_m * s.width_m / 4.0, cd = 1.2, nose = 2.0, limit = s.heat_limit_kw_m2;
+        if (decelerator_deployed()) {
+            for (const auto& q : parts_)
+                if (find_part(q.key).value()->kind == PartKind::Decelerator) {
+                    const double d = find_part(q.key).value()->capacity;
+                    area = kPi * d * d / 4.0;
+                    nose = d / 2.0;
+                    limit = std::max(limit, find_part(q.key).value()->heat_limit_kw_m2 * q.health);
+                }
+            cd = 1.5;   // küt koni (LOFTID ~1.4-1.6)
+            if (v < 450.0 && alt_ < 15000.0) decel_jettisoned_ = true;   // ses altı hızda atılır, motorlu iniş başlar
+        }
+        const double drag = 0.5 * rho * v * v * cd * area / m;
         ax -= drag * vh_ / v;
         ay -= drag * vv_ / v;
         // Sutton-Graves durma noktası ısı akısı (burun yarıçapı 2 m)
         const double k = e.molar_mass_gmol > 40 ? 1.9027e-4 : 1.7415e-4;
-        const double q = k * std::sqrt(rho / 2.0) * v * v * v / 1000.0;   // kW/m^2
+        const double q = k * std::sqrt(rho / nose) * v * v * v / 1000.0;   // kW/m^2
         max_heat_kw_m2_ = std::max(max_heat_kw_m2_, q);
-        if (s.heat_limit_kw_m2 > 0) {
-            if (q > s.heat_limit_kw_m2) damage(PartKind::HeatShield, 0.02 * dt);
+        if (limit > 0) {
+            if (q > limit) damage(decelerator_deployed() ? PartKind::Decelerator : PartKind::HeatShield, 0.02 * dt);
         } else if (q > 300.0) {
             damage(PartKind::Hull, 0.02 * dt * q / 300.0);
         }
@@ -825,6 +868,9 @@ json::Value Spacecraft::to_json() const {
     v.set("battery", battery_kwh_);
     v.set("mode", static_cast<int>(mode_));
     v.set("target", target_);
+    v.set("land_x", target_x_);
+    v.set("has_land", has_target_);
+    v.set("decel_off", decel_jettisoned_);
     json::Value f = json::Value::array();
     for (Fault x : faults_) f.push(static_cast<int>(x));
     v.set("faults", f);
@@ -860,6 +906,9 @@ Result<Spacecraft> Spacecraft::from_json(const json::Value& v) {
     if (md < 0 || md > 5) return make_error(ErrorCode::Parse, "Geçersiz uçuş modu");
     c.mode_ = static_cast<FlightMode>(md);
     c.target_ = v["target"].as_string();
+    c.target_x_ = v["land_x"].as_number();
+    c.has_target_ = v["has_land"].as_bool();
+    c.decel_jettisoned_ = v["decel_off"].as_bool();
     for (const auto& f : v["faults"].as_array()) {
         const int k = f.as_int(-1);
         if (k < 0 || k > static_cast<int>(Fault::LandingGearFailure)) return make_error(ErrorCode::Parse, "Geçersiz arıza");
@@ -902,6 +951,7 @@ const std::vector<PresetDef>& preset_defs() {
         {"heavy", "KZ-O1", "Fil ağır nakliye gemisi", C::Special, {"hull_heavy", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large", "tank_large", "cargo_bay", "cargo_bay", "cargo_bay", "rcs", "solar_panel", "battery", "life_support", "comms_hga"}, 2},
         {"transfer", "KZ-O2", "Köprü yörünge transfer aracı", C::Special, {"hull_modular", "cockpit_v2", "eng_hydrolox", "tank_large", "rcs", "solar_panel", "battery", "cargo_bay", "comms_hga"}, 1},
         {"deep", "KZ-O3", "Ufuk derin uzay aracı (nükleer termal)", C::Special, {"hull_heavy", "cockpit_v4", "eng_ntr", "tank_large", "tank_large", "tank_large", "rcs", "solar_panel", "solar_panel", "battery", "battery", "sensor_suite", "science_lab", "life_support", "crew_cabin", "comms_hga"}, 4},
+        {"mars_lander", "KZ-L2", "Ares Mars iniş aracı (şişme kalkan + 5 motor)", C::Lander, {"hull_heavy", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_medium", "rcs", "solar_panel", "battery", "landing_radar", "sensor_suite", "life_support", "landing_legs", "comms_hga", "heat_shield", "hiad", "crew_cabin"}, 3},
         {"fusion", "KZ-X1", "Yıldız füzyon deneme gemisi (KURGUSAL)", C::Special, {"hull_heavy", "cockpit_v4", "eng_fusion", "tank_large", "rcs", "solar_panel", "battery", "life_support", "crew_cabin", "comms_hga"}, 2},
     };
     return d;

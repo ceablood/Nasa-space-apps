@@ -28,6 +28,16 @@ PROJE: KOZMOGENİS · SÜRÜM: V41.1 (dikey dilim + geliştirme) · Tarih: 21 Ka
 * **§8 NOVA veri doğrulama**: kaydı olmayan stok "? (kayıt yok)", tutarsız değer "? (tutarsız veri)", ölçüm yerine tahmin olan radyasyon değerleri "VERİ UYARISI" ile bildirilir.
 * UE: HUD'a su ara / koloni kur / inşa / güçlendir / hasar raporu / araç lab / yörüngeye kalk / kenetlen düğmeleri; inşaat ilerledikçe 3B koloni yeniden kurulur (arsa kazıkları, yükselen iskele ve duvarlar, ilerleme etiketi); Titan turuncu puslu gökyüzü; ana panelde Mars ve Titan seferleri. **Derlenmedi.**
 
+## V41.2 düzeltmeleri (test edildi)
+
+* **Yörünge tutarsızlığı giderildi:** sefer gerçek yörünge fazında başlar (Ay 15 km, ~1670 m/s dairesel hız); önceden araç "yörüngede" iken 0 m'de duruyordu.
+* **İniş alanına konum güdümlü iniş:** iniş desteği artık yalnız hızı değil konumu da yönetir; motorlu iniş başlangıcı (Apollo PDI gibi) nominal menzile göre zamanlanır, sapmalar düzeltilir — Ay ve Mars'ta iniş alanına <50 m (15 km geç başlangıçta da).
+* **Mars'a yörüngeden tam giriş:** 125 km, 3.4 km/s giriş; 18 m şişme ısı kalkanı (NASA LOFTID/HIAD sınıfı, geliştirmede) ile aerodinamik frenleme, ateşleme irtifası durma mesafesinden hesaplanır, ses altında kalkan atılır, motorlu iniş (~1.3 m/s temas). Yeni "Ares Mars iniş aracı" (5 motor; Mars'ta yeterli itki/ağırlık). HIAD'sız araçla Mars girişi gerekçesiyle reddedilir.
+* **Bakım:** enerji tesisinde çalışan mühendisler fırtınada aşınan güneş dizilerini onarır (önceden bakım turu onarım yapmıyordu).
+* **Katlı binalar:** yönetim, hastane, yaşam alanı (asansörlü) ve laboratuvar (merdivenli) 2 katlı; konsollar kendi katlarında; asansör enerji ister (kesintide merdiven), kat kayda yazılır.
+* **UE:** yunuslama girişindeki paylaşılan `static` değişken hatası düzeltildi; gaz/kontrol kolu animasyonu; fare tekerleğiyle yakınlaştırma; sıfır yerçekiminde süzülen kamera; türbülans ve çarpışma kamera tepkisi (ayarla azaltılabilir); araç çekirdekteki gerçek menzil konumunda; 3B kolonide ara katlar, asansör/merdiven etkileşimi. **Derlenmedi.**
+* **UE API doğrulaması yapılamadı:** Epic'in API belgeleri sayfası içeriği tarayıcıda oluşturduğu için otomatik okunamadı; motor kaynak kodu (Epic hesabı gerektirir) bu ortamda yok. Kullanılan setter/enum adları hedef PC'de ilk derlemede doğrulanacak.
+
 ## Sistem durumu
 
 | V41 bölümü | Çekirdek (C++, test edildi) | Unreal (yazıldı, **derlenmedi**) |
@@ -39,12 +49,12 @@ PROJE: KOZMOGENİS · SÜRÜM: V41.1 (dikey dilim + geliştirme) · Tarih: 21 Ka
 | §5 NPC | Kişilik (9 eksen), ihtiyaçlar, vardiya, 5 katmanlı karar, meslekler, hafıza (sınırlı, önem sıralı), ilişkiler, sosyal etkileşim, olay tepkileri, LOD | `AKozmogenisNPC`: gövde/etiket, yürüme |
 | §6 NOVA | Sefer bağlantısı, 4 yeni niyet, onaylı tahliye | HUD NOVA kutusu |
 
-Toplam: **97 test, 60.606 kontrol, 0 başarısız** (V41 için 33 test). ASan+UBSan temiz; UE kısıtlarıyla (C++20, RTTI/istisna kapalı) tek birim derleme 0 hata / 0 uyarı.
+Toplam: **101 test, 60.647 kontrol, 0 başarısız** (V41 için 37 test). ASan+UBSan temiz; UE kısıtlarıyla (C++20, RTTI/istisna kapalı) tek birim derleme 0 hata / 0 uyarı.
 
 ## Dürüst sınırlar
 
 * Unreal kodu bu ortamda derlenmedi/çalıştırılmadı. Behavior Tree, State Tree, EQS, Smart Objects, Mass, GAS, World Partition, HLOD, Nanite ve iskelet animasyonu **planlandı**; bu dilimde karar mantığı test edilmiş çekirdekte, 3B görünüm temel şekillerle.
-* Uçuş 2B (irtifa + yatay), düz zemin üstünde; Mars tam atmosfer girişinden bu aracın motorsuz yavaşlaması mümkün değil (model bunu gösteriyor), dilim paraşüt sonrası 10 km'den başlar.
+* Uçuş 2B (irtifa + menzil); yan sapma ekseni ve arazi yüksekliği yok.
 * NASA tablosunda Mars yüzey yoğunluğu 0.020 kg/m³; ideal gazla 0.636 kPa / 208 K'den 0.016 çıkıyor — test ideal gaz değerini kullanır.
 * Zorluk ağırlıkları, ekipman katsayıları, NPC davranış katsayıları oyun varsayımıdır.
 

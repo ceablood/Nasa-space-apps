@@ -52,8 +52,10 @@ TEST("koloni: 18 bölgeli gezilebilir yerleşim, iç mekânlar ve yollar") {
     CHECK(m.s.buildings().size() == 18);
     CHECK(m.s.layout() == Layout::Underground);   // Ay: regolit kalkanlı
     const Building* admin = m.s.find(District::Admin);
-    CHECK(admin && !admin->rooms.empty() && admin->rooms[0].items.size() == 6);
-    CHECK(m.s.find(District::Hospital)->rooms.size() == 3);
+    std::size_t admin_items = 0;
+    for (const auto& r : admin->rooms) admin_items += r.items.size();
+    CHECK(admin && admin_items == 6 && admin->floors == 2 && admin->elevator);
+    CHECK(m.s.find(District::Hospital)->rooms.size() == 3 && m.s.find(District::Hospital)->rooms[2].floor == 1);
     CHECK(m.s.at(admin->x, admin->y) == admin);
     auto p = m.s.path(m.s.find(District::Housing)->x, m.s.find(District::Housing)->y, *admin);
     CHECK(p.size() == 4 && std::fabs(p.back().first - admin->x) < 1e-9);

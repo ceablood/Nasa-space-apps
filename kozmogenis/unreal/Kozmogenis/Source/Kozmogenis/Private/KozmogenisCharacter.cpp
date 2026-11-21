@@ -47,6 +47,7 @@ void AKozmogenisCharacter::SetupPlayerInputComponent(UInputComponent* In)
 	In->BindAxis(TEXT("MoveRight"), this, &AKozmogenisCharacter::MoveRight);
 	In->BindAxis(TEXT("Turn"), this, &APawn::AddControllerYawInput);
 	In->BindAxis(TEXT("LookUp"), this, &APawn::AddControllerPitchInput);
+	In->BindAxis(TEXT("Zoom"), this, &AKozmogenisCharacter::Zoom);
 	In->BindAction(TEXT("Jump"), IE_Pressed, this, &ACharacter::Jump);
 	In->BindAction(TEXT("Interact"), IE_Pressed, this, &AKozmogenisCharacter::Interact);
 	In->BindAction(TEXT("Sample"), IE_Pressed, this, &AKozmogenisCharacter::Sample);
@@ -65,6 +66,11 @@ void AKozmogenisCharacter::MoveForward(float V)
 void AKozmogenisCharacter::MoveRight(float V)
 {
 	if (Controller && !FMath::IsNearlyZero(V)) AddMovementInput(FRotationMatrix(FRotator(0, Controller->GetControlRotation().Yaw, 0)).GetUnitAxis(EAxis::Y), V);
+}
+
+void AKozmogenisCharacter::Zoom(float V)
+{
+	if (!FMath::IsNearlyZero(V)) Camera->SetFieldOfView(FMath::Clamp(Camera->FieldOfView - V * 5.f, 25.f, 100.f));
 }
 
 bool AKozmogenisCharacter::Trace(FHitResult& Hit) const
@@ -113,6 +119,28 @@ void AKozmogenisCharacter::Interact()
 			}
 			auto R = E->use(KozmoStd(T.RightChop(4)));
 			Scene->SetFeedback(R.ok() ? KozmoStr(R.value()) : KozmoStr(R.error().message));
+			return;
+		}
+		if (T.StartsWith(TEXT("elev:")) || T.StartsWith(TEXT("stairs:")))
+		{
+			// "elev:bX:N" / "stairs:bX:N": N. kata geç; karakteri o katın yüksekliğine taşı
+			TArray<FString> Parts;
+			T.ParseIntoArray(Parts, TEXT(":"));
+			if (Parts.Num() == 3)
+			{
+				const bool bElev = Parts[0] == TEXT("elev");
+				const int32 F = FCString::Atoi(*Parts[2]);
+				auto R = E->change_floor(F, bElev);
+				if (R.ok())
+				{
+					const auto* B = E->settlement().find(KozmoStd(Parts[1]));
+					const float FloorH = B ? static_cast<float>(B->h / FMath::Max(1, B->floors)) * 100.f : 400.f;
+					FVector L = GetActorLocation();
+					L.Z = Scene->SettlementToWorld(0, 0, 0).Z + F * FloorH + 100.f;
+					SetActorLocation(L, false, nullptr, ETeleportType::TeleportPhysics);
+				}
+				Scene->SetFeedback(R.ok() ? KozmoStr(R.value()) : KozmoStr(R.error().message));
+			}
 			return;
 		}
 		if (T.StartsWith(TEXT("npc:")))
