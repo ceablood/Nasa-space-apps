@@ -2,6 +2,7 @@
 
 #include "kozmo/civ.hpp"
 #include "kozmo/defense.hpp"
+#include "kozmo/planner.hpp"
 #include "kozmo/world.hpp"
 
 #include <algorithm>
@@ -37,6 +38,7 @@ const char* intent_name(Intent i) {
         case Intent::Quests: return "Görevler";
         case Intent::AsteroidThreat: return "Asteroit tehdidi";
         case Intent::Civilization: return "Medeniyet durumu";
+        case Intent::MissionPlan: return "Görev planı";
     }
     return "?";
 }
@@ -171,6 +173,7 @@ Parsed parse(const std::string& text) {
     else if (any(w, {"asteroit", "meteor", "goktasi", "apophis", "bennu"})) p.intent = Intent::AsteroidThreat;
     else if (any(w, {"medeniyet", "cag", "uygarlik"})) p.intent = Intent::Civilization;
     else if (any(w, {"gorevler", "gorevlerim"}) || f.find("gorev gunlu") != std::string::npos) p.intent = Intent::Quests;
+    else if (any(w, {"planla", "plan"}) && !p.planet.empty()) p.intent = Intent::MissionPlan;
     else if (any(w, {"gorev", "gorevlendir"}) && p.job >= 0) p.intent = Intent::AssignTask;
     else if (any(w, {"insa", "kur"}) && p.module >= 0) p.intent = Intent::BuildModule;
     else if (any(w, {"kur"}) && any(w, {"koloni"})) p.intent = Intent::FoundColony;
@@ -535,6 +538,12 @@ Reply Nova::ask(const std::string& text) {
                 t += "\n" + expedition_->env().name + " için 20 m cisim: " + l.advice;
             }
             return {t, {"Çap: Harris & Lagerros H-albedo bağıntısı", "Palermo: Chesley vd. 2002", "DART: Cheng vd. 2023"}, std::nullopt, false};
+        }
+        case Intent::MissionPlan: {
+            const int crew = p.has_number ? static_cast<int>(p.number) : 4;
+            auto pl = planner::plan(game_, p.planet, crew, 10.0, p.planet == "moon" ? 14.0 : 30.0, true);
+            if (!pl) return {pl.error().message, {}, std::nullopt, false};
+            return {pl.value().summary(), {"Pencere: Lambert/porkchop (dairesel eş düzlemli yaklaşım)", "Doz: MSL RAD, Curiosity RAD, Chang'e-4"}, std::nullopt, false};
         }
         case Intent::Civilization: {
             civ::Civilization c;
