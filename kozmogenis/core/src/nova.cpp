@@ -1,5 +1,7 @@
 ﻿#include "kozmo/nova.hpp"
 
+#include "kozmo/civ.hpp"
+#include "kozmo/defense.hpp"
 #include "kozmo/world.hpp"
 
 #include <algorithm>
@@ -32,6 +34,9 @@ const char* intent_name(Intent i) {
         case Intent::AssignTask: return "Görev verme";
         case Intent::BuildModule: return "Modül inşası";
         case Intent::FoundColony: return "Koloni kurma";
+        case Intent::Quests: return "Görevler";
+        case Intent::AsteroidThreat: return "Asteroit tehdidi";
+        case Intent::Civilization: return "Medeniyet durumu";
     }
     return "?";
 }
@@ -163,6 +168,9 @@ Parsed parse(const std::string& text) {
     else if (any(w, {"firlat", "gonder"}) && any(w, {"koloni", "kit"})) p.intent = Intent::LaunchColonyKit;
     else if (any(w, {"tahliye", "siginak"}) || f.find("guvenli alan") != std::string::npos) p.intent = Intent::Evacuate;
     else if (any(w, {"hasar"})) p.intent = Intent::DamageReport;
+    else if (any(w, {"asteroit", "meteor", "goktasi", "apophis", "bennu"})) p.intent = Intent::AsteroidThreat;
+    else if (any(w, {"medeniyet", "cag", "uygarlik"})) p.intent = Intent::Civilization;
+    else if (any(w, {"gorevler", "gorevlerim"}) || f.find("gorev gunlu") != std::string::npos) p.intent = Intent::Quests;
     else if (any(w, {"gorev", "gorevlendir"}) && p.job >= 0) p.intent = Intent::AssignTask;
     else if (any(w, {"insa", "kur"}) && p.module >= 0) p.intent = Intent::BuildModule;
     else if (any(w, {"kur"}) && any(w, {"koloni"})) p.intent = Intent::FoundColony;
@@ -510,6 +518,33 @@ Reply Nova::ask(const std::string& text) {
             if (!expedition_) return {"Etkin bir sefer yok; hasar verisi okunamıyor.", {}, std::nullopt, false};
             return {expedition_->damage_report(), {"Tesis ve araç telemetrisi (oyun içi veri)"}, std::nullopt, false};
         case Intent::AssignTask: return assign_task(p.job);
+        case Intent::Quests:
+            if (!expedition_) return {"Etkin bir sefer yok.", {}, std::nullopt, false};
+            return {expedition_->quests().summary(), {}, std::nullopt, false};
+        case Intent::AsteroidThreat: {
+            std::string t = "Bilinen yakın Dünya cisimleri (Palermo > -2 ya da Torino > 0 olanlar önemli):";
+            for (const auto& a : defense::catalog()) {
+                const double e = a.energy_mt();
+                t += "\n- " + a.name + ": ~" + fmt("%.0f", a.diameter_m()) + " m, " + fmt("%.0f", e) + " Mt";
+                if (a.probability > 0) t += ", olasılık " + fmt("%.1e", a.probability) + ", Palermo " + fmt("%.2f", defense::palermo(a.probability, e, a.years_to_event)) +
+                                            ", Torino " + std::to_string(defense::torino(a.probability, e, a.years_to_event));
+                t += a.real ? " (gerçek: " + a.note + ")" : " (" + a.note + ")";
+            }
+            if (expedition_) {
+                const auto l = defense::assess_local(20.0, 15000.0, expedition_->env().pressure_kpa, 1e-4);
+                t += "\n" + expedition_->env().name + " için 20 m cisim: " + l.advice;
+            }
+            return {t, {"Çap: Harris & Lagerros H-albedo bağıntısı", "Palermo: Chesley vd. 2002", "DART: Cheng vd. 2023"}, std::nullopt, false};
+        }
+        case Intent::Civilization: {
+            civ::Civilization c;
+            const auto m = c.measure(game_);
+            std::string t = std::string("Çağ: ") + civ::to_string(m.era) + ", " + std::to_string(m.colonies) + " koloni, nüfus " + std::to_string(m.population) +
+                            ", mutluluk %" + fmt("%.0f", m.happiness * 100) + ", istikrar %" + fmt("%.0f", m.stability * 100) + ", kişi başı enerji " +
+                            fmt("%.1f", m.energy_kw_per_capita) + " kW, gıda " + fmt("%.0f", m.food_days) + " gün.";
+            for (const auto& n : m.notes) t += "\n- " + n;
+            return {t, {}, std::nullopt, false};
+        }
         case Intent::BuildModule: return build_module(p.module);
         case Intent::FoundColony: return found_colony();
         case Intent::Confirm: return confirm();
