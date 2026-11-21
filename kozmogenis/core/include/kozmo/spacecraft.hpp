@@ -81,7 +81,17 @@ struct PartState {
     bool leaking = false;
 };
 
-enum class FlightPhase { Landed, Flying, Crashed };
+enum class FlightPhase { Landed, Flying, Crashed, Orbit };
+const char* to_string(FlightPhase p);
+
+// Araç sürümü (V41 §2.3): parçalardan türetilir, etiket değildir
+enum class Tier { V1Basic = 1, V2Advanced, V3Professional, V4Experimental };
+const char* to_string(Tier t);
+
+struct Docking {
+    double range_m = 0, closing_ms = 0;   // hedefe uzaklık, yaklaşma hızı (+ yaklaşıyor)
+    bool active = false, docked = false;
+};
 
 struct Instruments {     // kokpit göstergeleri: tümü canlı durumdan okunur
     double speed_ms, vertical_ms, horizontal_ms;
@@ -117,6 +127,7 @@ public:
     const std::vector<PartState>& installed() const { return parts_; }
     Specs specs() const;
     CockpitLevel cockpit() const;
+    Tier tier() const;
 
     // --- doldurma
     void refuel();                       // tankları doldur
@@ -153,6 +164,16 @@ public:
     double touchdown_speed() const { return touchdown_ms_; }
     // tam otomatik iniş (LandingAssist) ya da kalkış simülasyonu: sonuç fazı döner
     FlightPhase fly_until_landed(const challenge::PlanetEnvironment& env, Rng& rng, double max_s = 3600.0, double dt = 0.1);
+    // yüzeyden alçak yörüngeye otomatik kalkış (otomatik pilot, hedef "yörünge"); kalkıştan yörüngeye
+    Status launch_to_orbit(double orbit_alt_m);
+    FlightPhase fly_until_orbit(const challenge::PlanetEnvironment& env, Rng& rng, double max_s = 3600.0, double dt = 0.1);
+    double orbit_altitude() const { return orbit_target_m_; }
+    // kenetlenme (yörüngede, hedef istasyon): RCS ile yaklaşma. Kenetlenme desteği hızı otomatik yönetir;
+    // manuel modda rcs_command (-1..1) ile yaklaşma ivmesi verilir. Temas hızı >0.15 m/s çarpışma hasarı.
+    Status begin_docking(double range_m, double closing_ms);
+    void set_rcs(double command) { rcs_cmd_ = std::clamp(command, -1.0, 1.0); }
+    void step_docking(double dt_s);
+    const Docking& docking() const { return dock_; }
 
     // --- yaşam desteği (saat adımı)
     void tick_life_support(double dt_h);
@@ -198,12 +219,16 @@ private:
     // yaşam desteği
     double o2_kg_ = 50, cabin_kpa_ = 101.3, battery_kwh_ = 0, leak_rate_kpa_h_ = 0;
     bool emergency_o2_used_ = false;
+    double orbit_target_m_ = 0;
+    Docking dock_;
+    double rcs_cmd_ = 0;
     std::vector<Fault> faults_;
     bool has_fault(Fault f) const;
     void clear_fault(Fault f);
 };
 
-// Hazır araçlar (dikey dilim): Ay/Mars iniş aracı, kargo, araştırma gemisi
-Spacecraft preset(const std::string& key);   // "lander", "cargo", "science"
+// Hazır araçlar: "lander", "cargo", "science" ve sınıf kataloğu (preset_keys)
+Spacecraft preset(const std::string& key);
+const std::vector<std::string>& preset_keys();
 
 }  // namespace kozmo::craft

@@ -61,7 +61,7 @@ struct Colonist {
     bool ordered = false;            // dış emir (alarm/tahliye/onarım): süre bitene kadar kendi seçimini yapmaz
 };
 
-enum class ModuleType { Habitat, Greenhouse, Electrolyzer, SolarArray, FissionReactor, Mine, Sabatier, Lab, Clinic };
+enum class ModuleType { Habitat, Greenhouse, Electrolyzer, SolarArray, FissionReactor, Mine, Sabatier, Lab, Clinic, WaterRecycler };
 const char* module_name(ModuleType t);
 
 struct ModuleSpec {

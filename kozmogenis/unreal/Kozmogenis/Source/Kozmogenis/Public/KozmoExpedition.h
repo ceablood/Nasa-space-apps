@@ -42,6 +42,8 @@ public:
 private:
 	void SetupEnvironment();
 	void SyncNpcs();
+	void SyncColony();
+	int32 BuiltSignature = -1;
 	class UKozmoSubsystem* Kozmo() const;
 
 	UPROPERTY() TObjectPtr<USceneComponent> Root;

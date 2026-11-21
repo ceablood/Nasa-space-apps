@@ -1,6 +1,6 @@
-# KOZMOGENİS V41 — İlerleme raporu (V30 §30.3 biçimi)
+﻿# KOZMOGENİS V41 — İlerleme raporu (V30 §30.3 biçimi)
 
-PROJE: KOZMOGENİS · SÜRÜM: V41 dikey dilim · Tarih: 20 Kasım 2026 · Ortam: Linux bulut kapsayıcısı (UE5 yok)
+PROJE: KOZMOGENİS · SÜRÜM: V41.1 (dikey dilim + geliştirme) · Tarih: 21 Kasım 2026 · Ortam: Linux bulut kapsayıcısı (UE5 yok)
 
 ## Dikey dilim (V41 §10) — çekirdekte uçtan uca çalışan ve test edilen akış
 
@@ -16,6 +16,18 @@ PROJE: KOZMOGENİS · SÜRÜM: V41 dikey dilim · Tarih: 20 Kasım 2026 · Ortam
 8. İkinci gezegen Mars: iniş, farklı çevre profili, toz fırtınaları (araçta güvenle bekleme).
 9. Kayıt/yükleme: araç, oyuncu, NPC hafızası/ilişkileri.
 
+## V41.1 eklemeleri (test edildi)
+
+* **§4.6 Modüler inşaat** (`construction`): 13 yapı parçası (temel, duvar, tavan, kapı, pencere, koridor, hava kilidi, merdiven, asansör, enerji/su/oksijen/veri hattı); her birinin demir+kredi maliyeti, emek-saati, işletme gücü, bakım yükü, dayanımı, kapasitesi. Modül şablonları ve **bağlantı sırası** (habitat enerji kaynağı olmadan bağlanmaz). İşçiliği NPC mühendisler sahada çalışarak üretir.
+* **Su geri dönüşüm sistemi** modülü: temel %85 geri kazanımı ISS 2023 düzeyine (%98) çeker.
+* **§7.1 Mars'ta sıfırdan koloni** (`kozmo_cli --kurulum`): iniş (1.23 m/s) → su taraması (yeraltı buzu) → NOVA onaylı kuruluş (4 kişi, iniş kampı) → NOVA onaylı güneş dizisi + habitat + su geri dönüşüm inşaatı (~182 emek-saat, ~10 gün) → toz fırtınası, NPC'ler sığınağa → fırtına hasarı → NOVA hasar raporu → güçlendirme (sonraki hasar %70 azalır).
+* **§7.2 Titan buz araştırması**: Huygens benzeri paraşüt sonrası iniş, termal giysi gereksinimi (−179 °C < EMU sınırı −157 °C), numune, araç laboratuvarında analiz (araştırma ağacına puan); termal giysisiz çıkış zarar verir.
+* **§6.3 Görevlendirme**: NOVA onayla genel emir verir; NPC sağlığı/yorgunluğu/dozu/mevcut görevi uygunsa kabul eder, değilse nedenini bildirir; görev bitince kendi programına döner.
+* **§2.5 Kalkış ve kenetlenme**: Ay'dan 15 km yörüngeye otomatik kalkış ~1.81 km/s (Apollo LM yükselişi ~1.85 km/s); aynı araç Mars'tan yörüngeye **çıkamaz** (~4 km/s gerekir, aracın bütçesi 3.5 km/s — model doğru olarak başarısız). RCS ile istasyona kenetlenme desteği (temas ≤0.15 m/s), manuel hızlı yaklaşmada çarpışma hasarı.
+* **§2.1/§2.3 Araç kataloğu**: 19 hazır araç, 6 sınıfın tamamı; V1–V4 sürümü parçalardan türetilir (etiket değil); kurgusal füzyon motoru ayrı işaretli, NERVA sınıfı gerçek.
+* **§8 NOVA veri doğrulama**: kaydı olmayan stok "? (kayıt yok)", tutarsız değer "? (tutarsız veri)", ölçüm yerine tahmin olan radyasyon değerleri "VERİ UYARISI" ile bildirilir.
+* UE: HUD'a su ara / koloni kur / inşa / güçlendir / hasar raporu / araç lab / yörüngeye kalk / kenetlen düğmeleri; inşaat ilerledikçe 3B koloni yeniden kurulur (arsa kazıkları, yükselen iskele ve duvarlar, ilerleme etiketi); Titan turuncu puslu gökyüzü; ana panelde Mars ve Titan seferleri. **Derlenmedi.**
+
 ## Sistem durumu
 
 | V41 bölümü | Çekirdek (C++, test edildi) | Unreal (yazıldı, **derlenmedi**) |
@@ -27,7 +39,7 @@ PROJE: KOZMOGENİS · SÜRÜM: V41 dikey dilim · Tarih: 20 Kasım 2026 · Ortam
 | §5 NPC | Kişilik (9 eksen), ihtiyaçlar, vardiya, 5 katmanlı karar, meslekler, hafıza (sınırlı, önem sıralı), ilişkiler, sosyal etkileşim, olay tepkileri, LOD | `AKozmogenisNPC`: gövde/etiket, yürüme |
 | §6 NOVA | Sefer bağlantısı, 4 yeni niyet, onaylı tahliye | HUD NOVA kutusu |
 
-Toplam: **89 test, 60.468 kontrol, 0 başarısız** (25 yeni V41 testi). ASan+UBSan temiz; UE kısıtlarıyla (C++20, RTTI/istisna kapalı) tek birim derleme 0 hata / 0 uyarı.
+Toplam: **97 test, 60.606 kontrol, 0 başarısız** (V41 için 33 test). ASan+UBSan temiz; UE kısıtlarıyla (C++20, RTTI/istisna kapalı) tek birim derleme 0 hata / 0 uyarı.
 
 ## Dürüst sınırlar
 

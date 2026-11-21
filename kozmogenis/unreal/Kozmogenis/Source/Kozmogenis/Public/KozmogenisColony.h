@@ -24,12 +24,14 @@ class KOZMOGENIS_API AKozmogenisColony : public AActor
 
 public:
 	AKozmogenisColony();
-	void Build(const kozmo::life::Settlement& S);
+	/** SiteId/Progress: etkin inşaat sahası (iskele + ilerleme etiketi) */
+	void Build(const kozmo::life::Settlement& S, const FString& SiteId = FString(), float Progress = 0.f);
 	/** Dünya konumu (cm) -> hangi binanın içinde (yoksa boş) */
 	FString BuildingAt(const FVector& World) const;
 
 private:
 	void BuildBuilding(const kozmo::life::Building& B, kozmo::life::Layout L);
+	void BuildPlot(const kozmo::life::Building& B, bool bSite, float Progress);
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
 	TArray<kozmo::life::Building> Buildings;
 };

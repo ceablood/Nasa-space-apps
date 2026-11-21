@@ -29,7 +29,8 @@ double module_mass_t(colony::ModuleType t);               // oyun varsayımı
 prop::Design preset_heavy_rocket(const std::string& target, double payload_t, int crew);   // metan/LOX + hidrojen iniş
 prop::Design preset_light_rocket(const std::string& target, double payload_t);             // Falcon 9 sınıfı
 Payload standard_colony_kit();                                                              // 3 kişilik başlangıç kolonisi
-Payload vertical_slice_outpost();   // V41 dikey dilim: 8 kişilik, hastaneli, madenli küçük koloni (senaryo başlangıcı)
+Payload vertical_slice_outpost();
+Payload founding_crew_kit();        // §7.1: modülsüz 4 kişilik kuruluş ekibi + 40 t demir (ilk habitatı kendileri inşa eder)   // V41 dikey dilim: 8 kişilik, hastaneli, madenli küçük koloni (senaryo başlangıcı)
 double payload_mass_t(const Payload& p);                  // mürettebat kapsülü hariç (analiz ekler)
 
 enum class MissionState { InTransit, Arrived, Lost };

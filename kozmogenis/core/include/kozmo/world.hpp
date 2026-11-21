@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "kozmo/challenge.hpp"
+#include "kozmo/construction.hpp"
 #include "kozmo/game.hpp"
 #include "kozmo/life.hpp"
 #include "kozmo/spacecraft.hpp"
@@ -74,6 +75,25 @@ public:
     Result<std::string> talk(int npc_id, const std::string& topic);
     std::vector<int> npcs_here() const;            // aynı binadaki / 10 m yakındaki NPC'ler
 
+    // --- araç: yüzeyden yörüngeye ve kenetlenme
+    Status take_off(double orbit_alt_m = 15000.0);
+
+    // --- §7.1 koloni kurma: su ara, koloni kur, modül inşa et, güçlendir
+    Result<std::string> scan_water();               // araç sensörü / oyuncu dışarıda; bulunursa kuruluş açılır
+    bool water_found() const { return water_found_; }
+    Status found_colony();                          // yalnız koloni yokken, iniş yapılmış ve su bulunmuşken
+    Result<int> build(colony::ModuleType t);        // inşaat projesi (demir + kredi), NPC mühendisler inşa eder
+    Result<int> reinforce();                        // fırtına koruması
+    const build::Manager& construction() const { return construction_; }
+    std::string damage_report() const;              // NOVA hasar raporu
+
+    // --- §7.2 araştırma: araç laboratuvarında numune analizi (araştırma ağacına puan)
+    Result<std::string> analyze_onboard();
+
+    // --- §6.3 görevlendirme: NOVA genel emir verir, NPC kabul eder ya da sorun bildirir
+    Result<life::MissionReport> assign_mission(life::MissionKind k, colony::Job job, life::District where, int count, double hours,
+                                               const std::string& description);
+
     // --- senaryo olayları
     void fail_power();                              // enerji tesisi arızası (§7.3)
     void evacuate();                                // tüm NPC'ler sığınağa (NOVA onayı sonrası)
@@ -113,6 +133,9 @@ private:
     std::vector<std::string> log_;
     bool power_alarm_ = false;
     bool in_orbit_ = false;
+    bool water_found_ = false;
+    build::Manager construction_;
+    void update_construction(double dt_h);
 };
 
 }  // namespace kozmo::world

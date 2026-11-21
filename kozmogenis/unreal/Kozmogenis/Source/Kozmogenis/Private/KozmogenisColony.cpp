@@ -16,7 +16,7 @@ AKozmogenisColony::AKozmogenisColony()
 	SetRootComponent(Root);
 }
 
-void AKozmogenisColony::Build(const kozmo::life::Settlement& S)
+void AKozmogenisColony::Build(const kozmo::life::Settlement& S, const FString& SiteId, float Progress)
 {
 	Buildings = S.buildings();
 	const FLinearColor Path(0.30f, 0.30f, 0.31f);
@@ -27,6 +27,11 @@ void AKozmogenisColony::Build(const kozmo::life::Settlement& S)
 		const FVector Door(B.door_x, B.door_y, 0.f);
 		const float Len = Door.Size2D();
 		const FRotator Rot(0.f, FMath::RadiansToDegrees(FMath::Atan2(B.door_y, B.door_x)), 0.f);
+		if (!B.built && B.district != District::LandingPad)
+		{
+			BuildPlot(B, KozmoStr(B.id) == SiteId, Progress);   // arsa ya da inşaat sahası
+			continue;
+		}
 		KozmoShapes::Add(this, Root, EKozmoShape::Cube, Door * 0.5f + FVector(0, 0, 0.04f), FVector(Len / 1.f, 2.4f, 0.08f), Path, 0.9f, 0.f, Rot);
 		BuildBuilding(B, S.layout());
 	}
@@ -109,11 +114,37 @@ void AKozmogenisColony::BuildBuilding(const Building& B, Layout L)
 	Lamp->RegisterComponent();
 }
 
+void AKozmogenisColony::BuildPlot(const Building& B, bool bSite, float Progress)
+{
+	const FVector C(B.x, B.y, 0.f);
+	// arsa: köşe kazıkları; inşaat sahası: temel + ilerlemeyle yükselen iskele ve duvarlar
+	for (int32 k = 0; k < 4; ++k)
+	{
+		const FVector Corner = C + FVector((k & 1 ? 1.f : -1.f) * B.w / 2, (k & 2 ? 1.f : -1.f) * B.d / 2, 0.5f);
+		KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, Corner, FVector(0.1f, 0.1f, 1.f), FLinearColor(0.8f, 0.5f, 0.1f), 0.6f, 0.f, FRotator::ZeroRotator, false);
+	}
+	if (!bSite)
+	{
+		KozmoShapes::Label(this, Root, C + FVector(0, 0, 1.4f), KozmoStr(B.name) + TEXT(" (arsa)"), 50.f, FColor(200, 170, 120));
+		return;
+	}
+	const float H = FMath::Max(0.2f, B.h * Progress);
+	KozmoShapes::Add(this, Root, EKozmoShape::Cube, C + FVector(0, 0, 0.1f), FVector(B.w, B.d, 0.2f), FLinearColor(0.4f, 0.4f, 0.4f), 0.9f);
+	if (Progress > 0.3f) KozmoShapes::Add(this, Root, EKozmoShape::Cube, C + FVector(0, 0, H / 2), FVector(B.w * 0.9f, B.d * 0.9f, H), FLinearColor(0.55f, 0.55f, 0.53f), 0.7f);
+	for (int32 i = 0; i < 6; ++i)   // iskele direkleri
+	{
+		const float A = 2.f * PI * i / 6.f;
+		KozmoShapes::Add(this, Root, EKozmoShape::Cylinder, C + FVector(FMath::Cos(A) * B.w * 0.55f, FMath::Sin(A) * B.d * 0.55f, B.h / 2), FVector(0.08f, 0.08f, B.h),
+			FLinearColor(0.75f, 0.6f, 0.1f), 0.5f, 0.8f, FRotator::ZeroRotator, false);
+	}
+	KozmoShapes::Label(this, Root, C + FVector(0, 0, B.h + 1.f), FString::Printf(TEXT("%s — İNŞAAT %%%.0f"), *KozmoStr(B.name), Progress * 100.f), 60.f, FColor(255, 200, 90));
+}
+
 FString AKozmogenisColony::BuildingAt(const FVector& World) const
 {
 	const FVector L = GetActorTransform().InverseTransformPosition(World) / 100.f;
 	for (const Building& B : Buildings)
-		if (B.district != District::LandingPad && FMath::Abs(L.X - B.x) <= B.w / 2 && FMath::Abs(L.Y - B.y) <= B.d / 2) return KozmoStr(B.id);
+		if (B.district != District::LandingPad && B.built && FMath::Abs(L.X - B.x) <= B.w / 2 && FMath::Abs(L.Y - B.y) <= B.d / 2) return KozmoStr(B.id);
 	return FString();
 }
 

@@ -230,9 +230,57 @@ int run_slice() {
     return ok ? 0 : 1;
 }
 
+// V41 §7.1: Mars'ta sıfırdan koloni (iniş -> su -> kuruluş -> inşaat -> fırtına -> hasar raporu -> güçlendirme)
+int run_founding() {
+    Game g(71);
+    g.new_game("KOZMOGENİS", 1e6);
+    world::Expedition e(g, "mars", craft::preset("lander"));
+    if (!e.init()) return 1;
+    nova::Nova n(g);
+    n.attach(&e);
+    auto say = [](const char* who, const std::string& t) { std::printf("%s> %s\n", who, t.c_str()); };
+    (void)e.sit();
+    (void)e.begin_descent();
+    (void)e.craft().set_engines(true);
+    (void)e.craft().set_mode(craft::FlightMode::LandingAssist);
+    for (int i = 0; i < 1500 && e.craft().phase() == craft::FlightPhase::Flying; ++i) e.tick(1.0);
+    std::printf("İniş: %s (temas %.2f m/s)\n", craft::to_string(e.craft().phase()), e.craft().touchdown_speed());
+    (void)e.stand();
+    (void)e.exit_craft();
+    say("TARAMA", e.scan_water().value());
+    say("NOVA", n.ask("koloni kur").text);
+    say("NOVA", n.ask("onayla").text);
+    for (const char* q : {"güneş paneli kur", "habitat inşa et", "su geri dönüşüm sistemi kur"}) {
+        say("OYUNCU", q);
+        say("NOVA", n.ask(q).text);
+        say("NOVA", n.ask("onayla").text);
+    }
+    (void)e.enter_craft();
+    for (int d = 1; d <= 30; ++d) {
+        for (int h = 0; h < 24; ++h) e.tick(3600.0);
+        if (d % 5 == 0) std::printf("Gün %2d: %s\n", d, e.colony_report().c_str());
+    }
+    bool storm = false;
+    for (int h = 0; h < 24 * 200 && !storm; ++h) {
+        e.tick(3600.0);
+        for (const auto& w : e.weather()) storm |= w.kind == challenge::Weather::DustStorm;
+    }
+    std::printf("Toz fırtınası: %s\n", storm ? "başladı" : "200 günde yaşanmadı");
+    for (int h = 0; h < 24 * 6; ++h) e.tick(3600.0);
+    say("NOVA", n.ask("hasar raporu").text);
+    auto r = e.reinforce();
+    std::printf("Güçlendirme: %s\n", r ? "başladı" : r.error().message.c_str());
+    for (int h = 0; h < 24 * 10; ++h) e.tick(3600.0);
+    say("NOVA", n.ask("hasar raporu").text);
+    const bool ok = e.colony() && e.colony()->housing() >= 6 && e.construction().reinforced();
+    std::printf("\nKOLONİ KURULUMU %s\n", ok ? "BAŞARILI" : "BAŞARISIZ");
+    return ok ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string(argv[1]) == "--kurulum") return run_founding();
     if (argc > 1 && std::string(argv[1]) == "--demo") return run_demo();
     if (argc > 1 && std::string(argv[1]) == "--dilim") return run_slice();
     Game g(static_cast<std::uint64_t>(std::time(nullptr)));

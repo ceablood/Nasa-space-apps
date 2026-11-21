@@ -84,6 +84,21 @@ void AKozmoExpeditionScene::SetupEnvironment()
 		Fog->SetFogDensity(BaseFog);
 		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.35f, 0.22f));
 	}
+	else if (Env.key == "titan")
+	{
+		// Titan: kalın azot atmosferi, tolin pusu -> turuncu gök; yüzeye güneş ışığının ~%0.1'i ulaşır (Huygens)
+		Sky->SetBottomRadius(static_cast<float>(Env.radius_km));
+		Sky->SetAtmosphereHeight(600.f);
+		Sky->SetRayleighExponentialDistribution(21.f);
+		Sky->SetMieScattering(FLinearColor(0.9f, 0.55f, 0.2f));
+		Sky->SetMieScatteringScale(0.05f);
+		Sky->SetMieAbsorption(FLinearColor(0.1f, 0.3f, 0.8f));
+		BaseSun = 0.8f;
+		SkyLight->SetIntensity(0.4f);
+		BaseFog = 0.04f;
+		Fog->SetFogDensity(BaseFog);
+		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.38f, 0.15f));
+	}
 	else if (!Atmos)
 	{
 		Sky->SetVisibility(false);
@@ -91,7 +106,8 @@ void AKozmoExpeditionScene::SetupEnvironment()
 	}
 	Sun->SetIntensity(BaseSun);
 	// zemin, kraterler, kayalar (prosedürel, tohumlu)
-	const FLinearColor Ground = Env.key == "mars" ? FLinearColor(0.42f, 0.22f, 0.12f) : FLinearColor(0.33f, 0.33f, 0.32f);
+	const FLinearColor Ground = Env.key == "mars" ? FLinearColor(0.42f, 0.22f, 0.12f)
+		: (Env.key == "titan" ? FLinearColor(0.30f, 0.22f, 0.12f) : FLinearColor(0.33f, 0.33f, 0.32f));
 	KozmoShapes::Add(this, Root, EKozmoShape::Plane, FVector(0, 0, 0), FVector(4000.f, 4000.f, 1.f), Ground, 0.95f);
 	FRandomStream R(41);
 	for (int32 i = 0; i < 60; ++i)
@@ -114,11 +130,7 @@ void AKozmoExpeditionScene::BeginPlay()
 	UKozmoSubsystem* K = Kozmo();
 	auto* E = K ? K->GetExpedition() : nullptr;
 	if (!E) return;
-	if (E->colony())
-	{
-		Colony = GetWorld()->SpawnActor<AKozmogenisColony>(GetActorLocation(), FRotator::ZeroRotator);
-		if (Colony) Colony->Build(E->settlement());
-	}
+	SyncColony();
 	Craft = GetWorld()->SpawnActor<AKozmogenisSpacecraft>(LandingPadWorld(), FRotator::ZeroRotator);
 	if (Craft) Craft->SetScene(this);
 	PossessCraft();
@@ -191,6 +203,32 @@ void AKozmoExpeditionScene::PossessCharacter()
 	SetFeedback(TEXT("Yüzeydesin. WASD yürü, Space zıpla, E etkileşim (kapı/konsol/NPC/araç kapağı), G numune topla."));
 }
 
+void AKozmoExpeditionScene::SyncColony()
+{
+	// koloni kurulduğunda ya da bir modül tamamlandığında 3B yerleşimi yeniden kur (inşa edilmiş bölge imzası)
+	UKozmoSubsystem* K = Kozmo();
+	auto* E = K ? K->GetExpedition() : nullptr;
+	if (!E || !E->colony()) return;
+	int32 Sig = 0;
+	for (const auto& B : E->settlement().buildings()) Sig = Sig * 2 + (B.built ? 1 : 0);
+	const auto* P = E->construction().current();
+	Sig = Sig * 31 + (P ? P->id * 10 + static_cast<int32>(P->progress() * 4) : 0);
+	if (Sig == BuiltSignature) return;
+	BuiltSignature = Sig;
+	if (Colony) Colony->Destroy();
+	Colony = GetWorld()->SpawnActor<AKozmogenisColony>(GetActorLocation(), FRotator::ZeroRotator);
+	if (!Colony) return;
+	FString SiteId;
+	float Progress = 0.f;
+	if (P)
+	{
+		const auto D = P->reinforce ? kozmo::life::District::Housing : static_cast<kozmo::life::District>(kozmo::build::site_district(P->module));
+		if (const auto* B = E->settlement().find(D)) SiteId = KozmoStr(B->id);
+		Progress = static_cast<float>(P->progress());
+	}
+	Colony->Build(E->settlement(), SiteId, Progress);
+}
+
 void AKozmoExpeditionScene::SyncNpcs()
 {
 	UKozmoSubsystem* K = Kozmo();
@@ -225,6 +263,7 @@ void AKozmoExpeditionScene::Tick(float Dt)
 	UKozmoSubsystem* K = Kozmo();
 	auto* E = K ? K->GetExpedition() : nullptr;
 	if (!E) return;
+	SyncColony();
 	SyncNpcs();
 	// hava olayları: görüş -> sis, güneş çarpanı -> ışık
 	double Vis = 1.0, Solar = 1.0;

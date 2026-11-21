@@ -97,6 +97,26 @@ const char* to_string(FlightMode m) {
     return "?";
 }
 
+const char* to_string(FlightPhase p) {
+    switch (p) {
+        case FlightPhase::Landed: return "Yüzeyde";
+        case FlightPhase::Flying: return "Uçuşta";
+        case FlightPhase::Crashed: return "Çarptı";
+        case FlightPhase::Orbit: return "Yörüngede";
+    }
+    return "?";
+}
+
+const char* to_string(Tier t) {
+    switch (t) {
+        case Tier::V1Basic: return "V1 Temel";
+        case Tier::V2Advanced: return "V2 Gelişmiş";
+        case Tier::V3Professional: return "V3 Profesyonel";
+        case Tier::V4Experimental: return "V4 Deneysel";
+    }
+    return "?";
+}
+
 const char* to_string(Fault f) {
     switch (f) {
         case Fault::EngineFailure: return "Motor arızası";
@@ -199,6 +219,30 @@ CockpitLevel Spacecraft::cockpit() const {
         if (s.kind == PartKind::Cockpit) return CockpitLevel::Basic;   // hasarlı/elektriksiz: yalnız analog yedek
     }
     return CockpitLevel::None;
+}
+
+Tier Spacecraft::tier() const {
+    // V2: çoklu motor ya da dijital kokpit; V3: modüler/ağır gövde + yaşam desteği + kenetlenme donanımı (RCS, V3 kokpit);
+    // V4: NOVA entegre kokpit ya da yeni nesil itki (iyon, nükleer termal, kurgusal füzyon)
+    int engines = 0;
+    bool modular = false, ls = false, rcs = false, advanced = false;
+    for (const auto& q : parts_) {
+        const PartSpec& p = *find_part(q.key).value();
+        engines += p.kind == PartKind::Engine;
+        modular |= p.key == "hull_modular" || p.key == "hull_heavy";
+        ls |= p.kind == PartKind::LifeSupport;
+        rcs |= p.kind == PartKind::Rcs;
+        advanced |= p.key == "eng_ion" || p.key == "eng_ntr" || p.key == "eng_fusion";
+    }
+    int lvl = 0;
+    for (const auto& q : parts_) {
+        const PartSpec& p = *find_part(q.key).value();
+        if (p.kind == PartKind::Cockpit) lvl = p.cockpit_level;
+    }
+    if (lvl >= 4 || advanced) return Tier::V4Experimental;
+    if (modular && ls && rcs && lvl >= 3) return Tier::V3Professional;
+    if (engines >= 2 || lvl >= 2) return Tier::V2Advanced;
+    return Tier::V1Basic;
 }
 
 double Spacecraft::part_health(PartKind k) const {
@@ -397,7 +441,7 @@ void Spacecraft::landing_guidance(double g_eff, double amax, double& thr, double
 }
 
 void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng) {
-    if (phase_ == FlightPhase::Crashed || dt <= 0) return;
+    if (phase_ == FlightPhase::Crashed || phase_ == FlightPhase::Orbit || dt <= 0) return;   // yörüngede kararlı (2B model)
     const double m = mass_kg();
     const double r = (e.radius_km * 1000.0 + alt_);
     const double g_eff = e.gravity_ms2 * std::pow(e.radius_km * 1000.0 / r, 2) - vh_ * vh_ / r;
@@ -405,7 +449,21 @@ void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng
     const double amax = fmax / m;
     // mod -> itki komutu
     double thr = throttle_, pitch = pitch_deg_;
-    if (fmax > 0 && phase_ == FlightPhase::Flying) {
+    const double R0 = e.radius_km * 1000.0;
+    const double v_circ = std::sqrt(e.gravity_ms2 * R0 * R0 / r);
+    if (fmax > 0 && mode_ == FlightMode::Autopilot && orbit_target_m_ > 0) {
+        // kalkış güdümü: dikey yükseliş, sonra hedef irtifayı tutarken yatayda yörünge hızına ivmelen
+        if (alt_ < 100.0) {
+            thr = 1.0;
+            pitch = 90.0;
+        } else {
+            const double v_up = std::clamp((orbit_target_m_ - alt_) / 30.0, -20.0, 80.0);
+            const double av = std::clamp((v_up - vv_) / 2.0 + g_eff, -amax, amax);   // gerekirse ufkun altına yönel
+            const double ah = std::clamp((v_circ - vh_) / 2.0, 0.0, std::sqrt(std::max(0.0, amax * amax - av * av)));
+            thr = std::clamp(std::sqrt(av * av + ah * ah) / amax, 0.0, 1.0);
+            pitch = std::atan2(av, ah) * 180.0 / kPi;
+        }
+    } else if (fmax > 0 && phase_ == FlightPhase::Flying) {
         if (mode_ == FlightMode::LandingAssist || mode_ == FlightMode::Emergency) landing_guidance(g_eff, amax, thr, pitch);
         else if (mode_ == FlightMode::Autopilot) {
             // irtifa ve yatay hız tutma
@@ -470,6 +528,14 @@ void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng
     vv_ += ay * dt;
     x_ += vh_ * dt;
     alt_ += vv_ * dt;
+    if (orbit_target_m_ > 0 && alt_ >= orbit_target_m_ * 0.8 && vh_ >= v_circ * 0.999 && std::fabs(vv_) < 5.0) {
+        phase_ = FlightPhase::Orbit;   // dairesel yörünge (yaklaşım: kalan dikey hız sönümlenir)
+        vv_ = 0;
+        engines_on_ = false;
+        orbit_target_m_ = 0;
+        mode_ = FlightMode::Manual;
+        return;
+    }
     (void)rng;   // rastgele arıza yalnız inject() ile (deterministik uçuş)
     if (alt_ <= 0) {
         alt_ = 0;
@@ -494,6 +560,72 @@ void Spacecraft::step(double dt, const challenge::PlanetEnvironment& e, Rng& rng
 FlightPhase Spacecraft::fly_until_landed(const challenge::PlanetEnvironment& e, Rng& rng, double max_s, double dt) {
     for (double t = 0; t < max_s && phase_ == FlightPhase::Flying; t += dt) step(dt, e, rng);
     return phase_;
+}
+
+Status Spacecraft::launch_to_orbit(double alt_m) {
+    if (phase_ != FlightPhase::Landed && phase_ != FlightPhase::Flying) return make_error(ErrorCode::Infeasible, "Kalkış için araç yüzeyde ya da uçuşta olmalı");
+    if (!cockpit_has(cockpit(), Feature::Autopilot)) return make_error(ErrorCode::Infeasible, "Otomatik kalkış için Kokpit V2+ gerekli");
+    if (!nav_ok_) return make_error(ErrorCode::Infeasible, "Navigasyon arızalı");
+    if (alt_m < 5000) return make_error(ErrorCode::InvalidArgument, "Yörünge irtifası en az 5 km olmalı");
+    auto st = set_engines(true);
+    if (!st) return st;
+    orbit_target_m_ = alt_m;
+    mode_ = FlightMode::Autopilot;
+    target_ = "yörünge";
+    return ok_status();
+}
+
+FlightPhase Spacecraft::fly_until_orbit(const challenge::PlanetEnvironment& e, Rng& rng, double max_s, double dt) {
+    for (double t = 0; t < max_s && (phase_ == FlightPhase::Flying || phase_ == FlightPhase::Landed) && orbit_target_m_ > 0; t += dt) {
+        step(dt, e, rng);
+        if (!engines_on_ && phase_ != FlightPhase::Orbit) break;   // yakıt bitti
+    }
+    return phase_;
+}
+
+Status Spacecraft::begin_docking(double range_m, double closing_ms) {
+    if (phase_ != FlightPhase::Orbit) return make_error(ErrorCode::Infeasible, "Kenetlenme yalnız yörüngede");
+    if (target_.find("istasyon") == std::string::npos) return make_error(ErrorCode::Infeasible, "Hedef olarak istasyon seç");
+    if (!has_part(PartKind::Rcs)) return make_error(ErrorCode::Infeasible, "Kenetlenme için RCS iticileri gerekli");
+    dock_ = {std::max(1.0, range_m), closing_ms, true, false};
+    return ok_status();
+}
+
+void Spacecraft::step_docking(double dt) {
+    if (!dock_.active || dock_.docked || dt <= 0) return;
+    double rcs_n = 0, rcs_isp = 300;
+    for (const auto& q : parts_) {
+        const PartSpec& p = *find_part(q.key).value();
+        if (p.kind == PartKind::Rcs) {
+            rcs_n += p.thrust_kn * 1000.0 * q.health;
+            rcs_isp = p.isp_s;
+        }
+    }
+    const double amax = rcs_n / mass_kg();
+    double a = 0;
+    if (mode_ == FlightMode::DockingAssist && nav_ok_) {
+        // yaklaşma koridoru: uzakta en çok 1 m/s, son metrelerde ~0.05 m/s (gerçek kenetlenmeler 0.03-0.1 m/s)
+        const double want = std::clamp(dock_.range_m / 60.0, 0.05, 1.0);
+        a = std::clamp((want - dock_.closing_ms) / 3.0, -amax, amax);
+    } else {
+        a = rcs_cmd_ * amax;
+    }
+    if (fuel_t_ > 0 && a != 0) fuel_t_ = std::max(0.0, fuel_t_ - std::fabs(a) * mass_kg() / (rcs_isp * kG0) * dt / 1000.0);
+    else if (fuel_t_ <= 0) a = 0;
+    dock_.closing_ms += a * dt;
+    dock_.range_m -= dock_.closing_ms * dt;
+    if (dock_.range_m <= 0) {
+        if (dock_.closing_ms <= 0.15) {
+            dock_.docked = true;
+            dock_.range_m = 0;
+            dock_.closing_ms = 0;
+        } else {
+            damage(PartKind::Hull, std::min(0.5, 0.1 * dock_.closing_ms));
+            inject(Fault::CollisionDamage);
+            dock_.range_m = 2.0;
+            dock_.closing_ms = -0.1;    // geri sekme
+        }
+    }
 }
 
 void Spacecraft::tick_life_support(double dt) {
@@ -715,7 +847,7 @@ Result<Spacecraft> Spacecraft::from_json(const json::Value& v) {
     c.cargo_t_ = v["cargo"].as_number();
     c.crew_ = v["crew"].as_int(1);
     const int ph = v["phase"].as_int();
-    if (ph < 0 || ph > 2) return make_error(ErrorCode::Parse, "Geçersiz uçuş fazı");
+    if (ph < 0 || ph > 3) return make_error(ErrorCode::Parse, "Geçersiz uçuş fazı");
     c.phase_ = static_cast<FlightPhase>(ph);
     c.alt_ = v["alt"].as_number();
     c.x_ = v["x"].as_number();
@@ -739,29 +871,62 @@ Result<Spacecraft> Spacecraft::from_json(const json::Value& v) {
     return c;
 }
 
+namespace {
+struct PresetDef {
+    const char* key;
+    const char* id;
+    const char* model;
+    CraftClass cls;
+    std::vector<const char*> parts;
+    int crew;
+};
+const std::vector<PresetDef>& preset_defs() {
+    using C = CraftClass;
+    // V41 §2.1 araç sınıfları; parça listeleri katalogdaki gerçek sınıf motorlardan kurulur
+    static const std::vector<PresetDef> d = {
+        {"lander", "KZ-L1", "Kartal iniş aracı", C::Lander, {"hull_modular", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "rcs", "solar_panel", "battery", "landing_radar", "sensor_suite", "life_support", "landing_legs", "comms_hga", "heat_shield", "crew_cabin"}, 3},
+        {"scout", "KZ-S1", "Serçe küçük keşif gemisi", C::Exploration, {"hull_light", "cockpit_v1", "eng_hypergolic", "tank_small", "rcs", "solar_panel", "battery", "sensor_suite", "comms_hga"}, 1},
+        {"longrange", "KZ-S2", "Albatros uzun menzilli keşif", C::Exploration, {"hull_modular", "cockpit_v3", "eng_hydrolox", "eng_hydrolox", "tank_large", "tank_medium", "rcs", "solar_panel", "solar_panel", "battery", "sensor_suite", "life_support", "crew_cabin", "comms_hga"}, 2},
+        {"science", "KZ-A1", "Merak araştırma gemisi", C::Research, {"hull_modular", "cockpit_v4", "eng_hydrolox", "tank_medium", "rcs", "solar_panel", "solar_panel", "battery", "sensor_suite", "science_lab", "life_support", "crew_cabin", "comms_hga", "robotic_arm"}, 3},
+        {"probe", "KZ-P1", "Gözcü otonom sonda", C::Exploration, {"hull_light", "cockpit_v2", "eng_ion", "tank_small", "solar_panel", "solar_panel", "battery", "sensor_suite", "comms_hga"}, 0},
+        {"surveyor", "KZ-P2", "Haritacı gezegen tarama aracı", C::Exploration, {"hull_light", "cockpit_v2", "eng_hypergolic", "eng_hypergolic", "tank_medium", "rcs", "solar_panel", "battery", "sensor_suite", "landing_radar", "comms_hga"}, 1},
+        {"cargo", "KZ-K1", "Kervan kargo gemisi", C::Transport, {"hull_heavy", "cockpit_v2", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large", "cargo_bay", "cargo_bay", "rcs", "solar_panel", "battery", "landing_legs", "life_support", "comms_hga", "heat_shield"}, 2},
+        {"tanker", "KZ-K2", "Pınar yakıt tankeri", C::Transport, {"hull_heavy", "cockpit_v2", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large", "tank_large", "tank_large", "rcs", "solar_panel", "battery", "comms_hga"}, 1},
+        {"colony_ship", "KZ-K3", "Yuva koloni taşıyıcısı", C::Transport, {"hull_heavy", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large", "cargo_bay", "rcs", "solar_panel", "solar_panel", "battery", "life_support", "life_support", "crew_cabin", "crew_cabin", "landing_legs", "heat_shield", "landing_radar", "comms_hga"}, 8},
+        {"crew", "KZ-K4", "Yolcu personel taşıyıcısı", C::Transport, {"hull_modular", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "rcs", "solar_panel", "battery", "life_support", "life_support", "crew_cabin", "crew_cabin", "heat_shield", "comms_hga"}, 8},
+        {"asteroid", "KZ-A2", "Kaya asteroit araştırma gemisi", C::Research, {"hull_modular", "cockpit_v3", "eng_ion", "eng_hypergolic", "tank_medium", "rcs", "solar_panel", "solar_panel", "battery", "sensor_suite", "science_lab", "robotic_arm", "life_support", "crew_cabin", "comms_hga"}, 2},
+        {"atmo", "KZ-A3", "Rüzgâr atmosfer araştırma aracı", C::Research, {"hull_light", "cockpit_v2", "eng_hypergolic", "tank_small", "wings", "heat_shield", "sensor_suite", "battery", "solar_panel", "comms_hga"}, 0},
+        {"constructor", "KZ-I1", "Usta uzay inşaat gemisi", C::Construction, {"hull_heavy", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "cargo_bay", "robotic_arm", "robotic_arm", "rcs", "solar_panel", "solar_panel", "battery", "life_support", "crew_cabin", "comms_hga"}, 4},
+        {"repair", "KZ-I2", "Onarıcı tamir gemisi", C::Construction, {"hull_modular", "cockpit_v3", "eng_hypergolic", "eng_hypergolic", "tank_medium", "robotic_arm", "rcs", "solar_panel", "battery", "sensor_suite", "life_support", "comms_hga"}, 2},
+        {"miner", "KZ-I3", "Kazmacı maden gemisi", C::Construction, {"hull_heavy", "cockpit_v2", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "cargo_bay", "cargo_bay", "robotic_arm", "rcs", "landing_legs", "solar_panel", "battery", "life_support", "comms_hga"}, 2},
+        {"heavy", "KZ-O1", "Fil ağır nakliye gemisi", C::Special, {"hull_heavy", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large", "tank_large", "cargo_bay", "cargo_bay", "cargo_bay", "rcs", "solar_panel", "battery", "life_support", "comms_hga"}, 2},
+        {"transfer", "KZ-O2", "Köprü yörünge transfer aracı", C::Special, {"hull_modular", "cockpit_v2", "eng_hydrolox", "tank_large", "rcs", "solar_panel", "battery", "cargo_bay", "comms_hga"}, 1},
+        {"deep", "KZ-O3", "Ufuk derin uzay aracı (nükleer termal)", C::Special, {"hull_heavy", "cockpit_v4", "eng_ntr", "tank_large", "tank_large", "tank_large", "rcs", "solar_panel", "solar_panel", "battery", "battery", "sensor_suite", "science_lab", "life_support", "crew_cabin", "comms_hga"}, 4},
+        {"fusion", "KZ-X1", "Yıldız füzyon deneme gemisi (KURGUSAL)", C::Special, {"hull_heavy", "cockpit_v4", "eng_fusion", "tank_large", "rcs", "solar_panel", "battery", "life_support", "crew_cabin", "comms_hga"}, 2},
+    };
+    return d;
+}
+}  // namespace
+
+const std::vector<std::string>& preset_keys() {
+    static const std::vector<std::string> k = [] {
+        std::vector<std::string> v;
+        for (const auto& d : preset_defs()) v.push_back(d.key);
+        return v;
+    }();
+    return k;
+}
+
 Spacecraft preset(const std::string& key) {
-    if (key == "cargo") {
-        Spacecraft c("KZ-K1", "Kervan kargo gemisi", CraftClass::Transport);
-        for (const char* p : {"hull_heavy", "cockpit_v2", "eng_methalox_lander", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "tank_large",
-                              "cargo_bay", "cargo_bay", "rcs", "solar_panel", "battery", "landing_legs", "life_support", "comms_hga", "heat_shield"})
-            (void)c.install(p, {"methalox"});
-        c.refuel();
-        return c;
-    }
-    if (key == "science") {
-        Spacecraft c("KZ-A1", "Merak araştırma gemisi", CraftClass::Research);
-        for (const char* p : {"hull_modular", "cockpit_v4", "eng_hydrolox", "tank_medium", "rcs", "solar_panel", "solar_panel", "battery", "sensor_suite",
-                              "science_lab", "life_support", "crew_cabin", "comms_hga", "robotic_arm"})
-            (void)c.install(p, {"cryo", "avionics", "nova_link"});
-        c.refuel();
-        return c;
-    }
-    Spacecraft c("KZ-L1", "Kartal iniş aracı", CraftClass::Lander);
-    for (const char* p : {"hull_modular", "cockpit_v3", "eng_methalox_lander", "eng_methalox_lander", "tank_large", "rcs", "solar_panel", "battery",
-                          "landing_radar", "sensor_suite", "life_support", "landing_legs", "comms_hga", "heat_shield", "crew_cabin"})
-        (void)c.install(p, {"methalox", "avionics"});
+    const auto& defs = preset_defs();
+    const PresetDef* d = &defs.front();
+    for (const auto& x : defs)
+        if (key == x.key) d = &x;
+    Spacecraft c(d->id, d->model, d->cls);
+    const std::vector<std::string> all = {"methalox", "avionics", "cryo", "nova_link", "ion", "nuclear", "fusion"};
+    for (const char* p : d->parts) (void)c.install(p, all);
     c.refuel();
-    c.set_crew(3);
+    c.set_crew(d->crew);
     return c;
 }
 

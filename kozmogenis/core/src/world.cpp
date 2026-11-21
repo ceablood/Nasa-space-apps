@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <map>
 
 namespace kozmo::world {
 
@@ -33,6 +34,7 @@ Result<DescentStart> descent_start(const std::string& body) {
     if (body == "moon") return DescentStart{15000, 1650, 0, "Apollo motorlu iniş başlangıcı (PDI) ~15 km, ~1.65 km/s"};
     if (body == "mars") return DescentStart{10000, 400, -150, "Atmosfer girişi ve paraşüt sonrası (mühendislik yaklaşımı)"};
     if (body == "mercury") return DescentStart{15000, 2900, 0, "Alçak yörüngeden motorlu iniş (yaklaşım)"};
+    if (body == "titan") return DescentStart{8000, 2, -5, "Huygens benzeri paraşüt inişi sonrası (Huygens 2005: ~5 m/s ile yere değdi)"};
     return make_error(ErrorCode::NotFound, "Bu gök cismi için iniş senaryosu yok: " + body);
 }
 
@@ -149,6 +151,7 @@ Status Expedition::walk_to(const std::string& id) {
         auto st = leave_building();
         if (!st) return st;
     }
+    if (!b->built && b->district != life::District::LandingPad) return make_error(ErrorCode::Infeasible, b->name + " henüz inşa edilmedi (arsa)");
     player_.route = settlement_.path(player_.x, player_.y, *b);
     if (!player_.route.empty()) player_.route.pop_back();   // kapıda dur (içeri girmek ayrı eylem)
     return ok_status();
@@ -165,6 +168,7 @@ Status Expedition::enter_building(const std::string& id) {
     const life::Building* b = settlement_.find(id);
     if (!b) return make_error(ErrorCode::NotFound, "Bina yok: " + id);
     if (player_.mode != PlayerMode::OnFoot) return make_error(ErrorCode::Infeasible, "Binaya yürüyerek girilir");
+    if (!b->built) return make_error(ErrorCode::Infeasible, b->name + " henüz inşa edilmedi");
     if (std::hypot(player_.x - b->door_x, player_.y - b->door_y) > 6) return make_error(ErrorCode::Infeasible, "Kapıya yürü (" + b->name + ")");
     player_.mode = PlayerMode::InBuilding;
     player_.building = b->id;
@@ -286,6 +290,140 @@ Result<std::string> Expedition::use(const std::string& item) {
     return std::string(it->name + ": hazır.");
 }
 
+Status Expedition::take_off(double alt_m) {
+    if (player_.mode != PlayerMode::Seated) return make_error(ErrorCode::Infeasible, "Kalkış için kokpitte otur");
+    auto st = craft_.launch_to_orbit(alt_m);
+    if (st) push("Kalkış: hedef " + f0(alt_m / 1000.0) + " km yörünge");
+    return st;
+}
+
+Result<std::string> Expedition::scan_water() {
+    const bool outside = player_.mode == PlayerMode::OnFoot;
+    bool sensor = false;
+    for (const auto& p : craft_.installed())
+        if (craft::find_part(p.key).value()->kind == craft::PartKind::Sensor && p.health > 0.3) sensor = true;
+    if (!outside && !(sensor && craft_.phase() == craft::FlightPhase::Landed))
+        return make_error(ErrorCode::Infeasible, "Su taraması için yüzeyde ol ya da araç sensörünü (inişten sonra) kullan");
+    if (env_.water_availability < 0.1) {
+        push("Su taraması: kullanılabilir su bulunamadı");
+        return std::string(env_.name + ": bu bölgede kullanılabilir su/buz yok (su erişimi %" + f0(env_.water_availability * 100) + ")");
+    }
+    water_found_ = true;
+    // yeraltı buzu derinliği: su erişimi yüksekse sığ (oyun varsayımı; Mars'ta orta enlemlerde <1 m buz gözlendi — Phoenix 2008)
+    const double depth = std::max(0.05, (1.0 - env_.water_availability) * 2.0 + rng_.uniform(0.0, 0.5));
+    push("Su bulundu: ~" + f1(depth) + " m derinlikte buz");
+    return std::string("Yeraltı buzu bulundu: ~" + f1(depth) + " m derinlikte (" + env_.notes + "). Koloni kurulabilir.");
+}
+
+Status Expedition::found_colony() {
+    if (colony()) return make_error(ErrorCode::Infeasible, "Burada zaten koloni var");
+    if (craft_.phase() != craft::FlightPhase::Landed) return make_error(ErrorCode::Infeasible, "Önce iniş yap");
+    if (!water_found_) return make_error(ErrorCode::Infeasible, "Önce su kaynağı bul (su taraması)");
+    auto st = game_.found_outpost(body_, founding_crew_kit());
+    if (!st) return st;
+    colony::Colony* c = colony();
+    settlement_ = life::Settlement::build(*c, env_);
+    society_.sync(*c, settlement_, rng_);
+    game_.set_focus(c->id());
+    if (const life::Building* pad = settlement_.find(life::District::LandingPad)) {   // araç iniş alanında; oyuncu yanında
+        if (player_.mode == PlayerMode::OnFoot) {
+            player_.x = pad->x;
+            player_.y = pad->y;
+        }
+    }
+    push(env_.name + " kolonisi kuruldu: 4 kişilik ekip iniş kampında, ilk habitat inşa edilmeli");
+    return ok_status();
+}
+
+Result<int> Expedition::build(colony::ModuleType t) {
+    colony::Colony* c = colony();
+    if (!c) return make_error(ErrorCode::NotFound, "Koloni yok");
+    auto r = construction_.start(t, *c, game_.wallet(), game_.research().unlocked_list(), game_.day());
+    if (r) push(std::string("İnşaat başladı: ") + colony::module_name(t) + " (" + f0(build::total(build::blueprint(t)).labor_h) + " emek-saat)");
+    return r;
+}
+
+Result<int> Expedition::reinforce() {
+    colony::Colony* c = colony();
+    if (!c) return make_error(ErrorCode::NotFound, "Koloni yok");
+    auto r = construction_.start_reinforcement(*c, game_.wallet(), game_.day());
+    if (r) push("Güçlendirme başladı: regolit setleri ve rüzgâr duvarları");
+    return r;
+}
+
+void Expedition::update_construction(double dt_h) {
+    colony::Colony* c = colony();
+    if (!c) return;
+    (void)dt_h;
+    const build::Project* p = construction_.current();
+    std::string site;
+    if (p) {
+        const life::District d = p->reinforce ? life::District::Housing : static_cast<life::District>(build::site_district(p->module));
+        if (const life::Building* b = settlement_.find(d)) site = b->id;
+    }
+    society_.set_construction_site(site);
+    construction_.work(society_.take_construction_labor());
+    for (auto t : construction_.complete(*c, game_.research().unlocked_list())) {
+        push(std::string("İnşaat tamamlandı: ") + colony::module_name(t));
+        settlement_.refresh(*c);
+    }
+    for (const auto& q : construction_.projects())
+        if (q.state == build::State::WaitingConnection && !q.missing.empty() && q.labor_done_h > 0 && static_cast<int>(hours_ * 10) % 240 == 0)
+            push(std::string(colony::module_name(q.module)) + " bağlantı bekliyor: " + q.missing);
+}
+
+std::string Expedition::damage_report() const {
+    std::string s = "Hasar raporu:";
+    bool any = false;
+    if (const colony::Colony* c = colony()) {
+        std::map<std::string, std::pair<double, int>> agg;
+        for (const auto& m : c->modules()) {
+            auto& a = agg[colony::module_name(m.type)];
+            a.first += m.condition;
+            a.second++;
+        }
+        for (const auto& [n, a] : agg)
+            if (a.first / a.second < 0.95) {
+                s += "\n- " + n + ": durum %" + f0(a.first / a.second * 100);
+                any = true;
+            }
+        s += std::string("\n- Fırtına koruması: ") + (construction_.reinforced() ? "var (hasar %70 azalır)" : "YOK");
+    }
+    for (const auto& p : craft_.installed())
+        if (p.health < 0.95) {
+            s += "\n- Araç " + craft::find_part(p.key).value()->name + ": %" + f0(p.health * 100);
+            any = true;
+        }
+    for (const auto& w : craft_.warnings()) {
+        s += "\n! " + w.message;
+        any = true;
+    }
+    if (!any) s += "\n- Kayda değer hasar yok";
+    return s;
+}
+
+Result<std::string> Expedition::analyze_onboard() {
+    bool lab = false;
+    for (const auto& p : craft_.installed())
+        if (craft::find_part(p.key).value()->kind == craft::PartKind::Science && p.health > 0.3) lab = true;
+    if (!lab) return make_error(ErrorCode::Infeasible, "Araçta bilimsel laboratuvar yok");
+    if (player_.mode != PlayerMode::InCabin && player_.mode != PlayerMode::Seated) return make_error(ErrorCode::Infeasible, "Laboratuvar araç içinde");
+    if (player_.samples <= 0) return make_error(ErrorCode::Infeasible, "Analiz edilecek numune yok");
+    --player_.samples;
+    game_.research().add_points(25.0, &game_.bus());
+    push("Araç laboratuvarında numune analizi: +25 araştırma puanı");
+    return std::string(env_.name + " numunesi analiz edildi: +25 araştırma puanı (etkin araştırmaya eklendi).");
+}
+
+Result<life::MissionReport> Expedition::assign_mission(life::MissionKind k, colony::Job job, life::District where, int count, double hours,
+                                                       const std::string& description) {
+    colony::Colony* c = colony();
+    if (!c) return make_error(ErrorCode::NotFound, "Koloni yok");
+    auto r = society_.assign({k, job, where, hours, description}, count, game_.day(), *c, settlement_);
+    push(std::string("Görev: ") + description + " — kabul " + std::to_string(r.accepted.size()) + ", sorun " + std::to_string(r.problems.size()));
+    return r;
+}
+
 void Expedition::fail_power() {
     if (colony::Colony* c = colony()) {
         c->damage_module(colony::ModuleType::SolarArray, 0.7);
@@ -342,11 +480,13 @@ void Expedition::tick(double dt_s) {
     const double dt_h = dt_s / 3600.0;
     hours_ += dt_h;
     // araç uçuşu (0.1 s alt adım)
-    if (craft_.phase() == craft::FlightPhase::Flying) {
+    if (craft_.phase() == craft::FlightPhase::Flying || (craft_.phase() == craft::FlightPhase::Landed && craft_.instruments().engines_on)) {
         const auto before = craft_.phase();
         for (double t = 0; t < dt_s; t += 0.1) craft_.step(std::min(0.1, dt_s - t), env_, rng_);
+        if (craft_.docking().active) craft_.step_docking(dt_s);
         if (before != craft_.phase()) {
             if (craft_.phase() == craft::FlightPhase::Landed) push("İniş tamam: temas hızı " + f1(craft_.touchdown_speed()) + " m/s");
+            else if (craft_.phase() == craft::FlightPhase::Orbit) push("Yörüngeye girildi: " + f0(craft_.altitude() / 1000.0) + " km, " + f0(craft_.horizontal_speed()) + " m/s");
             else push("ARAÇ YÜZEYE ÇARPTI (" + f0(craft_.touchdown_speed()) + " m/s)");
         }
     }
@@ -367,6 +507,15 @@ void Expedition::tick(double dt_s) {
     const bool storm_before = std::any_of(weather_.begin(), weather_.end(), [](const auto& w) {
         return w.kind == challenge::Weather::DustStorm || w.kind == challenge::Weather::MeteorShower;
     });
+    for (const auto& w : weather_)
+        if (w.end_h <= hours_ && c && (w.kind == challenge::Weather::DustStorm || w.kind == challenge::Weather::StrongWind || w.kind == challenge::Weather::MeteorShower)) {
+            // fırtına hasarı (oyun varsayımı): güneş dizileri tozdan/rüzgârdan en çok etkilenir; güçlendirme %70 azaltır
+            const double k = w.intensity * construction_.storm_damage_factor() * std::min(1.0, (w.end_h - w.start_h) / 48.0);
+            c->damage_module(colony::ModuleType::SolarArray, 0.25 * k);
+            for (auto t : {colony::ModuleType::Habitat, colony::ModuleType::Greenhouse, colony::ModuleType::WaterRecycler})
+                c->damage_module(t, 0.08 * k);
+            push(std::string(challenge::to_string(w.kind)) + " hasarı: güneş dizileri -%" + f0(25 * k) + (construction_.reinforced() ? " (güçlendirme sayesinde azaldı)" : ""));
+        }
     weather_.erase(std::remove_if(weather_.begin(), weather_.end(), [&](const auto& w) { return w.end_h <= hours_; }), weather_.end());
     const bool storm_after = std::any_of(weather_.begin(), weather_.end(), [](const auto& w) {
         return w.kind == challenge::Weather::DustStorm || w.kind == challenge::Weather::MeteorShower;
@@ -390,6 +539,7 @@ void Expedition::tick(double dt_s) {
         const double py = player_.mode == PlayerMode::Seated || player_.mode == PlayerMode::InCabin ? 1e6 : player_.y;
         society_.tick(dt_h, game_.day(), crew_hour(), *c, settlement_, env_.gravity_ms2, px, py, rng_);
     }
+    update_construction(dt_h);
     hour_acc_ += dt_h;
     if (hour_acc_ >= 1.0) {
         game_.advance(hour_acc_ / 24.0);
@@ -405,7 +555,12 @@ std::string Expedition::colony_report() const {
     const colony::Colony* c = colony();
     if (!c) return "Bu gök cisminde koloni yok.";
     const int pop = std::max(1, c->population());
-    auto days = [&](const char* k, double per) { return f1(c->resource(k) / (pop * per)); };
+    auto days = [&](const char* k, double per) {
+        auto it = c->stock().find(k);
+        if (it == c->stock().end()) return std::string("? (kayıt yok)");                    // eksik veri açıkça bildirilir
+        if (!(it->second >= 0) || std::isnan(it->second)) return std::string("? (tutarsız veri)");
+        return f1(it->second / (pop * per));
+    };
     int sick = 0;
     for (const auto& k : c->colonists())
         if (k.alive && k.needs.health < 0.5) ++sick;
@@ -417,6 +572,9 @@ std::string Expedition::colony_report() const {
                     " gün, gıda " + days("food", colony::kFoodPerPersonDay_t) + " gün, oksijen " + days("oxygen", colony::kO2PerPersonDay_t) +
                     " gün, hasta " + std::to_string(sick) + ", ortalama üretim verimi %" + f0(eff * 100);
     if (society_.alarm()) s += ", ALARM: " + std::string(life::to_string(society_.last_event()));
+    if (c->housing() < c->population()) s += ", konut yetersiz (" + std::to_string(c->housing()) + "/" + std::to_string(c->population()) + ")";
+    if (const build::Project* p = construction_.current())
+        s += std::string(", inşaat: ") + (p->reinforce ? "güçlendirme" : colony::module_name(p->module)) + " %" + f0(p->progress() * 100);
     return s;
 }
 
@@ -430,6 +588,8 @@ std::string Expedition::environment_report() const {
         if (sc.mitigated >= 0.3) s += "\n- " + std::string(challenge::to_string(static_cast<challenge::Category>(i))) + " %" + f0(sc.mitigated * 100) + ": " + sc.reason;
         if (!sc.missing.empty() && sc.raw >= 0.3) s += " (eksik: " + sc.missing.front() + ")";
     }
+    if (env_.dose_source.find("tahmin") != std::string::npos)
+        s += "\n- VERİ UYARISI: radyasyon değeri ölçüm değil, tahmindir (" + env_.dose_source + ")";
     for (const auto& w : weather_) s += "\n- Etkin: " + std::string(challenge::to_string(w.kind)) + ", görüş %" + f0(w.visibility * 100);
     return s;
 }
@@ -475,6 +635,8 @@ json::Value Expedition::to_json() const {
     v.set("society", society_.to_json());
     v.set("hours", hours_);
     v.set("power_alarm", power_alarm_);
+    v.set("water_found", water_found_);
+    v.set("construction", construction_.to_json());
     return v;
 }
 
@@ -498,6 +660,12 @@ Status Expedition::from_json(const json::Value& v) {
     if (!st) return st;
     hours_ = v["hours"].as_number();
     power_alarm_ = v["power_alarm"].as_bool();
+    water_found_ = v["water_found"].as_bool();
+    if (v.has("construction")) {
+        auto cs = construction_.from_json(v["construction"]);
+        if (!cs) return cs;
+    }
+    if (const colony::Colony* cc = colony()) settlement_.refresh(*cc);
     return ok_status();
 }
 
