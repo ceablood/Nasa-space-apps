@@ -86,6 +86,20 @@ const char* to_string(Intent i) {
         case Intent::Patrol: return "Devriyede";
         case Intent::Research: return "Araştırmada";
         case Intent::TalkToPlayer: return "Seninle konuşuyor";
+        case Intent::Construct: return "İnşaatta";
+        case Intent::Mission: return "Görevde";
+    }
+    return "?";
+}
+
+const char* to_string(MissionKind k) {
+    switch (k) {
+        case MissionKind::Repair: return "Onarım";
+        case MissionKind::Construct: return "İnşaat";
+        case MissionKind::Research: return "Araştırma";
+        case MissionKind::Patrol: return "Devriye";
+        case MissionKind::Medical: return "Sağlık kontrolü";
+        case MissionKind::Supply: return "İkmal";
     }
     return "?";
 }
@@ -166,8 +180,30 @@ Settlement Settlement::build(const colony::Colony& c, const challenge::PlanetEnv
         }
         s.buildings_.push_back(std::move(b));
     }
-    (void)has_module;
+    s.refresh(c);
     return s;
+}
+
+void Settlement::refresh(const colony::Colony& c) {
+    using colony::ModuleType;
+    const bool hab = has_module(c, ModuleType::Habitat);
+    for (auto& b : buildings_) {
+        switch (b.district) {
+            case District::LandingPad: case District::Airlock: b.built = true; break;
+            case District::Housing: b.built = hab; break;
+            case District::Power: b.built = has_module(c, ModuleType::SolarArray) || has_module(c, ModuleType::FissionReactor); break;
+            case District::Water: b.built = has_module(c, ModuleType::WaterRecycler) || has_module(c, ModuleType::Electrolyzer); break;
+            case District::Farm: b.built = has_module(c, ModuleType::Greenhouse); break;
+            case District::Lab: b.built = has_module(c, ModuleType::Lab); break;
+            case District::Hospital: b.built = has_module(c, ModuleType::Clinic); break;
+            case District::Processing: b.built = has_module(c, ModuleType::Mine) || has_module(c, ModuleType::Sabatier); break;
+            default: b.built = hab; break;   // ortak alanlar (yönetim, yemek, sosyal, güvenlik...) ilk habitatla gelir (oyun varsayımı)
+        }
+        if (!b.built) b.shelter = false;
+        else if (b.district == District::Housing || b.district == District::Admin || b.district == District::Hospital || b.district == District::Security ||
+                 (layout_ == Layout::Underground && b.pressurized))
+            b.shelter = true;
+    }
 }
 
 const Building* Settlement::find(const std::string& id) const {
@@ -286,7 +322,13 @@ void Society::decide(Npc& n, colony::Colonist& c, colony::Colony& col, const Set
     std::string why;
     using colony::Activity;
     using colony::Job;
-    if (alarm_) {
+    if (n.mission >= 0 && n.mission_h > 0 && !alarm_) {
+        in = Intent::Mission;
+        const Building* mb = s.find(n.mission_site);
+        dest = mb ? mb->district : District::Admin;
+        why = std::string("görev: ") + to_string(static_cast<MissionKind>(n.mission));
+        (void)col.order(c.id, Activity::Work, std::min(1.0, n.mission_h));
+    } else if (alarm_) {
         const bool brave = p.courage > 0.6;
         if (c.job == Job::Security) {
             in = last_event_ == ColonyEvent::MeteorThreat || last_event_ == ColonyEvent::DustStorm ? Intent::Patrol : Intent::RespondAlarm;
@@ -330,6 +372,11 @@ void Society::decide(Npc& n, colony::Colonist& c, colony::Colony& col, const Set
                 dest = workplace(c.job);
                 if (c.job == Job::Engineer && hour >= 13 && hour < 15) dest = District::Power;   // öğleden sonra bakım turu
                 why = "vardiya";
+                if (c.job == Job::Engineer && !site_.empty()) {   // inşaat sahası varsa mühendisler orada
+                    in = Intent::Construct;
+                    if (const Building* sb = s.find(site_)) dest = sb->district;
+                    why = "vardiya: inşaat sahası";
+                }
                 break;
             case Activity::Idle:
                 if (n.thirst > 0.7) { in = Intent::Eat; dest = District::Canteen; why = "susuzluk"; }
@@ -340,6 +387,12 @@ void Society::decide(Npc& n, colony::Colonist& c, colony::Colony& col, const Set
         }
     }
     const Building* b = s.find(dest);
+    // hedef henüz inşa edilmediyse (inşaat hariç): iniş alanındaki araçta/kampta kal
+    if (b && !b->built && in != Intent::Construct && in != Intent::Mission) {
+        const Building* h = s.find(District::Housing);
+        b = (h && h->built) ? h : s.find(District::LandingPad);
+        why += " (bina yok: " + std::string(b == s.find(District::LandingPad) ? "iniş kampında" : "yaşam alanında") + ")";
+    }
     if (b && b->id != n.target) {
         n.route = s.path(n.x, n.y, *b);
         n.target = b->id;
@@ -440,6 +493,22 @@ void Society::tick(double dt_h, double day, double hour, colony::Colony& c, cons
             }
         }
         if (n.lod != Lod::Far) move(n, dt_h, speed);
+        // inşaat ve görev işçiliği
+        if ((n.intent == Intent::Construct || (n.intent == Intent::Mission && n.mission == static_cast<int>(MissionKind::Construct))) && n.arrived)
+            labor_h_ += dt_h * (0.5 + k->skill);
+        if (n.intent == Intent::Mission && n.arrived) {
+            n.mission_h -= dt_h;
+            if (n.mission == static_cast<int>(MissionKind::Repair)) {
+                c.repair(colony::ModuleType::SolarArray, 0.08 * dt_h * (0.5 + k->skill));
+                c.repair(colony::ModuleType::FissionReactor, 0.08 * dt_h * (0.5 + k->skill));
+            }
+            if (n.mission == static_cast<int>(MissionKind::Research)) c.add_resource("rp", 1.0 * dt_h * (0.5 + k->skill));
+            if (n.mission_h <= 0) {
+                remember(n, {day, -1, std::string("Görev tamamlandı: ") + to_string(static_cast<MissionKind>(n.mission)), 0.4, 0.5});
+                n.mission = -1;
+                n.think_in_h = 0;
+            }
+        }
         // enerji onarımı ekonomiye yansır
         if (n.intent == Intent::RepairPower && n.arrived) {
             c.repair(colony::ModuleType::SolarArray, 0.08 * dt_h * (0.5 + k->skill));
@@ -523,6 +592,40 @@ Result<std::string> Society::talk(int id, const std::string& topic, double day, 
     return s;
 }
 
+double Society::take_construction_labor() {
+    const double v = labor_h_;
+    labor_h_ = 0;
+    return v;
+}
+
+MissionReport Society::assign(const MissionOrder& m, int count, double day, colony::Colony& c, const Settlement& s) {
+    MissionReport r;
+    const Building* b = s.find(m.where);
+    for (auto& n : npcs_) {
+        colony::Colonist* k = c.colonist(n.id);
+        if (!k || !k->alive || k->job != m.job) continue;
+        if (static_cast<int>(r.accepted.size()) >= count) break;
+        std::string why;
+        if (k->needs.health < 0.5) why = "sağlığı yerinde değil (sağlık " + pct(k->needs.health) + ")";
+        else if (k->dose_limit_reached) why = "radyasyon kariyer sınırında, sahaya çıkamaz";
+        else if (k->needs.fatigue > 0.85) why = "çok yorgun (yorgunluk " + pct(k->needs.fatigue) + "), önce dinlenmeli";
+        else if (n.mission >= 0) why = std::string("zaten görevde: ") + to_string(static_cast<MissionKind>(n.mission));
+        else if (b && !b->built && m.kind != MissionKind::Construct) why = b->name + " henüz inşa edilmedi";
+        if (!why.empty()) {
+            r.problems.push_back(k->name + ": " + why);
+            continue;
+        }
+        n.mission = static_cast<int>(m.kind);
+        n.mission_h = m.hours;
+        n.mission_site = b ? b->id : std::string();
+        n.think_in_h = 0;
+        remember(n, {day, -1, "Görev aldım: " + m.description, 0.35, 0.1});
+        r.accepted.push_back(n.id);
+    }
+    if (r.accepted.empty() && r.problems.empty()) r.problems.push_back(std::string("Kolonide ") + colony::job_name(m.job) + " yok");
+    return r;
+}
+
 SocietyStats Society::stats() const {
     SocietyStats st;
     st.decisions = decisions_;
@@ -572,6 +675,9 @@ json::Value Society::to_json() const {
         o.set("x", n.x);
         o.set("y", n.y);
         o.set("shift", n.shift);
+        o.set("mission", n.mission);
+        o.set("mission_h", n.mission_h);
+        o.set("mission_site", n.mission_site);
         json::Value m = json::Value::array();
         for (const auto& x : n.memories) {
             json::Value mo = json::Value::object();
@@ -600,6 +706,7 @@ json::Value Society::to_json() const {
     v.set("rel", r);
     v.set("alarm", alarm_);
     v.set("event", static_cast<int>(last_event_));
+    v.set("site", site_);
     return v;
 }
 
@@ -614,13 +721,16 @@ Status Society::from_json(const json::Value& v) {
         n.safety = o["safety"].as_number(1.0);
         n.satisfaction = o["sat"].as_number(0.6);
         const int in = o["intent"].as_int(-1);
-        if (in < 0 || in > static_cast<int>(Intent::TalkToPlayer)) return make_error(ErrorCode::Parse, "Geçersiz NPC niyeti");
+        if (in < 0 || in > static_cast<int>(Intent::Mission)) return make_error(ErrorCode::Parse, "Geçersiz NPC niyeti");
         n.intent = static_cast<Intent>(in);
         n.at = o["at"].as_string();
         n.target = o["target"].as_string();
         n.x = o["x"].as_number();
         n.y = o["y"].as_number();
         n.shift = o["shift"].as_int();
+        n.mission = o["mission"].as_int(-1);
+        n.mission_h = o["mission_h"].as_number();
+        n.mission_site = o["mission_site"].as_string();
         for (const auto& m : o["mem"].as_array())
             n.memories.push_back({m["day"].as_number(), m["about"].as_int(), m["text"].as_string(), m["imp"].as_number(), m["val"].as_number()});
         npcs_.push_back(n);
@@ -628,6 +738,7 @@ Status Society::from_json(const json::Value& v) {
     for (const auto& o : v["rel"].as_array())
         relations_[{o["a"].as_int(), o["b"].as_int()}] = {o["aff"].as_number(), o["trust"].as_number(0.5), o["resp"].as_number(0.5), o["tie"].as_string()};
     alarm_ = v["alarm"].as_bool();
+    site_ = v["site"].as_string();
     const int e = v["event"].as_int(static_cast<int>(ColonyEvent::AllClear));
     if (e < 0 || e > static_cast<int>(ColonyEvent::AllClear)) return make_error(ErrorCode::Parse, "Geçersiz koloni olayı");
     last_event_ = static_cast<ColonyEvent>(e);

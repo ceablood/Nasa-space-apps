@@ -20,5 +20,6 @@ THIRD_PARTY_INCLUDES_START
 #include "../../../../../core/src/challenge.cpp"
 #include "../../../../../core/src/spacecraft.cpp"
 #include "../../../../../core/src/life.cpp"
+#include "../../../../../core/src/construction.cpp"
 #include "../../../../../core/src/world.cpp"
 THIRD_PARTY_INCLUDES_END

@@ -44,6 +44,7 @@ struct Building {
     std::vector<Room> rooms;
     bool pressurized = true, shelter = false;
     int capacity = 10;
+    bool built = true;          // false: arsa / inşaat alanı (girilemez)
 };
 
 enum class Layout { SurfaceDomes, Underground, Ocean, Polar, Orbital };
@@ -54,6 +55,8 @@ public:
     Settlement() = default;
     // Koloninin modüllerinden ve gezegen sınıfından yerleşim kurar (18 bölge; koloni modülleri ilgili bölgeye bağlanır)
     static Settlement build(const colony::Colony& c, const challenge::PlanetEnvironment& env);
+    // Koloni modüllerine göre hangi bölgelerin inşa edilmiş olduğunu günceller (yeni koloni: yalnız iniş alanı + hava kilidi)
+    void refresh(const colony::Colony& c);
     const std::vector<Building>& buildings() const { return buildings_; }
     const Building* find(const std::string& id) const;
     const Building* find(District d) const;
@@ -83,7 +86,23 @@ struct Relation {
     std::string tie;         // "iş arkadaşı", "ekip", "rakip"
 };
 
-enum class Intent { Sleep, Eat, Work, Socialize, Treatment, Idle, Shelter, RespondAlarm, RepairPower, Patrol, Research, TalkToPlayer };
+enum class Intent { Sleep, Eat, Work, Socialize, Treatment, Idle, Shelter, RespondAlarm, RepairPower, Patrol, Research, TalkToPlayer,
+                    Construct, Mission };
+
+// NOVA / oyuncu tarafından verilen görev (§6.3): NOVA genel emir verir, NPC kendi durumuna göre kabul eder ya da sorun bildirir
+enum class MissionKind { Repair, Construct, Research, Patrol, Medical, Supply };
+const char* to_string(MissionKind k);
+struct MissionOrder {
+    MissionKind kind;
+    colony::Job job;          // görevi yapacak meslek
+    District where;
+    double hours;
+    std::string description;
+};
+struct MissionReport {
+    std::vector<int> accepted;
+    std::vector<std::string> problems;   // "Can: çok yorgun (yorgunluk %91)" gibi
+};
 const char* to_string(Intent i);
 
 enum class Lod { Near, Mid, Far };
@@ -102,6 +121,9 @@ struct Npc {
     Lod lod = Lod::Far;
     double think_in_h = 0;         // sonraki karar
     int shift = 0;                 // 0 gündüz (08-17), 1 akşam (14-23) — vardiya
+    int mission = -1;              // etkin görev (MissionKind), -1 yok
+    double mission_h = 0;
+    std::string mission_site;
     std::vector<Memory> memories;
     bool arrived = true;
 };
@@ -122,6 +144,11 @@ public:
     void tick(double dt_h, double day, double local_hour, colony::Colony& c, const Settlement& s, double gravity, double player_x,
               double player_y, Rng& rng);
     void raise(ColonyEvent e, double day, colony::Colony& c, const Settlement& s);
+    // görev ata: uygun NPC'ler kabul eder, uygun olmayanlar nedenini bildirir; count: en çok kaç kişi
+    MissionReport assign(const MissionOrder& m, int count, double day, colony::Colony& c, const Settlement& s);
+    // inşaat sahası (bina kimliği; boş = yok). Mühendisler iş saatinde sahada çalışır.
+    void set_construction_site(const std::string& building_id) { site_ = building_id; }
+    double take_construction_labor();      // son çağrıdan beri üretilen emek-saat
     bool alarm() const { return alarm_; }
     ColonyEvent last_event() const { return last_event_; }
 
@@ -151,6 +178,8 @@ private:
     ColonyEvent last_event_ = ColonyEvent::AllClear;
     long decisions_ = 0;
     double social_timer_h_ = 0;
+    std::string site_;
+    double labor_h_ = 0;
 };
 
 // Üretim teşhisi (V41 §6.2 "Neden üretim yavaşladı?"): tesis -> personel -> enerji/girdi -> eksik -> öneri

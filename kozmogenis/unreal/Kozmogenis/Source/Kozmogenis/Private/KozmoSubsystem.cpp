@@ -114,6 +114,8 @@ FString UKozmoSubsystem::StartExpedition(const FString& Body, bool bInOrbit)
 		EndExpedition();
 		return Err;
 	}
+	// §7.2 adım 4: buz dünyası seferinde termal ekipman hazırlanmış olarak başlar (-179 °C, EMU sınırı -157 °C)
+	if (B == "titan" || B == "europa") Expedition->player().eq.thermal_suit = true;
 	SliceNova = MakeUnique<kozmo::nova::Nova>(*SliceGame);
 	SliceNova->attach(Expedition.Get());
 	Push(FString::Printf(TEXT("Sefer başladı: %s"), *KozmoStr(Expedition->env().name)));

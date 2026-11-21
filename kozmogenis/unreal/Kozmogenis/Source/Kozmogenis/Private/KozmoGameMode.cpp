@@ -200,3 +200,8 @@ void AKozmoGameMode::EndExpedition()
 }
 
 FString AKozmoGameMode::GetExpeditionFeedback() const { return ExpeditionScene ? ExpeditionScene->GetFeedback() : FString(); }
+
+void AKozmoGameMode::SetExpeditionFeedback(const FString& S)
+{
+	if (ExpeditionScene) ExpeditionScene->SetFeedback(S);
+}

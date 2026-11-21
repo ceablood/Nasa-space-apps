@@ -33,6 +33,7 @@ public:
 	FString StartExpedition(const FString& Body);
 	void EndExpedition();
 	FString GetExpeditionFeedback() const;
+	void SetExpeditionFeedback(const FString& S);
 
 private:
 	TSharedPtr<SKozmoDashboard> Dashboard;

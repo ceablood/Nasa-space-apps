@@ -52,6 +52,26 @@ void SKozmoExpeditionHud::Construct(const FArguments& InArgs)
 					+ SWrapBox::Slot()[Btn(TEXT("Senaryo: enerji arızası"), WithE([](kozmo::world::Expedition& E) { E.fail_power(); }))]
 					+ SWrapBox::Slot()[Btn(TEXT("Seferi bitir"), [GM]() { if (GM.IsValid()) GM->EndExpedition(); })]
 				]
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					// V41 §7.1 / §2.5: koloni kurma, inşaat, kalkış, kenetlenme — her düğme çekirdekte gerçek bir işlem
+					SNew(SWrapBox).UseAllottedSize(true)
+					+ SWrapBox::Slot()[Btn(TEXT("Su ara"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.scan_water(); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? KozmoStr(R.value()) : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("Koloni kur"), WithE([GM](kozmo::world::Expedition& E) { auto St = E.found_colony(); if (GM.IsValid()) GM->SetExpeditionFeedback(St.ok() ? TEXT("Koloni kuruldu: önce güneş dizisi, sonra habitat") : KozmoStr(St.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("İnşa: güneş dizisi"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.build(kozmo::colony::ModuleType::SolarArray); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? TEXT("İnşaat başladı") : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("İnşa: habitat"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.build(kozmo::colony::ModuleType::Habitat); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? TEXT("İnşaat başladı") : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("İnşa: su geri dönüşüm"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.build(kozmo::colony::ModuleType::WaterRecycler); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? TEXT("İnşaat başladı") : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("Güçlendir"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.reinforce(); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? TEXT("Güçlendirme başladı") : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("Hasar raporu"), WithE([GM](kozmo::world::Expedition& E) { if (GM.IsValid()) GM->SetExpeditionFeedback(KozmoStr(E.damage_report())); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("Araç lab: analiz"), WithE([GM](kozmo::world::Expedition& E) { auto R = E.analyze_onboard(); if (GM.IsValid()) GM->SetExpeditionFeedback(R.ok() ? KozmoStr(R.value()) : KozmoStr(R.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("Yörüngeye kalk"), WithE([GM](kozmo::world::Expedition& E) { auto St = E.take_off(15000.0); if (GM.IsValid()) GM->SetExpeditionFeedback(St.ok() ? TEXT("Kalkış: otomatik pilot yörüngeye çıkıyor") : KozmoStr(St.error().message)); }))]
+					+ SWrapBox::Slot()[Btn(TEXT("İstasyona kenetlen"), WithE([GM](kozmo::world::Expedition& E) {
+						(void)E.craft().set_target("istasyon Kapı");
+						(void)E.craft().set_mode(kozmo::craft::FlightMode::DockingAssist);
+						auto St = E.craft().begin_docking(500.0, 0.0);
+						if (GM.IsValid()) GM->SetExpeditionFeedback(St.ok() ? TEXT("Kenetlenme desteği: 500 m, RCS yaklaşma") : KozmoStr(St.error().message));
+					}))]
+				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0, 4, 0, 0)
 				[
 					SAssignNew(NovaBox, SEditableTextBox)
@@ -94,7 +114,14 @@ FText SKozmoExpeditionHud::Tasks() const
 {
 	const auto* E = Subsystem.IsValid() ? Subsystem->GetExpedition() : nullptr;
 	if (!E) return FText::GetEmpty();
-	FString S = TEXT("Görevler:");
+	FString S;
+	if (const auto& D = E->craft().docking(); D.active)
+		S += FString::Printf(TEXT("KENETLENME: %.1f m, yaklaşma %.2f m/s %s\n"), D.range_m, D.closing_ms, D.docked ? TEXT("— KENETLENDİ") : TEXT(""));
+	for (const auto& P : E->construction().projects())
+		if (P.state != kozmo::build::State::Done)
+			S += FString::Printf(TEXT("İNŞAAT: %s %%%.0f (%s)\n"), P.reinforce ? TEXT("güçlendirme") : *KozmoStr(kozmo::colony::module_name(P.module)), P.progress() * 100.0,
+				*KozmoStr(kozmo::build::to_string(P.state)));
+	S += TEXT("Görevler:");
 	for (const auto& T : E->tasks()) S += TEXT("\n• ") + KozmoStr(T);
 	const auto& L = E->log();
 	for (int32 i = FMath::Max(0, static_cast<int32>(L.size()) - 3); i < static_cast<int32>(L.size()); ++i) S += TEXT("\n") + KozmoStr(L[i]);

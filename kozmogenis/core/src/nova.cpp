@@ -28,6 +28,10 @@ const char* intent_name(Intent i) {
         case Intent::PlanetRisk: return "Gezegen riski";
         case Intent::ProductionDiagnosis: return "Üretim teşhisi";
         case Intent::Evacuate: return "Tahliye";
+        case Intent::DamageReport: return "Hasar raporu";
+        case Intent::AssignTask: return "Görev verme";
+        case Intent::BuildModule: return "Modül inşası";
+        case Intent::FoundColony: return "Koloni kurma";
     }
     return "?";
 }
@@ -125,6 +129,22 @@ Parsed parse(const std::string& text) {
     const std::string f = fold(text);
     const auto w = words(f);
     p.planet = planet_of(w);
+    {
+        using colony::Job;
+        const std::pair<const char*, Job> jobs[] = {{"muhendis", Job::Engineer}, {"bilim", Job::Scientist}, {"doktor", Job::Medic}, {"guvenlik", Job::Security},
+                                                    {"madenci", Job::Miner}, {"pilot", Job::Pilot}, {"ciftci", Job::Farmer}};
+        for (const auto& [k, j] : jobs)
+            if (any(w, {k})) p.job = static_cast<int>(j);
+        using colony::ModuleType;
+        if (f.find("su geri donusum") != std::string::npos) p.module = static_cast<int>(ModuleType::WaterRecycler);
+        else if (any(w, {"habitat"}) || f.find("yasam modul") != std::string::npos) p.module = static_cast<int>(ModuleType::Habitat);
+        else if (any(w, {"gunes", "panel"})) p.module = static_cast<int>(ModuleType::SolarArray);
+        else if (any(w, {"sera"})) p.module = static_cast<int>(ModuleType::Greenhouse);
+        else if (any(w, {"elektroliz"})) p.module = static_cast<int>(ModuleType::Electrolyzer);
+        else if (any(w, {"laboratuvar"})) p.module = static_cast<int>(ModuleType::Lab);
+        else if (any(w, {"klinik"})) p.module = static_cast<int>(ModuleType::Clinic);
+        else if (any(w, {"maden"}) && !any(w, {"madenci"})) p.module = static_cast<int>(ModuleType::Mine);
+    }
     p.tech = tech_of(f, w);
     for (const auto& x : w) {
         std::string n = x;
@@ -142,6 +162,10 @@ Parsed parse(const std::string& text) {
     else if (any(w, {"yardim", "komut"}) || f.find("neler yapabilir") != std::string::npos) p.intent = Intent::Help;
     else if (any(w, {"firlat", "gonder"}) && any(w, {"koloni", "kit"})) p.intent = Intent::LaunchColonyKit;
     else if (any(w, {"tahliye", "siginak"}) || f.find("guvenli alan") != std::string::npos) p.intent = Intent::Evacuate;
+    else if (any(w, {"hasar"})) p.intent = Intent::DamageReport;
+    else if (any(w, {"gorev", "gorevlendir"}) && p.job >= 0) p.intent = Intent::AssignTask;
+    else if (any(w, {"insa", "kur"}) && p.module >= 0) p.intent = Intent::BuildModule;
+    else if (any(w, {"kur"}) && any(w, {"koloni"})) p.intent = Intent::FoundColony;
     else if (any(w, {"uretim"}) && any(w, {"neden", "yavas", "dustu", "azal", "sorun"})) p.intent = Intent::ProductionDiagnosis;
     else if (any(w, {"risk", "tehlike", "zorluk"}) || f.find("inis riski") != std::string::npos || any(w, {"cevre"})) p.intent = Intent::PlanetRisk;
     else if (any(w, {"arac", "gemi", "kokpit", "govde", "kabin"}) || f.find("ariza") != std::string::npos) p.intent = Intent::VehicleStatus;
@@ -304,6 +328,62 @@ Reply Nova::evacuate() {
     });
 }
 
+Reply Nova::assign_task(int job) {
+    if (!expedition_ || !expedition_->colony()) return {"Görev verilecek koloni bağlı değil.", {}, std::nullopt, false};
+    using colony::Job;
+    using life::District;
+    using life::MissionKind;
+    const Job j = static_cast<Job>(job);
+    MissionKind k = MissionKind::Patrol;
+    District d = District::Admin;
+    std::string what;
+    switch (j) {
+        case Job::Engineer: k = MissionKind::Repair; d = District::Power; what = "enerji sistemi bakım/onarım"; break;
+        case Job::Scientist: k = MissionKind::Research; d = District::Lab; what = "laboratuvar araştırması"; break;
+        case Job::Medic: k = MissionKind::Medical; d = District::Hospital; what = "sağlık kontrolü"; break;
+        case Job::Security: k = MissionKind::Patrol; d = District::Airlock; what = "dış alan devriyesi"; break;
+        case Job::Miner: k = MissionKind::Supply; d = District::Processing; what = "kaynak çıkarma ve nakliye"; break;
+        case Job::Pilot: k = MissionKind::Supply; d = District::Hangar; what = "araç bakımı ve uçuş hazırlığı"; break;
+        case Job::Farmer: k = MissionKind::Supply; d = District::Farm; what = "sera su/ışık kontrolü"; break;
+    }
+    auto* e = expedition_;
+    const std::string desc = std::string(colony::job_name(j)) + " ekibine 4 saatlik görev: " + what +
+                             ". Görevdeki kişiler bu sürede kendi işlerini yapmaz. NPC'ler durumlarına göre kabul eder ya da sorun bildirir.";
+    return propose(desc, [e, k, j, d, what] {
+        auto r = e->assign_mission(k, j, d, 2, 4.0, what);
+        if (!r) return r.error().message;
+        std::string t = std::to_string(r.value().accepted.size()) + " kişi görevi kabul etti.";
+        for (const auto& pr : r.value().problems) t += "\n- Sorun bildirdi: " + pr;
+        return t;
+    });
+}
+
+Reply Nova::build_module(int module) {
+    if (!expedition_ || !expedition_->colony()) return {"İnşaat için bağlı bir koloni yok.", {}, std::nullopt, false};
+    const auto t = static_cast<colony::ModuleType>(module);
+    const auto c = build::total(build::blueprint(t));
+    auto* e = expedition_;
+    const std::string desc = std::string(colony::module_name(t)) + " inşaatı: " + fmt("%.1f", c.iron_t) + " t demir (stok " +
+                             fmt("%.1f", e->colony()->resource("iron")) + " t), " + fmt("%.0f", c.credits) + " kredi, ~" + fmt("%.0f", c.labor_h) +
+                             " mühendis emek-saati, işletme " + fmt("%.1f", c.power_kw) + " kW.";
+    return propose(desc, [e, t] {
+        auto r = e->build(t);
+        return r ? std::string("İnşaat başladı; mühendisler sahaya yönlendirildi.") : r.error().message;
+    });
+}
+
+Reply Nova::found_colony() {
+    if (!expedition_) return {"Etkin bir sefer yok.", {}, std::nullopt, false};
+    if (expedition_->colony()) return {"Burada zaten bir koloni var.", {}, std::nullopt, false};
+    if (!expedition_->water_found()) return {"Önce su kaynağı bulmalıyız: 'su ara' ya da araç sensörüyle tarama yap.", {}, std::nullopt, false};
+    auto* e = expedition_;
+    return propose("4 kişilik kuruluş ekibi ve 40 t demirle " + e->env().name + " kolonisi kurulacak; ekip ilk habitat bitene kadar iniş kampında yaşar.",
+                   [e] {
+                       auto st = e->found_colony();
+                       return st ? std::string("Koloni kuruldu. Önerim: önce güneş dizisi, sonra habitat ve su geri dönüşüm sistemi.") : st.error().message;
+                   });
+}
+
 Reply Nova::colony_advice() const {
     if (expedition_ && expedition_->colony()) {
         auto w = warnings();
@@ -426,6 +506,12 @@ Reply Nova::ask(const std::string& text) {
         case Intent::PlanetRisk: return planet_risk();
         case Intent::ProductionDiagnosis: return production_diagnosis();
         case Intent::Evacuate: return evacuate();
+        case Intent::DamageReport:
+            if (!expedition_) return {"Etkin bir sefer yok; hasar verisi okunamıyor.", {}, std::nullopt, false};
+            return {expedition_->damage_report(), {"Tesis ve araç telemetrisi (oyun içi veri)"}, std::nullopt, false};
+        case Intent::AssignTask: return assign_task(p.job);
+        case Intent::BuildModule: return build_module(p.module);
+        case Intent::FoundColony: return found_colony();
         case Intent::Confirm: return confirm();
         case Intent::Cancel: return cancel();
         case Intent::Unknown: break;

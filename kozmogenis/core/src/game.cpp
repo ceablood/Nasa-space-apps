@@ -18,6 +18,7 @@ double module_mass_t(colony::ModuleType t) {
         case ModuleType::Sabatier: return 5.0;
         case ModuleType::Lab: return 5.0;
         case ModuleType::Clinic: return 4.0;
+        case ModuleType::WaterRecycler: return 2.0;
     }
     return 5.0;
 }
@@ -63,6 +64,14 @@ Payload vertical_slice_outpost() {
     p.cargo = {{"water", 8.0}, {"oxygen", 0.6}, {"food", 1.2}, {"medicine", 0.5}};
     p.crew = {{"Ada", Job::Farmer}, {"Can", Job::Engineer}, {"Ece", Job::Scientist}, {"Deniz", Job::Medic},
               {"Mert", Job::Miner}, {"Selin", Job::Pilot}, {"Kaan", Job::Security}, {"Zeynep", Job::Engineer}};
+    return p;
+}
+
+Payload founding_crew_kit() {
+    using colony::Job;
+    Payload p;
+    p.cargo = {{"iron", 40.0}, {"water", 4.0}, {"oxygen", 0.4}, {"food", 0.8}, {"medicine", 0.1}};
+    p.crew = {{"Can", Job::Engineer}, {"Zeynep", Job::Engineer}, {"Ece", Job::Scientist}, {"Ada", Job::Farmer}};
     return p;
 }
 

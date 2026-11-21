@@ -26,7 +26,8 @@ namespace kozmo::nova {
 enum class Intent {
     Unknown, Help, Status, PlanetInfo, LaunchWindow, RocketAdvice, ColonyAdvice, ResearchAdvice,
     StartResearch, LaunchColonyKit, Confirm, Cancel, Economy,
-    VehicleStatus, PlanetRisk, ProductionDiagnosis, Evacuate      // V41: sefer (araç/gezegen/koloni) bağlamı
+    VehicleStatus, PlanetRisk, ProductionDiagnosis, Evacuate,     // V41: sefer (araç/gezegen/koloni) bağlamı
+    DamageReport, AssignTask, BuildModule, FoundColony
 };
 const char* intent_name(Intent i);
 
@@ -35,6 +36,8 @@ struct Parsed {
     std::string planet;        // "mars", "moon" ...
     std::string tech;          // araştırma anahtarı
     double number = 0;         // komuttaki ilk sayı (ör. yük tonu)
+    int job = -1;              // colony::Job (görev verme)
+    int module = -1;           // colony::ModuleType (inşaat)
     bool has_number = false;
 };
 
@@ -87,6 +90,9 @@ private:
     Reply planet_risk() const;
     Reply production_diagnosis() const;
     Reply evacuate();
+    Reply assign_task(int job);
+    Reply build_module(int module);
+    Reply found_colony();
     Reply propose(const std::string& description, std::function<std::string()> fn);
     Reply confirm();
     Reply cancel();

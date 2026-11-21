@@ -49,6 +49,7 @@ const char* module_name(ModuleType t) {
         case ModuleType::Sabatier: return "Sabatier yakıt reaktörü";
         case ModuleType::Lab: return "Laboratuvar";
         case ModuleType::Clinic: return "Klinik";
+        case ModuleType::WaterRecycler: return "Su geri dönüşüm sistemi";
     }
     return "?";
 }
@@ -66,6 +67,8 @@ const ModuleSpec& spec(ModuleType t) {
         {ModuleType::Sabatier, {ModuleType::Sabatier, -12, 1, Job::Engineer, 0, {{"water", 0.05}}, {{"methalox", 0.04}}, 4000, "isru"}},
         {ModuleType::Lab, {ModuleType::Lab, -5, 1, Job::Scientist, 0, {}, {{"rp", 2.0}}, 3000, ""}},
         {ModuleType::Clinic, {ModuleType::Clinic, -4, 1, Job::Medic, 0, {{"medicine", 0.0005}}, {}, 2500, ""}},
+        // ISS ECLSS su geri kazanımı 2023'te %98'e ulaştı (NASA); modülsüz temel habitat %85 varsayılır
+        {ModuleType::WaterRecycler, {ModuleType::WaterRecycler, -2, 0, Job::Engineer, 0, {}, {}, 1800, ""}},
     };
     return s.at(t);
 }
@@ -391,7 +394,12 @@ TickReport Colony::tick(double dt, double local_hour, Rng& rng, EventBus* bus, S
     const int pop = population();
     bool o2_ok = true, water_ok = true;
     const double o2_need = kO2PerPersonDay_t * pop * d;
-    const double w_need = kWaterPerPersonDay_t * pop * d * 0.15;   // %85 su geri dönüşümü (ISS düzeyi, yaklaşık)
+    // temel habitat %85 su geri dönüşümü; su geri dönüşüm sistemi verimiyle %98'e (ISS 2023) yaklaşır
+    double recycler = 0.0;
+    for (const auto& m : modules_)
+        if (m.type == ModuleType::WaterRecycler) recycler = std::max(recycler, m.efficiency);
+    const double loss = 0.15 - (0.15 - 0.02) * std::clamp(recycler, 0.0, 1.0);
+    const double w_need = kWaterPerPersonDay_t * pop * d * loss;
     if (resource("oxygen") >= o2_need) stock_["oxygen"] -= o2_need; else { o2_ok = false; stock_["oxygen"] = 0; }
     if (resource("water") >= w_need) stock_["water"] -= w_need; else { water_ok = false; stock_["water"] = 0; }
     rep.consumed["oxygen"] += o2_need;
@@ -520,7 +528,7 @@ Result<Colony> Colony::from_json(const json::Value& v) {
     for (const auto& [k, q] : v["stock"].as_object()) c.stock_[k] = q.as_number();
     for (const auto& m : v["modules"].as_array()) {
         const int t = m["type"].as_int(-1);
-        if (t < 0 || t > static_cast<int>(ModuleType::Clinic)) return make_error(ErrorCode::Parse, "Geçersiz modül türü");
+        if (t < 0 || t > static_cast<int>(ModuleType::WaterRecycler)) return make_error(ErrorCode::Parse, "Geçersiz modül türü");
         c.modules_.push_back({static_cast<ModuleType>(t), m["condition"].as_number(1.0), 0.0});
     }
     for (const auto& o : v["colonists"].as_array()) {
