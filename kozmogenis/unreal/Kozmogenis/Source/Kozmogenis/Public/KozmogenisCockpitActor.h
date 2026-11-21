@@ -31,6 +31,8 @@ public:
 	/** Bileşen bir düğmeyse eylem adını döner ("engines", "landing", "manual", "auto", "lights", "emergency", "fix") */
 	FString ButtonAction(const UPrimitiveComponent* Hit) const;
 	FVector GetEyeLocation() const;
+	/** Gaz kolu (0..1) ve kontrol kolu (yunuslama derecesi) animasyonu */
+	void SetLevers(double Throttle, float PitchDeg);
 
 private:
 	UPROPERTY() TObjectPtr<USceneComponent> Root;
@@ -40,6 +42,8 @@ private:
 	UPROPERTY() TObjectPtr<UTextRenderComponent> WarningText;
 	UPROPERTY() TObjectPtr<UTextRenderComponent> HoloMap;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Parts;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> Stick;
+	UPROPERTY() TObjectPtr<UStaticMeshComponent> ThrottleLever;
 	TMap<TObjectPtr<UPrimitiveComponent>, FString> Buttons;
 	kozmo::craft::CockpitLevel Level = kozmo::craft::CockpitLevel::None;
 	float BlinkT = 0.f;

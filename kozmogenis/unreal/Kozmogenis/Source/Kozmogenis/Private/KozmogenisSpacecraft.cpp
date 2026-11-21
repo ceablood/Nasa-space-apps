@@ -112,6 +112,7 @@ void AKozmogenisSpacecraft::SetupPlayerInputComponent(UInputComponent* In)
 	In->BindAxis(TEXT("LookUp"), this, &APawn::AddControllerPitchInput);
 	In->BindAxis(TEXT("Throttle"), this, &AKozmogenisSpacecraft::Throttle);
 	In->BindAxis(TEXT("MoveRight"), this, &AKozmogenisSpacecraft::PitchInput);
+	In->BindAxis(TEXT("Zoom"), this, &AKozmogenisSpacecraft::Zoom);
 	In->BindAction(TEXT("Interact"), IE_Pressed, this, &AKozmogenisSpacecraft::Interact);
 	In->BindAction(TEXT("Seat"), IE_Pressed, this, &AKozmogenisSpacecraft::SeatToggle);
 	In->BindAction(TEXT("Engines"), IE_Pressed, this, &AKozmogenisSpacecraft::ToggleEngines);
@@ -188,9 +189,15 @@ void AKozmogenisSpacecraft::PitchInput(float V)
 	UKozmoSubsystem* K = Kozmo();
 	auto* E = K ? K->GetExpedition() : nullptr;
 	if (!E || FMath::IsNearlyZero(V) || E->player().mode != kozmo::world::PlayerMode::Seated) return;
-	static float Pitch = 90.f;
-	Pitch = FMath::Clamp(Pitch + V * 0.6f, 0.f, 180.f);
-	E->craft().set_pitch_deg(Pitch);
+	PitchDeg = FMath::Clamp(PitchDeg + V * 0.6f, 0.f, 180.f);
+	E->craft().set_pitch_deg(PitchDeg);
+}
+
+void AKozmogenisSpacecraft::Zoom(float V)
+{
+	if (FMath::IsNearlyZero(V)) return;
+	Fov = FMath::Clamp(Fov - V * 5.f, 25.f, 100.f);   // kamera yakınlaştırma (pencere dışı ayrıntı)
+	Camera->SetFieldOfView(Fov);
 }
 
 void AKozmogenisSpacecraft::Interact()
@@ -234,17 +241,27 @@ void AKozmogenisSpacecraft::Tick(float Dt)
 	if (!E || !Scene) return;
 	const auto& C = E->craft();
 	const auto In = C.instruments();
-	// konum: iniş alanının üstünde irtifa; yatay hız görsel olarak yaklaşma mesafesine çevrilir (görsel yaklaşım)
+	// konum: çekirdekteki gerçek menzil (iniş alanı hedefine kalan mesafe) ve irtifa; hedef yoksa yörüngede iniş alanının üstü
 	const FVector Pad = Scene->LandingPadWorld();
-	const float Approach = FMath::Clamp(static_cast<float>(In.horizontal_ms) * 40.f, 0.f, 150000.f);
-	SetActorLocation(Pad + FVector(-Approach, 0.f, In.altitude_m * 100.f));
+	const double Remaining = C.has_landing_target() ? C.landing_target() - C.downrange() : 0.0;
+	SetActorLocation(Pad + FVector(static_cast<float>(-Remaining * 100.0), 0.f, In.altitude_m * 100.f));
+	if (Cockpit) Cockpit->SetLevers(In.throttle, PitchDeg);
 	if (Cockpit) Cockpit->UpdateFrom(C);
 	// motor alevi ve titreşim (kalkış/iniş titreşimi, ayarla azaltılabilir)
 	const bool Burning = In.engines_on && In.fuel_t > 0;
 	if (Plume) Plume->SetVisibility(Burning);
 	PlumeLight->SetIntensity(Burning ? 8.0e5f : 0.f);
 	ShakeT += Dt;
-	const float Amp = (Burning ? 0.6f : 0.f) * ShakeScale;
-	Camera->SetRelativeLocation((Cockpit ? Cockpit->GetEyeLocation() - GetActorLocation() : FVector(0, 0, 640)) +
-		FVector(FMath::Sin(ShakeT * 47.f), FMath::Cos(ShakeT * 53.f), FMath::Sin(ShakeT * 61.f)) * Amp);
+	// titreşim: motor (kalkış/iniş) + atmosferde türbülans (dinamik basınçla) + çarpışma tepkisi; ShakeScale ile azaltılabilir
+	const int32 Faults = static_cast<int32>(C.faults().size());
+	if (Faults > LastFaultCount) CollisionKick = 1.f;
+	LastFaultCount = Faults;
+	CollisionKick = FMath::Max(0.f, CollisionKick - Dt * 2.f);
+	const float Turb = C.phase() == kozmo::craft::FlightPhase::Flying ? static_cast<float>(FMath::Min(1.0, E->env().density_at(In.altitude_m) * In.speed_ms * In.speed_ms / 20000.0)) : 0.f;
+	const float Amp = ((Burning ? 0.6f : 0.f) + Turb * 1.5f + CollisionKick * 8.f) * ShakeScale;
+	FVector Offset = FVector(FMath::Sin(ShakeT * 47.f), FMath::Cos(ShakeT * 53.f), FMath::Sin(ShakeT * 61.f)) * Amp;
+	// sıfır yerçekimi: yörüngede koltukta değilken baş yavaşça süzülür
+	if (C.phase() == kozmo::craft::FlightPhase::Orbit && !In.seated)
+		Offset += FVector(FMath::Sin(ShakeT * 0.4f) * 6.f, FMath::Cos(ShakeT * 0.3f) * 5.f, FMath::Sin(ShakeT * 0.5f) * 8.f);
+	Camera->SetRelativeLocation((Cockpit ? Cockpit->GetEyeLocation() - GetActorLocation() : FVector(0, 0, 640)) + Offset);
 }

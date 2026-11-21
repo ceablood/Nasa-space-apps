@@ -1,7 +1,7 @@
 # KOZMOGENİS · Uzay Ajansı ve Medeniyet Simülasyonu
 
 **Ana oyun: Unreal Engine 5 sürümü** → [`kozmogenis/`](kozmogenis/) (C++ çekirdek KozmoCore + UE5 istemcisi).
-Durum: çekirdek derlenip test edildi (97 test, 0 başarısız, Linux + Windows MSVC CI); UE5 istemcisi yazıldı
+Durum: çekirdek derlenip test edildi (101 test, 0 başarısız, Linux + Windows MSVC CI); UE5 istemcisi yazıldı
 ama UE5 kurulu bir bilgisayar olmadığı için **henüz derlenmedi** — ilk derleme ve Windows EXE hedef PC'de yapılacak.
 Ayrıntı: [`kozmogenis/docs/V41_DURUM_RAPORU.md`](kozmogenis/docs/V41_DURUM_RAPORU.md) (V41 dikey dilim: kokpit, iniş, gezilebilir koloni, yaşayan NPC, NOVA) ve [`V30_DURUM_RAPORU.md`](kozmogenis/docs/V30_DURUM_RAPORU.md).
 

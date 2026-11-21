@@ -74,7 +74,7 @@ TEST("su geri dönüşüm sistemi su tüketimini %85'ten ~%98 geri kazanıma çe
 TEST("§7.1 çöl gezegeni (Mars): iniş -> su -> koloni -> enerji/habitat/su -> fırtına -> hasar raporu -> güçlendirme") {
     Game g(71);
     g.new_game("KOZMOGENİS", 1e6);
-    Expedition e(g, "mars", craft::preset("lander"));
+    Expedition e(g, "mars", craft::preset("mars_lander"));
     CHECK(e.init().ok());
     nova::Nova nova(g);
     nova.attach(&e);
@@ -128,7 +128,7 @@ TEST("§7.1 çöl gezegeni (Mars): iniş -> su -> koloni -> enerji/habitat/su ->
     CHECK(e.construction().reinforced());
     CHECK(nova.ask("hasar raporu").text.find("koruması: var") != std::string::npos);
     // kayıt/yükleme inşaatı da taşır
-    Expedition e2(g, "mars", craft::preset("lander"));
+    Expedition e2(g, "mars", craft::preset("mars_lander"));
     CHECK(e2.init().ok());
     CHECK(e2.from_json(json::parse(e.to_json().dump()).value()).ok());
     CHECK(e2.construction().reinforced() && e2.water_found());

@@ -32,7 +32,7 @@ const char* to_string(PlayerMode m) {
 
 Result<DescentStart> descent_start(const std::string& body) {
     if (body == "moon") return DescentStart{15000, 1650, 0, "Apollo motorlu iniş başlangıcı (PDI) ~15 km, ~1.65 km/s"};
-    if (body == "mars") return DescentStart{10000, 400, -150, "Atmosfer girişi ve paraşüt sonrası (mühendislik yaklaşımı)"};
+    if (body == "mars") return DescentStart{125000, 3400, -100, "Yörüngeden atmosfer girişi (125 km, 3.4 km/s): şişme ısı kalkanı ile frenleme, ses altında motorlu iniş"};
     if (body == "mercury") return DescentStart{15000, 2900, 0, "Alçak yörüngeden motorlu iniş (yaklaşım)"};
     if (body == "titan") return DescentStart{8000, 2, -5, "Huygens benzeri paraşüt inişi sonrası (Huygens 2005: ~5 m/s ile yere değdi)"};
     return make_error(ErrorCode::NotFound, "Bu gök cismi için iniş senaryosu yok: " + body);
@@ -60,7 +60,12 @@ Status Expedition::init(bool in_orbit) {
         society_.sync(*c, settlement_, rng_);
         game_.set_focus(c->id());
     }
-    craft_.place_landed();   // yörüngedeyken araç durumu: in_orbit_ (iniş başlatılana kadar)
+    if (in_orbit_) {
+        auto d = descent_start(body_);
+        craft_.place_in_orbit(env_, d ? d.value().altitude_m : 100000.0);   // gerçek yörünge fazı
+    } else {
+        craft_.place_landed();
+    }
     if (const life::Building* pad = settlement_.find(life::District::LandingPad)) {
         player_.x = pad->x;
         player_.y = pad->y;
@@ -113,7 +118,25 @@ Status Expedition::begin_descent() {
     auto d = descent_start(body_);
     if (!d) return d.error();
     if (player_.mode != PlayerMode::Seated) return make_error(ErrorCode::Infeasible, "İniş için kokpitte otur");
+    if (env_.pressure_kpa > 0.3 && env_.key != "titan") {
+        bool decel = false;
+        for (const auto& p : craft_.installed()) decel |= craft::find_part(p.key).value()->kind == craft::PartKind::Decelerator;
+        if (!decel)
+            return make_error(ErrorCode::Infeasible, env_.name + " girişi için şişme yavaşlatıcı (HIAD) gerekli: bu aracın balistik katsayısı yüksek, "
+                                                                "yörüngeden giriş motorla karşılanamaz (Ares Mars iniş aracını kullan)");
+    }
     craft_.place_in_flight(d.value().altitude_m, d.value().horizontal_ms, d.value().vertical_ms);
+    // iniş alanı hedefi: motorlu iniş başlangıcının zamanlaması (Apollo PDI gibi) nominal menzile göre seçilir;
+    // güdüm sapmaları konum geri beslemesiyle düzeltir
+    {
+        craft::Spacecraft sim = craft_;
+        (void)sim.set_engines(true);
+        if (!sim.instruments().seated) (void)sim.sit();
+        (void)sim.set_engines(true);
+        (void)sim.set_mode(craft::FlightMode::LandingAssist);
+        Rng r2(1);
+        if (sim.fly_until_landed(env_, r2, 4000, 0.1) == craft::FlightPhase::Landed) craft_.set_landing_target(sim.downrange());
+    }
     in_orbit_ = false;
     push("İniş başladı: " + d.value().note);
     return ok_status();
@@ -122,7 +145,7 @@ Status Expedition::begin_descent() {
 Status Expedition::exit_craft() {
     if (player_.mode == PlayerMode::Seated) return make_error(ErrorCode::Infeasible, "Önce koltuktan kalk");
     if (player_.mode != PlayerMode::InCabin) return make_error(ErrorCode::Infeasible, "Araçta değilsin");
-    if (in_orbit_) return make_error(ErrorCode::Infeasible, "Araç yörüngede: önce iniş yap");
+    if (in_orbit_ || craft_.phase() == craft::FlightPhase::Orbit) return make_error(ErrorCode::Infeasible, "Araç yörüngede: önce iniş yap");
     if (!craft_.can_exit(env_, player_.eq.pressure_suit))
         return make_error(ErrorCode::Infeasible, craft_.phase() != craft::FlightPhase::Landed ? "Araç inmeden çıkılamaz" : "Dış ortam için basınçlı giysi gerekli");
     player_.mode = PlayerMode::OnFoot;
@@ -172,6 +195,7 @@ Status Expedition::enter_building(const std::string& id) {
     if (std::hypot(player_.x - b->door_x, player_.y - b->door_y) > 6) return make_error(ErrorCode::Infeasible, "Kapıya yürü (" + b->name + ")");
     player_.mode = PlayerMode::InBuilding;
     player_.building = b->id;
+    player_.floor = 0;
     player_.x = b->x;
     player_.y = b->y;
     player_.route.clear();
@@ -189,6 +213,28 @@ Status Expedition::leave_building() {
     player_.mode = PlayerMode::OnFoot;
     player_.building.clear();
     return ok_status();
+}
+
+Result<std::string> Expedition::change_floor(int floor, bool use_elevator) {
+    if (player_.mode != PlayerMode::InBuilding) return make_error(ErrorCode::Infeasible, "Bina içinde değilsin");
+    const life::Building* b = settlement_.find(player_.building);
+    if (!b || b->floors <= 1) return make_error(ErrorCode::Infeasible, "Bu bina tek katlı");
+    if (floor < 0 || floor >= b->floors) return make_error(ErrorCode::InvalidArgument, "Bu binada " + std::to_string(b->floors) + " kat var");
+    if (floor == player_.floor) return std::string("Zaten bu kattasın");
+    const bool underground = settlement_.layout() == life::Layout::Underground;
+    const std::string name = floor == 0 ? "zemin kat" : (underground ? "-" + std::to_string(floor) + ". kat" : std::to_string(floor) + ". kat");
+    if (use_elevator && b->elevator) {
+        const colony::Colony* c = colony();
+        const bool powered = c && (c->module_condition(colony::ModuleType::SolarArray) > 0.3 || c->module_condition(colony::ModuleType::FissionReactor) > 0.3) &&
+                             !(society_.alarm() && society_.last_event() == life::ColonyEvent::PowerOutage);
+        if (!powered) return make_error(ErrorCode::Infeasible, "Asansör enerjisiz: merdiveni kullan");
+        player_.floor = floor;
+        return std::string("Asansörle " + name);
+    }
+    const int steps = std::abs(floor - player_.floor);
+    player_.floor = floor;
+    tick(20.0 * steps);   // merdiven: kat başına ~20 s
+    return std::string("Merdivenle " + name + (b->elevator ? "" : " (bu binada asansör yok)"));
 }
 
 Status Expedition::collect_sample() {
@@ -219,10 +265,17 @@ Result<std::string> Expedition::use(const std::string& item) {
     if (player_.mode != PlayerMode::InBuilding) return make_error(ErrorCode::Infeasible, "Konsollar bina içindedir");
     const life::Building* b = settlement_.find(player_.building);
     const life::Interactable* it = nullptr;
+    int item_floor = 0;
     for (const auto& r : b->rooms)
         for (const auto& x : r.items)
-            if (x.id == item) it = &x;
+            if (x.id == item) {
+                it = &x;
+                item_floor = r.floor;
+            }
     if (!it) return make_error(ErrorCode::NotFound, "Bu binada böyle bir konsol yok: " + item);
+    if (item_floor != player_.floor)
+        return make_error(ErrorCode::Infeasible, it->name + " " + (item_floor == 0 ? std::string("zemin katta") : std::to_string(item_floor) + ". katta") +
+                                                     (b->elevator ? " (asansörü kullan)" : " (merdiveni kullan)"));
     colony::Colony* c = colony();
     if (!c) return make_error(ErrorCode::NotFound, "Koloni yok");
     const std::string& a = it->action;
@@ -627,6 +680,7 @@ json::Value Expedition::to_json() const {
     p.set("x", player_.x);
     p.set("y", player_.y);
     p.set("building", player_.building);
+    p.set("floor", player_.floor);
     p.set("health", player_.body.health);
     p.set("o2", player_.body.suit_o2_h);
     p.set("dose", player_.body.dose_msv);
@@ -652,6 +706,7 @@ Status Expedition::from_json(const json::Value& v) {
     player_.x = p["x"].as_number();
     player_.y = p["y"].as_number();
     player_.building = p["building"].as_string();
+    player_.floor = p["floor"].as_int();
     player_.body.health = p["health"].as_number(1.0);
     player_.body.suit_o2_h = p["o2"].as_number(8.0);
     player_.body.dose_msv = p["dose"].as_number();

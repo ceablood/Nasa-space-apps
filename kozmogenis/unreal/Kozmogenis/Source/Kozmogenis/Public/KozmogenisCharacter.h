@@ -28,6 +28,7 @@ private:
 	void MoveRight(float V);
 	void Interact();
 	void Sample();
+	void Zoom(float V);
 	void Topic1() { Talk(TEXT("selam")); }
 	void Topic2() { Talk(TEXT("nasılsın")); }
 	void Topic3() { Talk(TEXT("iş")); }

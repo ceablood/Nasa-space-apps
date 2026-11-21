@@ -93,13 +93,33 @@ void AKozmogenisColony::BuildBuilding(const Building& B, Layout L)
 		KozmoShapes::Add(this, Root, EKozmoShape::Sphere, C + FVector(0, 0, H * 0.6f), FVector(W * 1.4f, D * 1.4f, H * 2.4f), FLinearColor(0.36f, 0.35f, 0.33f), 0.95f);
 	else
 		KozmoShapes::Add(this, Root, EKozmoShape::Cube, C + FVector(0, 0, H), FVector(W, D, 0.2f), Wall, 0.6f);
-	// iç mekân: oda konsolları (etiketli; E ile kullanılır)
+	// katlar: ara döşeme + asansör/merdiven işaretleri (E ile kat değiştir)
+	const float FloorH = H / FMath::Max(1, B.floors);
+	for (int32 F = 0; F < B.floors; ++F)
+	{
+		if (F > 0)
+			KozmoShapes::Add(this, Root, EKozmoShape::Cube, C + FVector(W * 0.1f, 0, F * FloorH), FVector(W * 0.8f, D * 0.95f, 0.15f), Floor, 0.8f);   // merdiven boşluğu bırakılır
+		if (B.floors > 1)
+		{
+			const FVector Lift = C + FVector(-W * 0.42f, D * 0.35f, F * FloorH + 1.2f);
+			if (B.elevator)
+			{
+				UStaticMeshComponent* E = KozmoShapes::Add(this, Root, EKozmoShape::Cube, Lift, FVector(0.3f, 0.3f, 0.3f), FLinearColor(0.2f, 0.7f, 0.3f), 0.3f);
+				E->ComponentTags.Add(FName(*FString::Printf(TEXT("elev:%s:%d"), *KozmoStr(B.id), (F + 1) % B.floors)));
+				KozmoShapes::Label(this, Root, Lift + FVector(0, 0, 0.4f), TEXT("ASANSÖR"), 14.f, FColor(150, 240, 160));
+			}
+			UStaticMeshComponent* St = KozmoShapes::Add(this, Root, EKozmoShape::Cube, Lift + FVector(0, -1.2f, 0), FVector(0.3f, 0.3f, 0.3f), FLinearColor(0.7f, 0.6f, 0.2f), 0.3f);
+			St->ComponentTags.Add(FName(*FString::Printf(TEXT("stairs:%s:%d"), *KozmoStr(B.id), (F + 1) % B.floors)));
+			KozmoShapes::Label(this, Root, Lift + FVector(0, -1.2f, 0.4f), TEXT("MERDİVEN"), 14.f, FColor(240, 220, 140));
+		}
+	}
+	// iç mekân: oda konsolları kendi katlarında (etiketli; E ile kullanılır)
 	int32 n = 0;
 	for (const auto& Room : B.rooms)
 		for (const auto& It : Room.items)
 		{
 			const float A = 2.f * PI * n++ / 6.f;
-			const FVector P = C + FVector(FMath::Cos(A) * W * 0.3f, FMath::Sin(A) * D * 0.3f, 0.6f);
+			const FVector P = C + FVector(FMath::Cos(A) * W * 0.3f, FMath::Sin(A) * D * 0.3f, 0.6f + Room.floor * FloorH);
 			UStaticMeshComponent* K = KozmoShapes::Add(this, Root, EKozmoShape::Cube, P, FVector(0.8f, 0.5f, 1.1f), FLinearColor(0.10f, 0.12f, 0.15f), 0.4f, 0.4f);
 			K->ComponentTags.Add(FName(*(TEXT("use:") + KozmoStr(It.id))));
 			KozmoShapes::Label(this, Root, P + FVector(0, 0, 0.8f), KozmoStr(It.name), 18.f, FColor(140, 220, 235));

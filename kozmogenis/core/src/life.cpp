@@ -151,24 +151,36 @@ Settlement Settlement::build(const colony::Colony& c, const challenge::PlanetEnv
         b.capacity = d == District::Housing ? std::max(10, c.housing()) : 12;
         switch (d) {
             case District::Admin:
+                b.floors = 2;
+                b.elevator = true;
                 b.rooms = {room("Komuta salonu", {{"admin_map", "Koloni haritası", "map"}, {"admin_pop", "Nüfus ekranı", "population"},
-                                                   {"admin_econ", "Ekonomi ekranı", "economy"}, {"admin_sec", "Güvenlik ekranı", "security"},
-                                                   {"admin_desk", "Görev masası", "missions"}, {"admin_nova", "NOVA terminali", "nova"}})};
+                                                   {"admin_econ", "Ekonomi ekranı", "economy"}}),
+                           room("Üst kat: operasyon", {{"admin_sec", "Güvenlik ekranı", "security"}, {"admin_desk", "Görev masası", "missions"},
+                                                       {"admin_nova", "NOVA terminali", "nova"}})};
+                b.rooms[1].floor = 1;
                 break;
             case District::Lab:
-                b.rooms = {room("Laboratuvar", {{"lab_scope", "Mikroskop", "analyze"}, {"lab_samples", "Numune dolapları", "samples"},
-                                               {"lab_pc", "Araştırma bilgisayarı", "research"}, {"lab_bench", "Deney masası", "experiment"}})};
+                b.floors = 2;
+                b.rooms = {room("Laboratuvar", {{"lab_scope", "Mikroskop", "analyze"}, {"lab_bench", "Deney masası", "experiment"}}),
+                           room("Analiz katı", {{"lab_samples", "Numune dolapları", "samples"}, {"lab_pc", "Araştırma bilgisayarı", "research"}})};
+                b.rooms[1].floor = 1;
                 break;
             case District::Hospital:
-                b.rooms = {room("Muayene", {{"med_exam", "Muayene alanı", "exam"}}), room("Tedavi odası", {{"med_bed", "Tedavi yatağı", "treat"}}),
-                           room("Acil müdahale", {{"med_kit", "Medikal ekipman", "medkit"}})};
+                b.floors = 2;
+                b.elevator = true;   // sedye taşıma
+                b.rooms = {room("Muayene", {{"med_exam", "Muayene alanı", "exam"}}), room("Acil müdahale", {{"med_kit", "Medikal ekipman", "medkit"}}),
+                           room("Tedavi odası", {{"med_bed", "Tedavi yatağı", "treat"}})};
+                b.rooms[2].floor = 1;
                 break;
             case District::Production:
                 b.rooms = {room("Üretim hattı", {{"prod_machines", "Üretim makineleri", "machines"}, {"prod_arm", "Robot kolları", "arms"},
                                                 {"prod_qc", "Kalite kontrol", "qc"}})};
                 break;
             case District::Housing:
-                b.rooms = {room("Yatakhane", {{"house_bed", "Yatak", "rest"}}), room("Ortak alan", {{"house_locker", "Kişisel depo", "locker"}})};
+                b.floors = 2;
+                b.elevator = true;
+                b.rooms = {room("Ortak alan", {{"house_locker", "Kişisel depo", "locker"}}), room("Yatakhane", {{"house_bed", "Yatak", "rest"}})};
+                b.rooms[1].floor = 1;
                 break;
             case District::Power: b.rooms = {room("Kontrol odası", {{"power_panel", "Enerji paneli", "power"}})}; break;
             case District::Water: b.rooms = {room("Arıtma", {{"water_panel", "Su sistemi paneli", "water"}})}; break;
@@ -178,6 +190,7 @@ Settlement Settlement::build(const colony::Colony& c, const challenge::PlanetEnv
             case District::Security: b.rooms = {room("Kontrol noktası", {{"sec_alarm", "Alarm paneli", "alarm"}})}; break;
             default: b.rooms = {room(b.name, {})}; break;
         }
+        b.h = b.h * b.floors;
         s.buildings_.push_back(std::move(b));
     }
     s.refresh(c);
@@ -493,6 +506,14 @@ void Society::tick(double dt_h, double day, double hour, colony::Colony& c, cons
             }
         }
         if (n.lod != Lod::Far) move(n, dt_h, speed);
+        // bakım turu: enerji tesisinde çalışan mühendis dizileri temizler/onarır (fırtına sonrası toz, aşınma)
+        if (n.intent == Intent::Work && n.arrived && k->job == colony::Job::Engineer) {
+            const Building* here = s.find(n.at);
+            if (here && here->district == District::Power) {
+                c.repair(colony::ModuleType::SolarArray, 0.03 * dt_h * (0.5 + k->skill));
+                c.repair(colony::ModuleType::FissionReactor, 0.03 * dt_h * (0.5 + k->skill));
+            }
+        }
         // inşaat ve görev işçiliği
         if ((n.intent == Intent::Construct || (n.intent == Intent::Mission && n.mission == static_cast<int>(MissionKind::Construct))) && n.arrived)
             labor_h_ += dt_h * (0.5 + k->skill);

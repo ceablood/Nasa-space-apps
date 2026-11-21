@@ -22,6 +22,7 @@ struct Player {
     PlayerMode mode = PlayerMode::InCabin;
     double x = 0, y = 0;               // yerleşim planında (m)
     std::string building;
+    int floor = 0;
     std::vector<std::pair<double, double>> route;
     challenge::Survivor body;
     challenge::Equipment eq;
@@ -70,6 +71,8 @@ public:
     bool walking() const { return !player_.route.empty(); }
     Status enter_building(const std::string& id);
     Status leave_building();
+    // kat değiştir: asansör (enerji varsa anında) ya da merdiven (her zaman, ~20 s/kat). Mesaj döner.
+    Result<std::string> change_floor(int floor, bool use_elevator = true);
     Status collect_sample();
     Result<std::string> use(const std::string& interactable_id);
     Result<std::string> talk(int npc_id, const std::string& topic);

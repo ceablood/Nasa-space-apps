@@ -129,7 +129,7 @@ TEST("dikey dilim: kolonide acil durum (§7.3) ve NOVA onaylı tahliye") {
 TEST("dikey dilim: ikinci gezegen Mars — farklı iniş, çevre ve hava") {
     Game g(23);
     g.new_game("KOZMOGENİS", 1e6);
-    Expedition e(g, "mars", craft::preset("lander"));
+    Expedition e(g, "mars", craft::preset("mars_lander"));
     CHECK(e.init().ok());
     CHECK(land(e));
     CHECK(e.stand().ok());

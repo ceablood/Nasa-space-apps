@@ -234,7 +234,7 @@ int run_slice() {
 int run_founding() {
     Game g(71);
     g.new_game("KOZMOGENİS", 1e6);
-    world::Expedition e(g, "mars", craft::preset("lander"));
+    world::Expedition e(g, "mars", craft::preset("mars_lander"));
     if (!e.init()) return 1;
     nova::Nova n(g);
     n.attach(&e);
