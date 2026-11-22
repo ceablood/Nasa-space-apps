@@ -26,7 +26,8 @@ WEB = sys.platform == "emscripten"
 
 
 def enabled():
-    return i18n.PREFS.get("cinematic", True)
+    """Sinematik geçişler: ayar açık ve grafik kademesi izin veriyorsa (Düşük kademede kapalı)."""
+    return i18n.PREFS.get("cinematic", True) and i18n.quality().get("cine", True)
 
 
 def _rgba_surface(rgb, a=None):
@@ -306,8 +307,9 @@ def space_dynamic(surf, palette, t, strength=1.0):
         return
     p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
     god_rays(surf, p["sun"], p["key"], 0.55 * strength, t=t, clip=surf.get_rect())
-    if i18n.PREFS.get("quality") != "standard":
-        motes(surf, surf.get_rect(), t, 38, p["mote"])
+    n = i18n.quality().get("motes", 38)
+    if n:
+        motes(surf, surf.get_rect(), t, n, p["mote"])
 
 
 def space_pass(surf, palette, t, strength=1.0):
@@ -316,9 +318,8 @@ def space_pass(surf, palette, t, strength=1.0):
     if not enabled():
         return
     p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
-    lowq = i18n.PREFS.get("quality") == "standard"
     full_pass(surf, surf.get_rect(), t, sun=p["sun"], sun_col=p["key"], rays=0.55 * strength,
-              mote_col=p["mote"], n_motes=0 if lowq else 38, haze_col=p["haze"], haze_k=0.8 * strength,
+              mote_col=p["mote"], n_motes=i18n.quality().get("motes", 38), haze_col=p["haze"], haze_k=0.8 * strength,
               warm=p["warm"], cool=p["cool"])
 
 
@@ -330,7 +331,7 @@ def bloom(surf, strength=0.85, threshold=128):
     İnce yazılar küçültmede ortalanıp eşik altında kaldığı için keskin kalır.
     Optimizasyon: şiddet çarpımı 1/4 çözünürlükte yapılır; bulanık katman iki karede bir yenilenir
     (parlama hâlesi zaten çok yumuşak, bir karelik gecikme görünmez)."""
-    if not enabled() or strength <= 0.02 or i18n.PREFS.get("quality") == "standard":
+    if not enabled() or strength <= 0.02 or not i18n.quality().get("bloom"):
         return
     w, h = surf.get_size()
     B = _BLOOM

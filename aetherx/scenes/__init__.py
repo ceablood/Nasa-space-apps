@@ -41,7 +41,9 @@ class Scene:
     # --- yardımcılar ---------------------------------------------------------
     def ensure_bg(self, palette=None, seed=11, density=1.0):
         if self.bg is None:
-            self.bg = SpaceBackground(palette or self.background, seed, 380, density)
+            from .. import i18n
+            n = int(380 * i18n.quality().get("stars", 900) / 900)       # yıldız sayısı grafik kademesine göre
+            self.bg = SpaceBackground(palette or self.background, seed, n, density)
         return self.bg
 
     def add(self, w):

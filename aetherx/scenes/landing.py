@@ -22,6 +22,11 @@ from . import Scene
 from .. import art
 from .. import data as D
 from ..config import C, H, W
+from .. import i18n
+
+
+def FX():
+    return i18n.quality().get("fx", 1.0)
 from ..fx import ParticleSystem, Shake, clamp, draw_glow, lerp, overlay, scale_color
 from ..ui import UI, Button, chip, draw_bar, draw_icon, draw_text, glass_panel
 
@@ -290,7 +295,7 @@ class LandingScene(Scene):
                 k = 1 - alt / 45
                 gx, gy = self.to_screen(L.x, ground)
                 for side in (-1, 1):
-                    self.ps.smoke(gx + side * 10, gy - 2, n=1 + int(2 * k), angle=math.pi if side < 0 else 0.0,
+                    self.ps.smoke(gx + side * 10, gy - 2, n=max(1, int((1 + 2 * k) * FX())), angle=math.pi if side < 0 else 0.0,
                                   spread=0.25, speed=(80 * k + 40, 260 * k + 60), size=(8, 18), life=(0.8, 1.8),
                                   color=self.b["dust"], alpha=int(120 * k + 40), grow=30,
                                   grav=0 if self.key == "moon" else -6)
@@ -622,7 +627,7 @@ class LandingScene(Scene):
         y = r.y + 16
         for k, v, col in rows:
             draw_text(surf, k, (r.x + 18, y + 4), 13, C["text_dim"], bold=True)
-            draw_text(surf, v, (r.right - 18, y), 22, col, bold=True, anchor="topright", raw=True)
+            draw_text(surf, v, (r.right - 18, y), 22, col, bold=True, anchor="topright")
             y += 38
         draw_bar(surf, (r.x + 40, y + 14, r.w - 60, 12), L.dv / max(1, L.dv0), C["orange"], label="YAKIT (Δv)",
                  value=f"{L.dv:.0f} m/s", icon="fuel", warn_below=0.2)
@@ -640,7 +645,7 @@ class LandingScene(Scene):
         for v in (0, 10, 20, 30, 40):
             yy = vy_y(-v)
             pygame.draw.line(surf, (90, 100, 120), (tr.x + 62, yy), (tr.x + 70, yy), 1)
-            draw_text(surf, str(v), (tr.x + 74, yy - 8), 12, C["text_dim"], raw=True)
+            draw_text(surf, str(v), (tr.x + 74, yy - 8), 12, C["text_dim"])
         yy = vy_y(L.vy)
         col = C["green"] if -L.vy <= SAFE_VY else C["orange"] if -L.vy <= HARD_VY else C["red"]
         pygame.draw.polygon(surf, col, [(tr.x + 24, yy), (tr.x + 12, yy - 8), (tr.x + 12, yy + 8)])

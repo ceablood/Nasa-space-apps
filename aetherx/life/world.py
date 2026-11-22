@@ -197,7 +197,7 @@ class LifeWorld:
         "volkan": ("VolcanicEruption", "Volkanik patlama"), "meteor": ("MeteorImpact", "Meteor çarpması"),
         "kuraklik": ("Drought", "Kuraklık"), "buzul": ("IceAge", "Buzul dönemi"), "sicak": ("HeatWave", "Aşırı sıcaklık"),
         "atmosfer": ("AtmosphereChanged", "Atmosfer değişimi"), "deniz": ("SeaLevelChanged", "Deniz seviyesi değişimi"),
-        "radyasyon": ("RadiationSpike", "Radyasyon artışı"), "yildiz": ("StellarFlare", "Yıldız patlaması (flare)"),
+        "radyasyon": ("RadiationSpike", "Radyasyon artışı"), "yildiz": ("StellarFlare", "Yıldız patlaması"),
         "firtina": ("StormStarted", "Fırtına"),
     }
 

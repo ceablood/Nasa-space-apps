@@ -101,18 +101,26 @@ class IntroScene(Scene):
         """Her karede bir gezegeni yeniden çizer (sırayla): dönüş, bulut ve toz hareketi canlı kalır, maliyet sabit."""
         if self.stage != "menu":
             return
+        q = i18n.quality()
+        self._live_frame = getattr(self, "_live_frame", 0) + 1
+        if self._live_frame % q.get("live_every", 1):
+            return
         key, x, y, R = LIVE[self.live_i % len(LIVE)]
         self.live_i += 1
         if self.pick == key:
             R = int(R * 1.12)
-        if not S3.has_texture(key, 512):
-            return
+        th = min(q.get("live_tex", 512), 1024)
+        if not S3.has_texture(key, th):
+            if th > 512 and S3.has_texture(key, 512):
+                th = 512 if WEB else th            # masaüstünde ultra dokusu ilk istekte üretilir (NASA haritası: hızlı)
+            elif not S3.has_texture(key, 512):
+                return
         nd = D.NASA[key]
         spin = (self.live_t / (nd["rot_h"] * 3600.0)) * math.tau
         try:
             M = S3.rot_z(math.radians(-12)) @ S3.rot_x(0.28)
             L = S3.norm3(S3.np.array((-0.8, -0.18, 0.56), dtype=S3.F32))
-            self.live[key] = S3.to_surface(S3.render_body(key, R, M, L, spin, self.live_t / 3600.0, 512))
+            self.live[key] = S3.to_surface(S3.render_body(key, R, M, L, spin, self.live_t / 3600.0, th))
         except Exception:
             self.live[key] = None
 
@@ -170,6 +178,19 @@ class IntroScene(Scene):
         y += 72
         self.add(Button((x, y, 205, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=15))
         self.add(Button((x + 215, y, 205, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=15))
+        y += 84
+        self.q_y = y
+        for i, q in enumerate(i18n.QUALITY_ORDER):
+            b = self.add(Button((x + i * 106, y, 100, 42), i18n.QUALITY_LABEL[q][0], (lambda qq=q: self.set_quality(qq)),
+                                accent=C["gold"], size=12, style="tab", tooltip=i18n.QUALITY_LABEL[q][1]))
+            b.selected = i18n.PREFS.get("quality") == q
+
+    def set_quality(self, q):
+        i18n.PREFS["quality"] = q
+        i18n.save_prefs()
+        self.live.clear()
+        self.app.audio.play("click")
+        self.go_stage("menu")
 
     def quit(self):
         self.app.running = False
@@ -341,6 +362,10 @@ class IntroScene(Scene):
                 cr = chip(surf, (cx, r.bottom - 30), D.PLANET[p]["name"], C["green"], 11, anchor="topright", icon="flag")
                 cx = cr.x - 6
         self.draw_live(surf, t)
+        qy = getattr(self, "q_y", 700)
+        draw_text(surf, "GRAFİK KALİTESİ", (90, qy - 22), 13, C["text_dim"], bold=True)
+        draw_paragraph(surf, i18n.QUALITY_LABEL.get(i18n.PREFS.get("quality"), ("", ""))[1], (90, qy + 50), 420, 12,
+                       C["text_dim"], max_lines=4)
         draw_text(surf, "F11 tam ekran · ESC geri", (W // 2, H - 34), 13, C["text_mute"], anchor="midtop")
 
     def draw_live(self, surf, t):
@@ -362,8 +387,8 @@ class IntroScene(Scene):
                 pygame.draw.circle(surf, C["cyan"], (x, y), int(R * 1.12) + 6, 1)
             nd = D.NASA[key]
             draw_text(surf, nd["name"].upper(), (x, y + R + 14), 15, C["text"] if not sel else C["cyan"], bold=True,
-                      anchor="midtop", raw=True)
-            draw_text(surf, f"{nd['g']:.2f}".replace(".", ",") + " m/s²", (x, y + R + 34), 12, C["text_dim"], anchor="midtop",
+                      anchor="midtop")
+            draw_text(surf, i18n.num(nd['g'], 2) + " m/s²", (x, y + R + 34), 12, C["text_dim"], anchor="midtop",
                       raw=True)
         if self.pick:
             self.draw_card(surf, self.pick)
@@ -372,11 +397,11 @@ class IntroScene(Scene):
         nd = D.NASA[key]
         r = pygame.Rect(690, 600, 830, 190)
         glass_panel(surf, r, C["cyan"], 225, 16)
-        draw_text(surf, nd["name"].upper(), (r.x + 24, r.y + 16), 24, C["text"], bold=True, raw=True)
-        draw_text(surf, "Kaynak: " + D.NASA_SOURCE, (r.right - 20, r.y + 22), 12, C["gold"], anchor="topright", raw=True)
+        draw_text(surf, nd["name"].upper(), (r.x + 24, r.y + 16), 24, C["text"], bold=True)
+        draw_text(surf, "Kaynak: " + D.NASA_SOURCE, (r.right - 20, r.y + 22), 12, C["gold"], anchor="topright")
 
         def n(v, d=0):
-            return f"{v:,.{d}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+            return i18n.num(v, d)
         rot = nd["rot_h"]
         rows = [
             ("Yerçekimi", f"{n(nd['g'], 2)} m/s²"), ("Çap", f"{n(nd['diam_km'])} km"),
@@ -392,7 +417,7 @@ class IntroScene(Scene):
             cx = r.x + 24 + (i % 2) * 410
             cy = r.y + 56 + (i // 2) * 25
             draw_text(surf, k, (cx, cy), 14, C["text_dim"])
-            draw_text(surf, v, (cx + 380, cy), 15, C["text"], bold=True, anchor="topright", raw=True)
+            draw_text(surf, v, (cx + 380, cy), 15, C["text"], bold=True, anchor="topright")
 
     def draw_name(self, surf, t):
         self.question(surf, t, "name", "Sen bir kişi değil, koca bir ajanssın. Bu isim üssünde, roketinde, bayrağında yazacak.",

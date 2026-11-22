@@ -98,10 +98,9 @@ class AgencyScene(Scene):
             cb = self.add(Button((x + 500, TOPBAR_H + 540, 360, 46), "AÇIK" if on else "KAPALI", self.toggle_cinema,
                                  accent=C["magenta"] if on else C["text_dim"], icon="star", size=15, style="tab"))
             cb.selected = on
-            for i, (q, lab) in enumerate((("standard", "STANDART"), ("high", "YÜKSEK"), ("ultra", "ULTRA"),
-                                          ("max", "MAKSİMUM"))):
-                b = self.add(Button((x + 940 + (i % 3) * 170, TOPBAR_H + 340 + (i // 3) * 60, 160, 50), lab, (lambda qq=q: self.set_quality(qq)),
-                                    accent=C["gold"], size=15, style="tab"))
+            for i, q in enumerate(i18n.QUALITY_ORDER):
+                b = self.add(Button((x + 940 + i * 128, TOPBAR_H + 340, 120, 50), i18n.QUALITY_LABEL[q][0],
+                                    (lambda qq=q: self.set_quality(qq)), accent=C["gold"], size=13, style="tab"))
                 b.selected = (i18n.PREFS.get("quality") == q)
 
     # ---------------------------------------------------------------- eylemler
@@ -269,8 +268,8 @@ class AgencyScene(Scene):
         draw_text(surf, "AJANS ADI", (40, TOPBAR_H + 180), 14, C["text_dim"], bold=True)
         draw_text(surf, "DİL", (980, TOPBAR_H + 180), 14, C["text_dim"], bold=True)
         draw_text(surf, "GÖRÜNTÜ KALİTESİ", (980, TOPBAR_H + 316), 14, C["text_dim"], bold=True)
-        draw_paragraph(surf, "Kalite; gezegen dokularının çözünürlüğünü, halka parçacığı ve yıldız sayısını belirler.",
-                       (980, TOPBAR_H + 462), 500, 14, C["text_dim"])
+        draw_paragraph(surf, i18n.QUALITY_LABEL.get(i18n.PREFS.get("quality"), ("", ""))[1],
+                       (980, TOPBAR_H + 404), 520, 14, C["text"], max_lines=4)
         draw_text(surf, "SİNEMATİK EFEKTLER", (540, TOPBAR_H + 516), 14, C["text_dim"], bold=True)
         draw_paragraph(surf, "Işık huzmeleri, süzülen toz, renkli kenar ışığı, mürekkep çizgileri, fırça dokusu ve kenar "
                              "yumuşatma. Yavaş bilgisayarlarda kapatabilirsin.", (980, TOPBAR_H + 520), 520, 13,

@@ -22,14 +22,34 @@ from .config import SETTINGS_FILE, SAVE_DIR
 
 LANGS = [("tr", "Türkçe"), ("en", "English"), ("de", "Deutsch"), ("fr", "Français"), ("es", "Español"),
          ("ru", "Русский")]
-LANG = "tr"
-PREFS = {"lang": "tr", "quality": "ultra", "lang_chosen": False, "cinematic": True}
+LANG = "en"
+PREFS_VERSION = 2       # 2: varsayılan dil İngilizce, 4 kademeli grafik (low/medium/high/ultra)
+PREFS = {"lang": "en", "quality": "high", "lang_chosen": True, "cinematic": True, "prefs_version": PREFS_VERSION}
 if sys.platform == "emscripten":         # tarayıcıda (WebAssembly) hız için bir kademe düşük başla
-    PREFS["quality"] = "high"
-QUALITY = {"standard": {"tex": 256, "ss": 1.0, "stars": 300, "rocks": 260},
-           "high": {"tex": 512, "ss": 1.35, "stars": 600, "rocks": 700},
-           "ultra": {"tex": 1024, "ss": 1.6, "stars": 1000, "rocks": 1400},
-           "max": {"tex": 2048, "ss": 2.0, "stars": 1400, "rocks": 2400}}
+    PREFS["quality"] = "medium"
+# Grafik kademeleri. tex: gezegen dokusu yüksekliği (NASA haritaları en çok 1024 = 2048x1024 piksel),
+# ss: 3B koloni süper örnekleme, stars/rocks: yıldız ve halka parçacığı sayısı, bloom: parlama şiddeti
+# (0 = kapalı), motes: süzülen toz zerresi, fx: parçacık çarpanı, cine: sinematik ışık/pus geçişleri,
+# live_tex: ana menüdeki canlı gezegen dokusu, live_every: canlı gezegenin kaç karede bir yeniden çizildiği.
+QUALITY = {
+    "low":    {"tex": 256, "ss": 1.0, "stars": 250, "rocks": 200, "bloom": 0.0, "motes": 0, "fx": 0.5,
+               "cine": False, "live_tex": 256, "live_every": 3},
+    "medium": {"tex": 512, "ss": 1.2, "stars": 500, "rocks": 600, "bloom": 0.5, "motes": 20, "fx": 0.8,
+               "cine": True, "live_tex": 512, "live_every": 2},
+    "high":   {"tex": 1024, "ss": 1.5, "stars": 900, "rocks": 1300, "bloom": 0.75, "motes": 38, "fx": 1.0,
+               "cine": True, "live_tex": 512, "live_every": 1},
+    "ultra":  {"tex": 2048, "ss": 2.0, "stars": 1500, "rocks": 2600, "bloom": 0.95, "motes": 64, "fx": 1.5,
+               "cine": True, "live_tex": 1024, "live_every": 1},
+}
+QUALITY_ORDER = ("low", "medium", "high", "ultra")
+QUALITY_LABEL = {
+    "low": ("1 · DÜŞÜK", "Basit ayarlar: 256 piksel gezegen dokusu, parlama ve sinematik ışık kapalı, az parçacık. Zayıf cihazlar için."),
+    "medium": ("2 · ORTA", "Ortalama: 512 piksel doku, hafif parlama, az toz zerresi, 1,2x süper örnekleme."),
+    "high": ("3 · YÜKSEK", "Yüksek ayarlar: NASA haritalarının tam çözünürlüğü (2048x1024), tam sinematik ışık, 1,5x süper örnekleme."),
+    "ultra": ("4 · ULTRA", "Mümkün olan en yüksek grafik: en büyük doku önbelleği, en güçlü parlama, en çok yıldız/parçacık, "
+                            "2x süper örnekleme, menüde yüksek çözünürlüklü canlı gezegenler."),
+}
+_OLD_QUALITY = {"standard": "low", "high": "medium", "ultra": "high", "max": "ultra"}   # sürüm 1 adları
 
 _exact, _upper, _lower = {}, {}, {}
 _templates = []          # (regex, hedef, n_grup)
@@ -46,17 +66,34 @@ def quality():
     return QUALITY.get(PREFS.get("quality"), QUALITY["high"])
 
 
+def quality_level():
+    """0 düşük .. 3 ultra"""
+    q = PREFS.get("quality")
+    return QUALITY_ORDER.index(q) if q in QUALITY_ORDER else 2
+
+
 # ---------------------------------------------------------------- tercihler
 def load_prefs():
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         if isinstance(d, dict):
-            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic") if k in d})
+            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic", "cae", "prefs_version") if k in d})
+            if d.get("prefs_version", 1) < 2:          # eski kayıt: bir kez İngilizceye geç, kalite adlarını taşı
+                PREFS["lang"] = "en"
+                PREFS["lang_chosen"] = True
+                PREFS["quality"] = _OLD_QUALITY.get(PREFS.get("quality"), "high")
+                PREFS["prefs_version"] = PREFS_VERSION
     except Exception:
         pass
+    # Oyun her açılışta İngilizce başlar (giriş ekranı, menü, NOVA). Oyuncu oturum içinde dili değiştirebilir;
+    # bir sonraki açılışta yine İngilizce gelir.
+    PREFS["lang"] = "en"
+    PREFS["lang_chosen"] = True
+    if PREFS.get("quality") not in QUALITY:
+        PREFS["quality"] = _OLD_QUALITY.get(PREFS.get("quality"), "high")
     if PREFS["lang"] not in [c for c, _ in LANGS]:
-        PREFS["lang"] = "tr"
+        PREFS["lang"] = "en"
     set_lang(PREFS["lang"])
     return PREFS
 
@@ -215,6 +252,15 @@ def pct(v):
     if LANG == "en":
         return f"{v}%"
     return f"{v}\u202f%" if LANG in ("fr", "ru") else f"{v} %"
+
+
+def num(v, d=0):
+    """Dile göre sayı biçimi: en 1,234.5 · tr/de/es 1.234,5 · fr/ru 1 234,5"""
+    t = f"{v:,.{d}f}"
+    if LANG == "en":
+        return t
+    sep = "\u202f" if LANG in ("fr", "ru") else "."
+    return t.replace(",", "§").replace(".", ",").replace("§", sep)
 
 
 def pick(d):
