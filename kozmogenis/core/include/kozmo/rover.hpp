@@ -10,6 +10,7 @@
 // Patinaj eğrisi, aşınma ve çevresel çarpanlar OYUN VARSAYIMIDIR.
 #pragma once
 
+#include <algorithm>
 #include <string>
 #include <vector>
 

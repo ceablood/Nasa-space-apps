@@ -1,4 +1,4 @@
-# KOZMOGENİS
+﻿# KOZMOGENİS
 
 Gerçekçi uzay ajansı, roket mühendisliği, koloni ve NPC yaşam simülasyonu.
 İki katmandan oluşur:
@@ -7,8 +7,9 @@ Gerçekçi uzay ajansı, roket mühendisliği, koloni ve NPC yaşam simülasyonu
 |---|---|---|
 | **KozmoCore** (`core/`) — tüm oyun mantığı | Standart C++17, bağımlılıksız | **Derleniyor ve test ediliyor**: GCC, Clang, MSVC (CI), RTTI/istisna kapalı mod, AddressSanitizer + UBSan |
 | **Unreal Engine 5 istemcisi** (`unreal/Kozmogenis/`) — 3B sahne + arayüz | UE 5.4 C++ (Slate) | **Henüz derlenmedi** — UE5 kurulu Windows makine gerekiyor (bkz. [docs/UNREAL_KURULUM.md](docs/UNREAL_KURULUM.md)) |
+| **Tarayıcı istemcisi** (`web/`) — aynı çekirdek WebAssembly'de + Three.js | C++ → wasm, JS | **Derlendi ve tarayıcıda test edildi** — https://ceablood.github.io/Nasa-space-apps/ (bkz. [web/README.md](web/README.md)) |
 
-Tarayıcıda hemen oynanan sürüm (AETHER-X, Python/pygame) ayrıdır: https://ceablood.github.io/Nasa-space-apps/
+Eski Python/pygame prototipi: https://ceablood.github.io/Nasa-space-apps/prototip/
 
 ## Çekirdeği derle, test et, oyna
 
