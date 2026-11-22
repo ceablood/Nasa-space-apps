@@ -44,12 +44,13 @@ SCENES = {
     "agency": ("agency", "AgencyScene"),
     "solar": ("solar", "SolarScene"),
     "life": ("life", "LifeScene"),
+    "rover": ("rover", "RoverScene"),
 }
 
 NAV = [
     ("base", "ÜS", "home"), ("hangar", "HANGAR", "wrench"), ("research", "AR-GE", "flask"),
     ("crew", "EKİP", "astro"), ("colony", "KOLONİ", "flag"), ("quests", "GÖREV", "chart"),
-    ("solar", "ATLAS", "planet"), ("life", "YAŞAM", "flask"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
+    ("solar", "ATLAS", "planet"), ("life", "YAŞAM", "flask"), ("rover", "ROVER", "rocket"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
 ]
 
 COLOR_KEYS = {"cyan": C["cyan"], "gold": C["gold"], "green": C["green"], "red": C["red"], "orange": C["orange"],

@@ -49,6 +49,16 @@ SAFE_VY, SAFE_VX, SAFE_TILT = 2.6, 2.0, 10.0      # yumuşak temas sınırları
 HARD_VY = 5.5
 
 
+RCS_ACC = 90.0      # derece/sn²: tepki kontrol iticilerinin açısal ivmesi (oyun değeri)
+
+
+def rcs_toward(L, target, dt):
+    """RCS ile hedef açıya PD yaklaşımı: açısal hız ivme sınırıyla değişir (anlık dönüş yok)."""
+    want = clamp((target - L.ang) * 2.5, -45, 45)
+    L.omega += clamp(want - L.omega, -RCS_ACC * dt, RCS_ACC * dt)
+    L.ang += L.omega * dt
+
+
 class Terrain:
     """1B yükseklik profili (m). x=0 iniş alanı; çevresi düzleştirilmiş."""
 
@@ -105,6 +115,7 @@ class Lander:
         self.x, self.y = START_DX, START_ALT
         self.vx, self.vy = 58.0, -32.0
         self.ang = -8.0           # derece; + sağa eğik (itki +x)
+        self.omega = 0.0          # derece/sn: açısal hız (RCS torkuyla değişir; momentum korunur)
         self.g = g
         self.tmax = thrust        # m/s² en çok itki ivmesi
         self.dv = budget          # kalan Δv (m/s) = yakıt
@@ -258,14 +269,19 @@ class LandingScene(Scene):
             self.app.toast("Kumanda sende", "cyan", "nova")
         if self.assist:
             thr, ang = self.guidance()
-            L.ang += clamp(ang - L.ang, -60 * dt, 60 * dt)
+            rcs_toward(L, ang, dt)
             L.throttle = thr
         else:
             if mouse[0] and not over_ui and not rot_in:       # dokunmatik: basılan yana eğ
                 sx, _ = self.to_screen(L.x, L.y)
-                target = clamp((UI.mouse[0] - sx) / 260 * 40, -40, 40)
-                L.ang += clamp(target - L.ang, -55 * dt, 55 * dt)
-            L.ang = clamp(L.ang + rot_in * 55 * dt, -60, 60)
+                rcs_toward(L, clamp((UI.mouse[0] - sx) / 260 * 40, -40, 40), dt)
+            elif rot_in:                                       # RCS iticisi: açısal ivme, hız birikir
+                L.omega = clamp(L.omega + rot_in * RCS_ACC * dt, -60, 60)
+                L.ang += L.omega * dt
+            else:                                              # SAS: RCS dönüşü durdurur (momentum anında yok olmaz)
+                L.omega -= clamp(L.omega, -RCS_ACC * dt, RCS_ACC * dt)
+                L.ang += L.omega * dt
+            L.ang = clamp(L.ang, -75, 75)
             L.throttle = 1.0 if thr_in else 0.0
         if L.dv <= 0:
             L.throttle = 0.0
@@ -352,10 +368,11 @@ class LandingScene(Scene):
         if self.b["drag"]:
             ax += self.b["drag"] * v * L.vx
             ay += self.b["drag"] * v * L.vy
-        ay = max(ay, 0.05)
+        # dikey talep sıfıra yaklaşınca atan2 tekilleşir (açı ±45° arası çırpınır): açıyı en az 0,3g dikey referansla
+        # hesapla; itki yalnız gerçekten gereken kadar
+        thr = clamp(math.hypot(ax, max(ay, 0.0)) / L.tmax, 0.0, 1.0)
         lim = 6 if alt < 12 else 45
-        ang = clamp(math.degrees(math.atan2(ax, ay)), -lim, lim)
-        thr = clamp(math.hypot(ax, ay) / L.tmax, 0.0, 1.0)
+        ang = clamp(math.degrees(math.atan2(ax, max(ay, 0.3 * L.g))), -lim, lim)
         return thr, ang
 
     def plan_budget(self, thrust):
@@ -365,7 +382,7 @@ class LandingScene(Scene):
         used, dt = 0.0, 1 / 30
         for _ in range(30 * 400):
             thr, ang = self.guidance(L)
-            L.ang += clamp(ang - L.ang, -60 * dt, 60 * dt)
+            rcs_toward(L, ang, dt)
             a = thr * L.tmax
             rad = math.radians(L.ang)
             ax, ay = math.sin(rad) * a, math.cos(rad) * a - L.g

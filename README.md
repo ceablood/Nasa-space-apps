@@ -2,9 +2,40 @@
 
 ## ▶ Tarayıcıda oyna: https://ceablood.github.io/Nasa-space-apps/
 
-Ana oyun bu Python/pygame sürümüdür. Deneysel 3B sürüm (KOZMOGENİS C++ çekirdeği + Three.js):
-https://ceablood.github.io/Nasa-space-apps/3d/ · Unreal Engine 5 sürümü ve C++ çekirdeği: [`kozmogenis/`](kozmogenis/)
-(UE5 istemcisi henüz derlenmedi).
+Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 3D web sürümü kaldırıldı; ayrıntı ve geri
+dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
+[`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
+
+## Sürüm 3.5 — Gerçekçi gezegen aracı sürüşü (ROVER)
+
+Üst menüde yeni **ROVER** ekranı: Ay, Mars ya da Titan'da araç seç, görev seç, sür. Kod: [`aetherx/vehicles/`](aetherx/vehicles/)
+(sürüş motoru), arayüz [`aetherx/scenes/rover.py`](aetherx/scenes/rover.py), testler [`tests/test_vehicles.py`](tests/test_vehicles.py).
+
+* **Fizik** (`physics.py`): kütle, ağırlık merkezi yüksekliği, tekerlek başına yay-sönümleyici süspansiyon, motor tork/güç
+  eğrisi, sürtünme çemberi (boyuna + yanal tutunma), zemine göre μ ve yuvarlanma direnci, yokuş ve gevşek zeminde patinaj
+  (C++ KozmoCore `slip_ratio` eğrisi), fren, el freni, kaya çarpışması ve hasar, statik + virajda yanal ivmeyle devrilme,
+  batarya/enerji, motor ısısı, rastgele tekerlek motoru arızası. Atmosfer sürüklemesi yalnız havası olan gezegende (Ay: 0).
+* **Gezegenler** (`planets.py`): yerçekimi, basınç, sıcaklık, yoğunluk NASA NSSDC ve Cassini-Huygens değerleri. Zemin
+  tutunma katsayıları literatüre dayalı yaklaşık değerlerdir; **Titan zemini ölçülmemiştir, değerleri oyun varsayımıdır**
+  (ekranda yazar). Titan'da metan gölü sıvıdır: amfibi araç yüzer, diğerleri batar.
+* **Araçlar**: Apollo LRV (NASA değerleri), Artemis LTV ve NASA SEV (kavram değerleri + varsayımlar), Mars basınçlı gezgini
+  ve Titan paletli amfibi aracı (**kurgusal**, ekranda öyle etiketli).
+* **Kontroller** (değiştirilebilir, ROVER → KONTROLLER): W ileri · S geri/fren · A-D direksiyon · SPACE el freni ·
+  SHIFT hız modu · C kamera · F araca bin/in · L farlar · R kurtar · P otopilot · E numune. Dokunmatik: sol altta direksiyon,
+  sağ altta gaz/fren ve düğmeler.
+* **Kameralar**: takip (yaylı yumuşak takip), kokpit, ön tampon, serbest (fareyle döndür, tekerlekle yakınlaş); hıza göre
+  görüş açısı, süspansiyon ve çarpışma sarsıntısı.
+* **Gösterge paneli** doğrudan araç durumundan: hız, batarya (% ve kWh), güç, motor sıcaklığı, hasar, yön, yunuslama/yalpa,
+  eğim, yükseklik, zemin, patinaj, radar (60 m kaya ve hedef), navigasyon (mesafe/kerteriz), iletişim (üsse uzaklık + arazi
+  görüş hattı), sistem durumu.
+* **Görüntü**: voxel arazi (numpy, derinlik tamponu), 3B araç modelleri, dönen tekerlekler, süspansiyon ve gövde eğimi,
+  tekerlek izleri, toz/taş parçacıkları (Ay'da havasız balistik yay), farlar, fırtınada görüş düşmesi. Çözünürlük grafik
+  kalitesine bağlı (düşük 320×180 … ultra 640×360, ekrana ölçeklenir).
+* **Görevler** (10): uzun mesafe keşfi, numune toplama (araçtan inip yürüyerek de), kargo taşıma (araç ağırlaşır), hasarlı
+  rover kurtarma (çekme), zorlu arazi, krater araştırması (Titan'da göl kıyısı), fırtınada sığınağa dönüş (süreli), otonom
+  keşif (otopilot), acil ikmal (süreli), bilim noktası. Ödüller oyun varsayımıdır.
+* **Uzay aracı fiziği ayrı** (`spacecraft.py`): itki, Tsiolkovsky, momentum korunumu, RCS ile açısal hız (bırakınca dönüş
+  sürer), vakumda sürükleme yok. Motorlu iniş ekranı da RCS açısal dinamiğiyle çalışır.
 
 ## Sürüm 3.4 — Yaşayan Gezegenler ve Kozmik Ses Motoru
 
@@ -105,7 +136,7 @@ fırlat, yolculuğu yönet, gezegenlere in, koloni kur ve en sonunda
 
 ## Sürüm 3 yenilikleri
 
-- **Tarayıcı sürümü:** Sitenin ana sayfası artık KOZMOGENİS'in C++ çekirdeğiyle (WebAssembly + Three.js) çalışan 3B sürümüdür (`kozmogenis/web/`); bu Python sürümü `/prototip/` altında yayınlanır (`.github/workflows/pages.yml`).
+- **Tarayıcı sürümü:** Oyun pygbag ile WebAssembly'ye derlenip GitHub Pages'te yayınlanır (`.github/workflows/pages.yml`).
 - **Sinematik katman her yerde:** Hacimsel ışık huzmeleri, pus, toz zerreleri, fırça dokusu ve tamamlayıcı
   renk uyumu artık bütün ekranlarda (hangar, AR-GE, ekip, görevler, depo, görev kontrol, ajans, yolculuk, üs,
   NOVA odası). Tüm ekrana yumuşak parlama (bloom). Roket, güçlendirici ve asteroitlerde renkli kenar ışığı,
@@ -184,6 +215,8 @@ Puanı kazan → Araştır → NOVA'ya sor → Daha iyi roket tasarla → Daha u
 | Yolculuk | F | Fotoğraf çek (Kamera gerekir) |
 | Yolculuk | N | NOVA'ya sor |
 | Yolculuk | TAB | Büyük Görev Kontrol haritası |
+| ROVER | W/S · A/D · SPACE · SHIFT | Gaz-fren/geri · direksiyon · el freni · hız modu (tuşlar değiştirilebilir) |
+| ROVER | C · F · L · R · P · E | Kamera · bin/in · farlar · kurtar · otopilot · numune |
 
 ## Sistemler
 
