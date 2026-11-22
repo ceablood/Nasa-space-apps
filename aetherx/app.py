@@ -43,12 +43,13 @@ SCENES = {
     "colony": ("colony", "ColonyScene"),
     "agency": ("agency", "AgencyScene"),
     "solar": ("solar", "SolarScene"),
+    "life": ("life", "LifeScene"),
 }
 
 NAV = [
     ("base", "ÜS", "home"), ("hangar", "HANGAR", "wrench"), ("research", "AR-GE", "flask"),
     ("crew", "EKİP", "astro"), ("colony", "KOLONİ", "flag"), ("quests", "GÖREV", "chart"),
-    ("solar", "ATLAS", "planet"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
+    ("solar", "ATLAS", "planet"), ("life", "YAŞAM", "flask"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
 ]
 
 COLOR_KEYS = {"cyan": C["cyan"], "gold": C["gold"], "green": C["green"], "red": C["red"], "orange": C["orange"],
@@ -57,11 +58,12 @@ COLOR_KEYS = {"cyan": C["cyan"], "gold": C["gold"], "green": C["green"], "red": 
 
 class App:
     def __init__(self, headless=False, max_frames=None):
-        pygame.init()
-        try:
-            pygame.mixer.pre_init(44100, -16, 2, 512)
+        try:            # pre_init pygame.init()'ten ÖNCE çağrılmalı; yoksa varsayılan küçük tampon kalır (çatırtı)
+            from .audio import BUFFER
+            pygame.mixer.pre_init(44100, -16, 2, BUFFER)
         except Exception:
             pass
+        pygame.init()
         flags = 0
         if hasattr(pygame, "SCALED"):
             flags |= pygame.SCALED | pygame.RESIZABLE
@@ -86,6 +88,11 @@ class App:
         self.game = Game()
         self.audio = Audio()
         self.audio.preload()
+        # Yaşam Motoru <-> Kozmik Ses Motoru ortak olay yolu (iki motor birbirini doğrudan çağırmaz)
+        from .life.events import EventBus
+        from .cae import CosmicAudio
+        self.bus = EventBus()
+        self.cae = CosmicAudio(self.audio, self.bus, i18n.PREFS)
         UI.sound_hook = self._ui_sound
         self.nova = NovaBrain(self.game)
         self.bubble = NovaBubble(self.audio)
@@ -232,6 +239,18 @@ class App:
         draw_text(surf, fact, (r.centerx, r.y + 16), 17, C["text"], anchor="midtop", raw=True, max_w=r.w - 40)
         draw_text(surf, "Kaynak: " + src, (r.centerx, r.y + 52), 13, C["gold"], anchor="midtop", raw=True)
         pygame.display.flip()
+
+    def draw_captions(self, surf):
+        """Erişilebilirlik: sesli olayların altyazıları (Kozmik Ses Motoru)."""
+        caps = list(self.cae.events.captions)[-2:] if self.cae.settings["captions"] else []
+        y = H - 34
+        for _, txt in reversed(caps):
+            w, h = text_size(txt, 15, raw=True)
+            r = pygame.Rect(W // 2 - w // 2 - 12, y - 4, w + 24, h + 8)
+            pygame.draw.rect(surf, (4, 8, 18), r, border_radius=8)
+            pygame.draw.rect(surf, (40, 80, 110), r, 1, border_radius=8)
+            draw_text(surf, txt, (W // 2, y), 15, C["text"], anchor="midtop", raw=True)
+            y -= h + 12
 
     # ----------------------------------------------------------------- yardımcı
     def _ui_sound(self, name):
@@ -496,6 +515,8 @@ class App:
                     if ev:
                         self.open_event(ev)
         self.audio.update(dt)
+        self.bus.t += dt
+        self.cae.update(dt)
         if self.scene:
             self.scene.update(dt)
         if self.scene and self.scene.show_topbar and g.s:
@@ -523,6 +544,7 @@ class App:
         self.bubble.draw(surf)
         self.draw_modal(surf)
         self.toasts.draw(surf)
+        self.draw_captions(surf)
         draw_tooltip(surf)
         self.trans.draw(surf)
         if self.fps_show:

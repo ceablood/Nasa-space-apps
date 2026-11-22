@@ -25,6 +25,10 @@ except Exception:  # pragma: no cover
     HAS_NUMPY = False
 
 SR = 44100
+# Ses tamponu: 512 örnek (~12 ms) yük altında (özellikle tarayıcıda) boşalıp çatırtı yapıyordu.
+# Masaüstü 2048 (~46 ms), tarayıcı 4096 (~93 ms): gecikme hissedilmez, kesilme olmaz.
+import sys as _sys
+BUFFER = 4096 if _sys.platform == "emscripten" else 2048
 
 
 # ===========================================================================
@@ -367,44 +371,51 @@ def _loopable(x, fade=0.5):
 
 
 def ambient_track(name):
+    """Sahne ortam sesleri. Taban gürültüleri frekans uzayında bant sınırlı üretilir (cae.synth.shaped_noise):
+    eski beyaz gürültü + kayan ortalama tabanındaki tıslama/cızırtı yok, döngü noktası tıksız."""
+    from .cae import synth as CS
     d = 9.0
     n = _n(d)
     t = np.arange(n, dtype=np.float32) / SR
     rng = random.Random(sum(map(ord, name)))
     buf = np.zeros(n, dtype=np.float32)
+
+    def bed(lo, hi, slope, seed):
+        x = CS.shaped_noise(d, lo, hi, slope, seed)
+        return x[:n] if len(x) >= n else np.pad(x, (0, n - len(x)))
+    lfo = 0.5 + 0.5 * np.sin(2 * np.pi * t / d)          # döngü boyunca tam bir periyot: dikişsiz
     if name == "amb_base":                       # açık hava: rüzgâr + uzak jeneratör uğultusu
-        buf += _lowpass(_noise(d, 201), 70) * (0.6 + 0.4 * np.sin(t * 0.7)) * 2.4
-        buf += _sine(58, d) * 0.05 + _sine(116.5, d) * 0.02
+        buf += bed(60, 700, 1.4, 201) * (0.55 + 0.45 * lfo) * 0.5
+        buf += _sine(58, d) * 0.05 + _sine(116, d) * 0.02
     elif name == "amb_hangar":                   # makine uğultusu + ara sıra metal sesleri
-        buf += _lowpass(_saw(48, d) + _saw(48.6, d), 30) * 0.12
-        buf += _lowpass(_noise(d, 202), 24) * 0.9
+        buf += bed(40, 300, 1.6, 202) * 0.35 + (_sine(48, d) + _sine(96, d) * 0.4) * 0.06
         for _ in range(5):
             c = sfx_clunk() * rng.uniform(0.15, 0.4)
             _place(buf, c, rng.uniform(0.3, d - 1.0) * SR)
-    elif name == "amb_control":                  # kontrol odası: bip sesleri + cızırtı
-        buf += _lowpass(_noise(d, 203), 40) * 0.8
+    elif name == "amb_control":                  # kontrol odası: havalandırma uğultusu + bip sesleri (cızırtı yok)
+        buf += bed(50, 500, 1.6, 203) * 0.3 + _sine(60, d) * 0.03
         for _ in range(14):
             b = sfx_beep(rng.choice((660, 880, 990, 1320)), rng.uniform(0.05, 0.12)) * rng.uniform(0.08, 0.22)
             _place(buf, b, rng.uniform(0.1, d - 0.6) * SR)
-    elif name == "amb_space":                    # derin uzay: vuru yapan alçak uğultu + ince parıltılar
-        buf += (_sine(41, d) + _sine(41.4, d)) * 0.16 + _sine(82.3, d) * 0.04
-        buf += _lowpass(_noise(d, 204), 120) * 1.2
+    elif name == "amb_space":                    # derin uzay (kabin içi): vuru yapan alçak uğultu + ince parıltılar
+        buf += (_sine(41, d) + _sine(373 / 9, d)) * 0.16 + _sine(82, d) * 0.04   # tam sayı periyot: döngüde tık yok
+        buf += bed(30, 260, 1.8, 204) * 0.3
         for _ in range(6):
             f0 = rng.choice((1760, 2093, 2637, 3136))
             s_ = _sine(f0, 2.2) * np.sin(np.linspace(0, np.pi, _n(2.2))) ** 2 * 0.015
             _place(buf, s_, rng.uniform(0, d - 2.4) * SR)
     elif name == "amb_colony":                   # ince atmosfer rüzgârı + yaşam destek uğultusu
-        buf += _highpass(_lowpass(_noise(d, 205), 26), 300) * (0.5 + 0.5 * np.sin(t * 1.1 + 1)) * 2.2
+        buf += bed(150, 1200, 1.2, 205) * (0.5 + 0.5 * lfo) * 0.35
         buf += _sine(72, d) * 0.04
     elif name == "amb_lab":                      # laboratuvar: kabarcıklar + uğultu
-        buf += _sine(96, d) * 0.03 + _lowpass(_noise(d, 206), 50) * 0.7
+        buf += _sine(96, d) * 0.03 + bed(60, 400, 1.6, 206) * 0.25
         for _ in range(26):
             f0 = rng.uniform(500, 1400)
             ch = _sine(lambda tt, f0=f0: f0 + tt * 2600, 0.07) * _exp_decay(_n(0.07), 0.02) * rng.uniform(0.03, 0.09)
             _place(buf, ch, rng.uniform(0, d - 0.2) * SR)
     else:
-        buf += _lowpass(_noise(d, 207), 60)
-    return _norm(_loopable(buf), 0.42)
+        buf += bed(60, 500, 1.4, 207) * 0.3
+    return _norm(buf, 0.42)
 
 
 # ===========================================================================
@@ -520,6 +531,7 @@ class Audio:
         "beep": lambda: sfx_beep(880), "go": lambda: sfx_beep(1320, 0.5), "success": sfx_success,
         "fail": sfx_fail, "repair": sfx_repair, "flash": sfx_flash, "storm": sfx_storm,
         "levelup": sfx_levelup, "ping": sfx_ping, "radio": sfx_radio, "sep": sfx_sep,
+        "engine": lambda: __import__("aetherx.cae.sounds", fromlist=["engine_loop"]).engine_loop(1.0, False),
     }
 
     def __init__(self, enabled=True, music_vol=0.55, sfx_vol=0.8):
@@ -544,10 +556,10 @@ class Audio:
             return
         try:
             if not pygame.mixer.get_init():
-                pygame.mixer.pre_init(SR, -16, 2, 512)
-                pygame.mixer.init(SR, -16, 2, 512)
+                pygame.mixer.pre_init(SR, -16, 2, BUFFER)
+                pygame.mixer.init(SR, -16, 2, BUFFER)
             pygame.mixer.set_num_channels(32)
-            pygame.mixer.set_reserved(4)
+            pygame.mixer.set_reserved(10)      # 0-3 eski motor (müzik, döngü, ortam), 4-9 CAE ortam katmanları
             self.music_ch = [pygame.mixer.Channel(0), pygame.mixer.Channel(1)]
             self.loop_ch = pygame.mixer.Channel(2)
             self.amb_ch = pygame.mixer.Channel(3)
@@ -557,7 +569,9 @@ class Audio:
 
     # --- dönüştürme --------------------------------------------------------
     def _to_sound(self, mono):
-        arr = np.clip(mono * 32767, -32767, 32767).astype(np.int16)
+        # yumuşak sınırlayıcı: tepe değerler sert kırpılmaz (kırpılan dalga çatırtı/cızırtı üretir)
+        mono = np.tanh(np.asarray(mono, dtype=np.float32) * 1.05) / np.tanh(1.05)
+        arr = np.clip(mono * 32000, -32767, 32767).astype(np.int16)
         init = pygame.mixer.get_init()
         ch = init[2] if init else 2
         if ch == 2:
