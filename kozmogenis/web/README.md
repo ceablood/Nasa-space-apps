@@ -2,7 +2,7 @@
 
 Unreal Engine 5 istemcisinin kullandığı **aynı C++ çekirdeği** (KozmoCore) Emscripten ile WebAssembly'ye derlenir.
 Fizik, iniş güdümü, NPC yaşamı, NOVA, inşaat, görevler, ajans yönetimi ve kayıt formatı tarayıcıda gerçek kodla çalışır.
-3B görüntü Three.js (0.169.0, `vendor/`) ile çizilir. Yayın adresi: https://ceablood.github.io/Nasa-space-apps/
+3B görüntü Three.js (0.169.0, `vendor/`) ile çizilir. Deneysel sürüm; yayın adresi: https://ceablood.github.io/Nasa-space-apps/3d/ (ana oyun sitenin kökündeki Python sürümüdür).
 
 | Dosya | Unreal karşılığı | Görev |
 |---|---|---|
