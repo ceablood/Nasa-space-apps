@@ -1,10 +1,28 @@
-# KOZMOGENİS · Uzay Ajansı ve Medeniyet Simülasyonu
+# AETHER-X · Uzay Ajansı Komuta Simülasyonu
 
 ## ▶ Tarayıcıda oyna: https://ceablood.github.io/Nasa-space-apps/
 
-Ana oyun bu Python/pygame sürümüdür (aşağıda). Deneysel 3B sürüm (C++ çekirdeği + Three.js):
+Ana oyun bu Python/pygame sürümüdür. Deneysel 3B sürüm (KOZMOGENİS C++ çekirdeği + Three.js):
 https://ceablood.github.io/Nasa-space-apps/3d/ · Unreal Engine 5 sürümü ve C++ çekirdeği: [`kozmogenis/`](kozmogenis/)
 (UE5 istemcisi henüz derlenmedi).
+
+## Sürüm 3.3 yenilikleri
+
+- **Yeni isim: AETHER-X.**
+- **NASA görüntüleriyle gezegenler:** Dünya NASA Blue Marble (gündüz) + Black Marble 2023 (gece ışıkları),
+  Ay NASA LRO renkli mozaiği, Mars NASA Mars Trek Viking MDIM 2.1 mozaiği, Jüpiter NASA/JPL Cassini haritası
+  (PIA07782). Bütün 3B gezegen çizimleri (menü, atlas, yolculuk, koloni) bu dokuları kullanır; dosya yoksa eski
+  prosedürel dokuya dönülür. İndirme aracı ve kaynaklar: [`tools/fetch_nasa_maps.py`](tools/fetch_nasa_maps.py).
+  Venüs'ün görünür ışıkta yüzeyi görünmez; bulut örtüsü prosedürel kalır.
+- **NASA verileri:** Yerçekimi, çap, kaçış hızı, sıcaklık, dönüş süresi, gün uzunluğu, basınç, uydu sayısı,
+  yörünge süresi ve uzaklık NASA NSSDC Gezegen Bilgi Tablosu'ndan (`aetherx/data.py` → `NASA`).
+  Gezegen kartlarındaki yerçekimi değerleri gerçek m/s² oldu (Jüpiter 2,5 g yerine 24,79 m/s² · 2,53 g).
+- **Yeni ana menü:** Solda kampanya düğmeleri, sağda **canlı Güneş Sistemi**: Ay, Venüs, Mars ve Jüpiter NASA
+  dokularıyla, NASA dönüş sürelerine oranla (×890 hızlandırılmış) gerçekten döner; Mars'ta toz fırtınaları
+  kabarır, Venüs ters yönde döner. Bir gezegene tıklayınca NASA bilgi kartı açılır.
+- **Yükleme ekranları:** Tarayıcıda oyun inerken NASA haritalarıyla dönen gezegenler, gerçek indirme aşamaları
+  ve kaynaklı NASA bilgileri (eski gri pygbag sayfası yerine). Oyun içi yüklemede her gezegen NASA dokusu hazır
+  olunca belirir.
 
 ## Sürüm 3.2 yenilikleri
 

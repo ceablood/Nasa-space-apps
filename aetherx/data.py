@@ -293,7 +293,7 @@ PLANETS = [
     {
         "key": "moon", "name": "Ay", "distance": "Çok yakın", "difficulty": "Kolay", "diff": 1,
         "mineral": "moon_rock", "special": "Başlangıç kolonisi", "dist": 42, "sun": 1.0, "range": 1,
-        "risk": 0.06, "colony_cost": 800, "unlock": None, "gravity": "1/6 g",
+        "risk": 0.06, "colony_cost": 800, "unlock": None, "gravity": "1,62 m/s² (0,17 g)",
         "color": (200, 200, 210), "color2": (120, 120, 135), "glow": (180, 200, 255),
         "zones": [(0.0, 0.18, "debris"), (0.35, 0.6, "asteroids"), (0.6, 0.72, "stardust")],
         "desc": "Dünya'nın uydusu. Ay Taşı bakımından zengin. İlk koloni için ideal.",
@@ -301,7 +301,7 @@ PLANETS = [
     {
         "key": "mars", "name": "Mars", "distance": "Orta", "difficulty": "Orta", "diff": 2,
         "mineral": "red_ore", "special": "İlk gerçek koloni", "dist": 72, "sun": 0.62, "range": 2,
-        "risk": 0.13, "colony_cost": 2200, "unlock": ("visit", "moon", 1), "gravity": "0.38 g",
+        "risk": 0.13, "colony_cost": 2200, "unlock": ("visit", "moon", 1), "gravity": "3,71 m/s² (0,38 g)",
         "color": (220, 100, 60), "color2": (130, 50, 30), "glow": (255, 140, 90),
         "zones": [(0.0, 0.12, "debris"), (0.25, 0.45, "asteroids"), (0.45, 0.55, "dark"),
                   (0.6, 0.75, "stardust"), (0.75, 0.92, "asteroids")],
@@ -310,7 +310,7 @@ PLANETS = [
     {
         "key": "venus", "name": "Venüs", "distance": "Orta", "difficulty": "Zor - Sıcak", "diff": 3,
         "mineral": "sulfur", "special": "Sıcaklık kalkanı lazım", "dist": 66, "sun": 1.9, "range": 2,
-        "risk": 0.18, "colony_cost": 3200, "unlock": ("visit", "mars", 1), "gravity": "0.9 g", "hot": True,
+        "risk": 0.18, "colony_cost": 3200, "unlock": ("visit", "mars", 1), "gravity": "8,87 m/s² (0,90 g)", "hot": True,
         "color": (240, 200, 110), "color2": (170, 120, 50), "glow": (255, 220, 140),
         "zones": [(0.0, 0.12, "debris"), (0.2, 0.4, "stardust"), (0.45, 0.7, "heat"), (0.7, 0.9, "asteroids")],
         "desc": "Kavurucu sıcaklık ve asit bulutları. Sülfür çıkarılır.",
@@ -318,7 +318,7 @@ PLANETS = [
     {
         "key": "jupiter", "name": "Jüpiter", "distance": "Çok uzak", "difficulty": "Çok Zor", "diff": 4,
         "mineral": "gas", "special": "Final hedefi", "dist": 115, "sun": 0.16, "range": 3,
-        "risk": 0.24, "colony_cost": 6000, "unlock": ("visit", "mars", 2), "gravity": "2.5 g",
+        "risk": 0.24, "colony_cost": 6000, "unlock": ("visit", "mars", 2), "gravity": "24,79 m/s² (2,53 g)",
         "color": (220, 170, 120), "color2": (150, 100, 70), "glow": (255, 190, 140), "bands": True,
         "zones": [(0.0, 0.08, "debris"), (0.15, 0.4, "belt"), (0.4, 0.5, "dark"), (0.5, 0.62, "stardust"),
                   (0.62, 0.8, "belt"), (0.85, 1.0, "radiation")],
@@ -326,6 +326,42 @@ PLANETS = [
     },
 ]
 PLANET = {p["key"]: p for p in PLANETS}
+
+# ===========================================================================
+# NASA VERİLERİ — NASA NSSDC Gezegen Bilgi Tablosu (nssdc.gsfc.nasa.gov/planetary/factsheet)
+# Jüpiter yerçekimi: NASA Jüpiter bilgi tablosu (1 bar, ekvator). Oyun bu değerleri kullanır ve gösterir.
+# ===========================================================================
+NASA = {
+    "earth":   {"name": "Dünya", "g": 9.80, "rot_h": 23.9, "diam_km": 12756, "day_h": 24.0, "temp_c": 15, "bar": 1.0,
+                "sun_mkm": 149.6, "escape": 11.2, "moons": 1, "year_d": 365.2},
+    "moon":    {"name": "Ay", "g": 1.62, "rot_h": 655.7, "diam_km": 3475, "day_h": 708.7, "temp_c": -20, "bar": 0.0,
+                "earth_km": 384400, "escape": 2.4, "moons": 0, "year_d": 27.3},
+    "mars":    {"name": "Mars", "g": 3.71, "rot_h": 24.6, "diam_km": 6792, "day_h": 24.7, "temp_c": -65, "bar": 0.01,
+                "sun_mkm": 228.0, "escape": 5.0, "moons": 2, "year_d": 687.0},
+    "venus":   {"name": "Venüs", "g": 8.87, "rot_h": -5832.5, "diam_km": 12104, "day_h": 2802.0, "temp_c": 464, "bar": 92.0,
+                "sun_mkm": 108.2, "escape": 10.4, "moons": 0, "year_d": 224.7},
+    "jupiter": {"name": "Jüpiter", "g": 24.79, "rot_h": 9.9, "diam_km": 142984, "day_h": 9.9, "temp_c": -110, "bar": None,
+                "sun_mkm": 778.5, "escape": 59.5, "moons": 95, "year_d": 4331},
+}
+NASA_SOURCE = "NASA NSSDC Gezegen Bilgi Tablosu"
+
+# yükleme ekranlarında dönen bilgiler: (metin, kaynak) — hepsi NASA yayınlarından
+NASA_FACTS = [
+    ("Ay'da yerçekimi 1,62 m/s²: Dünya'daki ağırlığının yalnızca %17'sini hissedersin.", "NASA NSSDC Ay Bilgi Tablosu"),
+    ("Venüs'te yüzey basıncı 92 bar, ortalama sıcaklık 464 °C: Merkür'den bile sıcak.", "NASA NSSDC Gezegen Bilgi Tablosu"),
+    ("Venüs'te bir gün (2.802 saat) bir yıldan (224,7 gün) uzundur ve gezegen ters yönde döner.", "NASA NSSDC"),
+    ("Mars'ın yüzey basıncı Dünya'nınkinin yaklaşık %1'i; bir Mars günü 24,7 saat sürer.", "NASA NSSDC Mars Bilgi Tablosu"),
+    ("Olympus Mons yaklaşık 22 km yüksekliğiyle Güneş Sistemi'nin en yüksek yanardağıdır.", "NASA Science · Mars"),
+    ("Jüpiter'in kütlesi öteki bütün gezegenlerin toplamının iki katından fazladır.", "NASA Science · Jüpiter"),
+    ("Jüpiter'de bir gün yalnızca 9,9 saat sürer: Güneş Sistemi'nin en hızlı dönen gezegeni.", "NASA NSSDC"),
+    ("Ay, Dünya'dan ortalama 384.400 km uzaktadır; ışık bu yolu 1,3 saniyede alır.", "NASA NSSDC Ay Bilgi Tablosu"),
+    ("Apollo 11 Ay modülü Eagle 20 Temmuz 1969'da Huzur Denizi'ne indi.", "NASA History Office"),
+    ("Dünya'dan kaçış hızı 11,2 km/s, Ay'dan 2,4 km/s, Jüpiter'den 59,5 km/s.", "NASA NSSDC Gezegen Bilgi Tablosu"),
+    ("Bu oyundaki Dünya NASA Blue Marble, Ay LRO, Mars Viking, Jüpiter Cassini görüntüleriyle çizilir.", "NASA SVS · NASA Mars Trek · NASA/JPL"),
+    ("Perseverance gezgini 18 Şubat 2021'de Mars'taki Jezero Krateri'ne indi.", "NASA/JPL"),
+    ("DART aracı 2022'de Dimorphos'a çarparak yörünge periyodunu yaklaşık 33 dakika kısalttı.", "NASA / JHU APL"),
+    ("Uluslararası Uzay İstasyonu Dünya'nın çevresini yaklaşık 90 dakikada bir dolaşır.", "NASA ISS"),
+]
 PLANET_ORDER = ["moon", "mars", "venus", "jupiter"]
 TO = {"moon": "Ay'a", "mars": "Mars'a", "venus": "Venüs'e", "jupiter": "Jüpiter'e", "earth": "Dünya'ya"}
 AT = {"moon": "Ay'da", "mars": "Mars'ta", "venus": "Venüs'te", "jupiter": "Jüpiter'de", "earth": "Dünya'da"}

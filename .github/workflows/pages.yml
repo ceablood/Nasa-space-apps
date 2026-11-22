@@ -1,5 +1,5 @@
 # KOZMOGENİS web sürümünü GitHub Pages'te yayınlar.
-#  /     -> KOZMOGENİS ana oyunu (Python/pygame, pygbag ile WebAssembly)
+#  /     -> AETHER-X ana oyunu (Python/pygame, pygbag ile WebAssembly; özel NASA yükleme sayfası web/loader/aetherx.tmpl)
 #  /3d/  -> deneysel 3B sürüm: KozmoCore C++ çekirdeği (WebAssembly) + Three.js
 # Bir kez: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions" seçilmeli.
 name: Web sürümünü yayınla (GitHub Pages)
@@ -39,10 +39,11 @@ jobs:
           mkdir -p web_src/aetherx-x
           cp -r main.py aetherx web_src/aetherx-x/
           find web_src -name __pycache__ -prune -exec rm -rf {} +
-          python -m pygbag --build --title KOZMOGENIS --app_name aetherx web_src/aetherx-x
+          python -m pygbag --build --title AETHER-X --app_name aetherx --template web/loader/aetherx.tmpl web_src/aetherx-x
       - name: Site klasörünü birleştir
         run: |
           cp -r web_src/aetherx-x/build/web _site
+          cp -r web/loader/nasa _site/nasa        # yükleme sayfasındaki NASA gezegen haritaları (küçük)
           mkdir -p _site/3d
           cp -r kozmogenis/web/index.html kozmogenis/web/css kozmogenis/web/js kozmogenis/web/vendor kozmogenis/web/dist _site/3d/
           touch _site/.nojekyll

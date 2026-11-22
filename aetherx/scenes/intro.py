@@ -6,11 +6,14 @@ adı ne olsun?" -> astronot kıyafeti seçimi -> ajans odağı -> üs.
 """
 import math
 import random
+import sys
+import threading
 
 import pygame
 
 from . import Scene
 from .. import paint
+from .. import space3d as S3
 from .. import cinema
 from .. import art
 from .. import data as D
@@ -24,6 +27,13 @@ from ..ui import Button, TextInput, UI, chip, draw_bar, draw_icon, draw_paragrap
 EXAMPLES = ["Selim Uzay", "Anadolu Uzay Ajansı", "Nova Space", "Türk Uzay Gücü"]
 QUESTIONS = {"name": "Uzay Ajansının adı ne olsun?", "suit": "Astronotların hangi kıyafeti giysin?",
              "focus": "Ajansın neye odaklansın?", "lang": "Dil  ·  Language  ·  Sprache"}
+
+
+# Ana menüdeki canlı gezegenler: NASA haritaları (Ay LRO, Mars Viking, Jüpiter Cassini; Venüs bulut örtüsü)
+# NASA NSSDC dönüş sürelerine oranla döner. Ölçek: Jüpiter'in 9,9 saatlik günü ~40 sn -> ×891 hızlandırılmış.
+LIVE = [("venus", 1000, 470, 64), ("moon", 760, 492, 40), ("mars", 1210, 478, 52), ("jupiter", 1440, 452, 92)]
+TIME_SCALE = 9.9 * 3600 / 40.0
+WEB = sys.platform == "emscripten"
 
 
 class IntroScene(Scene):
@@ -45,9 +55,15 @@ class IntroScene(Scene):
         self.input = None
         self.summary = None
         self.cards = []
+        self.live = {}                  # anahtar -> son çizilen yüzey
+        self.live_i = 0
+        self.live_t = 0.0               # gezegen saati (sn, hızlandırılmış)
+        self.pick = None                # tıklanan gezegen (NASA kartı)
+        self._warming = False
 
     def enter(self, **kw):
         self.summary = self.game.save_summary() if self.game.has_save() else None
+        self.warm_planets()
         self.go_stage("menu" if i18n.PREFS.get("lang_chosen") else "lang")
 
     def go_stage(self, st):
@@ -61,6 +77,59 @@ class IntroScene(Scene):
 
     def rebuild(self):
         pass
+
+    # ------------------------------------------------------- canlı gezegenler
+    def warm_planets(self):
+        """Dokular eksikse masaüstünde arka planda hazırla (tarayıcıda yükleme ekranı zaten hazırlar)."""
+        missing = [k for k, *_ in LIVE if not S3.has_texture(k, 512)]
+        if not missing or self._warming:
+            return
+        if WEB:
+            return
+        self._warming = True
+
+        def work():
+            for k in missing:
+                try:
+                    S3.texture(k, 512)
+                except Exception:
+                    pass
+            self._warming = False
+        threading.Thread(target=work, daemon=True).start()
+
+    def render_live(self):
+        """Her karede bir gezegeni yeniden çizer (sırayla): dönüş, bulut ve toz hareketi canlı kalır, maliyet sabit."""
+        if self.stage != "menu":
+            return
+        key, x, y, R = LIVE[self.live_i % len(LIVE)]
+        self.live_i += 1
+        if self.pick == key:
+            R = int(R * 1.12)
+        if not S3.has_texture(key, 512):
+            return
+        nd = D.NASA[key]
+        spin = (self.live_t / (nd["rot_h"] * 3600.0)) * math.tau
+        try:
+            M = S3.rot_z(math.radians(-12)) @ S3.rot_x(0.28)
+            L = S3.norm3(S3.np.array((-0.8, -0.18, 0.56), dtype=S3.F32))
+            self.live[key] = S3.to_surface(S3.render_body(key, R, M, L, spin, self.live_t / 3600.0, 512))
+        except Exception:
+            self.live[key] = None
+
+    def planet_at(self, pos):
+        for key, x, y, R in LIVE:
+            if math.hypot(pos[0] - x, pos[1] - y) <= R + 8:
+                return key
+        return None
+
+    def handle(self, e):
+        if self.stage == "menu" and e.type == pygame.MOUSEBUTTONDOWN and getattr(e, "button", 1) == 1:
+            k = self.planet_at(e.pos)
+            if k:
+                self.pick = None if self.pick == k else k
+                self.app.audio.play("ping", 0.5)
+                return True
+        return super().handle(e)
 
     # ----------------------------------------------------------------- dil
     def build_lang(self):
@@ -86,21 +155,21 @@ class IntroScene(Scene):
 
     # ---------------------------------------------------------------- menü
     def build_menu(self):
-        cx = W // 2
-        y = 520
+        x, y = 90, 430
         self.lang_buttons()
         if self.summary:
-            b = self.add(Button((cx - 200, y, 400, 62), "KAMPANYAYA DEVAM", self.continue_game, accent=C["green"],
+            y = 520
+            b = self.add(Button((x, y, 420, 62), "KAMPANYAYA DEVAM", self.continue_game, accent=C["green"],
                                 icon="play", size=20, style="big", hotkey=pygame.K_RETURN))
             b.pulse = True
             y += 76
-        nb = self.add(Button((cx - 200, y, 400, 56), "YENİ KAMPANYA", lambda: self.go_stage("name"), accent=C["cyan"],
+        nb = self.add(Button((x, y, 420, 58), "YENİ KAMPANYA", lambda: self.go_stage("name"), accent=C["cyan"],
                              icon="rocket", size=19, style="big" if not self.summary else "glass",
                              hotkey=None if self.summary else pygame.K_RETURN))
         nb.pulse = not self.summary
-        y += 70
-        self.add(Button((cx - 200, y, 195, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=15))
-        self.add(Button((cx + 5, y, 195, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=15))
+        y += 72
+        self.add(Button((x, y, 205, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=15))
+        self.add(Button((x + 215, y, 205, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=15))
 
     def quit(self):
         self.app.running = False
@@ -202,6 +271,8 @@ class IntroScene(Scene):
             self.ps.glow(random.uniform(0, W), H + 10, 1, random.choice([C["cyan"], C["violet"], C["magenta"]]),
                          speed=(20, 60), size=(1, 3), life=(3, 6), grav=-25)
         self.ps.update(dt)
+        self.live_t += dt * TIME_SCALE
+        self.render_live()
         if self.stage == "name" and self.input:
             self.next_btn.pulse = len(self.input.text.strip()) >= 2
 
@@ -220,12 +291,12 @@ class IntroScene(Scene):
         cinema.grade(surf, (0, 0, W, H))
         self.ps.draw(surf)
         if self.stage in ("menu", "lang"):
-            self.draw_logo(surf, 150 if self.stage == "menu" else 120, t)
+            self.draw_logo(surf, 120, t)
         self.draw_widgets(surf)
         getattr(self, "draw_" + self.stage)(surf, t)
 
     def draw_logo(self, surf, y, t, scale=1.0):
-        word = "KOZMOGENİS"
+        word = "AETHER-X"
         fs = int(120 * scale)
         tw = sum(render_text(ch, fs, C["text"], True).get_width() for ch in word)
         x = W // 2 - tw // 2
@@ -234,7 +305,7 @@ class IntroScene(Scene):
             d = clamp(self.k * 2.4 - i * 0.12, 0, 1)
             img = render_text(ch, fs, C["text"], True)
             off = (1 - ease_out_back(d)) * 60
-            col = C["cyan"] if ch not in "İ" else C["magenta"]   # İ noktası vurgulu
+            col = C["magenta"] if ch in "-X" else C["cyan"]       # "-X" vurgulu
             draw_glow(surf, (x + img.get_width() / 2, y + fs * 0.55 + off), fs * 0.5, col, 0.35 * d)
             surf.blit(render_text(ch, fs, scale_color(col, 0.5), True), (x + 3, y + 4 + off))
             surf.blit(img, (x, y + off))
@@ -252,25 +323,76 @@ class IntroScene(Scene):
         draw_text(surf, sub, (W // 2, cy + size + 72), 17, C["text_dim"], anchor="midtop", max_w=max_w)
 
     def draw_lang(self, surf, t):
-        draw_text(surf, QUESTIONS["lang"], (W // 2, 390), 34, C["white"], bold=True, anchor="midtop", glow=C["cyan"], raw=True)
-        draw_text(surf, "Türkçe  ·  English  ·  Deutsch", (W // 2, 610), 16, C["text_dim"], anchor="midtop", raw=True)
+        draw_text(surf, QUESTIONS["lang"], (W // 2, 318), 34, C["white"], bold=True, anchor="midtop", glow=C["cyan"], raw=True)
 
     def draw_menu(self, surf, t):
         if self.summary:
             s = self.summary
-            r = pygame.Rect(W // 2 - 260, 370, 520, 126)
+            r = pygame.Rect(90, 380, 420, 120)
             glass_panel(surf, r, s["color"], 200, 18)
-            pygame.draw.circle(surf, s["color"], (r.x + 52, r.centery), 30, 2)
-            draw_glow(surf, (r.x + 52, r.centery), 40, s["color"], 0.5)
-            draw_icon(surf, "rocket", (r.x + 52, r.centery), 30, s["color"])
-            draw_text(surf, s["name"].upper(), (r.x + 100, r.y + 18), 24, C["text"], bold=True, raw=True, max_w=400)
-            draw_text(surf, f"Seviye {s['level']} · Gün {s['day']}", (r.x + 100, r.y + 52), 16, C["text_dim"])
-            draw_text(surf, f"{s['money']} Para · {s['rp']} Puan", (r.x + 100, r.y + 76), 16, C["gold"], bold=True)
-            cx = r.right - 20
+            pygame.draw.circle(surf, s["color"], (r.x + 50, r.centery), 28, 2)
+            draw_glow(surf, (r.x + 50, r.centery), 38, s["color"], 0.5)
+            draw_icon(surf, "rocket", (r.x + 50, r.centery), 28, s["color"])
+            draw_text(surf, s["name"].upper(), (r.x + 94, r.y + 16), 22, C["text"], bold=True, raw=True, max_w=300)
+            draw_text(surf, f"Seviye {s['level']} · Gün {s['day']}", (r.x + 94, r.y + 48), 15, C["text_dim"])
+            draw_text(surf, f"{s['money']} Para · {s['rp']} Puan", (r.x + 94, r.y + 72), 15, C["gold"], bold=True)
+            cx = r.right - 16
             for p in reversed(s["colonies"]):
-                cr = chip(surf, (cx, r.y + 20), D.PLANET[p]["name"], C["green"], 12, anchor="topright", icon="flag")
+                cr = chip(surf, (cx, r.bottom - 30), D.PLANET[p]["name"], C["green"], 11, anchor="topright", icon="flag")
                 cx = cr.x - 6
+        self.draw_live(surf, t)
         draw_text(surf, "F11 tam ekran · ESC geri", (W // 2, H - 34), 13, C["text_mute"], anchor="midtop")
+
+    def draw_live(self, surf, t):
+        draw_text(surf, "CANLI GÜNEŞ SİSTEMİ", (1100, 352), 14, C["cyan"], bold=True, anchor="midtop")
+        draw_text(surf, "NASA görüntüleri · NASA dönüş sürelerine oranla ×890 hızlı · bir gezegene tıkla", (1100, 374), 12,
+                  C["text_dim"], anchor="midtop")
+        for key, x, y, R in LIVE:
+            img = self.live.get(key)
+            sel = self.pick == key
+            glow = {"mars": (255, 140, 90), "venus": (255, 214, 150), "jupiter": (255, 196, 150)}.get(key, (190, 200, 230))
+            draw_glow(surf, (x, y), R * (1.7 if sel else 1.45), glow, 0.32 if sel else 0.2)
+            if img:
+                surf.blit(img, (x - img.get_width() // 2, y - img.get_height() // 2))
+            else:
+                a = (t * 3 + x) % math.tau
+                pygame.draw.circle(surf, (40, 50, 80), (x, y), R, 1)
+                pygame.draw.arc(surf, C["cyan"], (x - R, y - R, 2 * R, 2 * R), a, a + 1.3, 2)
+            if sel:
+                pygame.draw.circle(surf, C["cyan"], (x, y), int(R * 1.12) + 6, 1)
+            nd = D.NASA[key]
+            draw_text(surf, nd["name"].upper(), (x, y + R + 14), 15, C["text"] if not sel else C["cyan"], bold=True,
+                      anchor="midtop", raw=True)
+            draw_text(surf, f"{nd['g']:.2f}".replace(".", ",") + " m/s²", (x, y + R + 34), 12, C["text_dim"], anchor="midtop",
+                      raw=True)
+        if self.pick:
+            self.draw_card(surf, self.pick)
+
+    def draw_card(self, surf, key):
+        nd = D.NASA[key]
+        r = pygame.Rect(690, 600, 830, 190)
+        glass_panel(surf, r, C["cyan"], 225, 16)
+        draw_text(surf, nd["name"].upper(), (r.x + 24, r.y + 16), 24, C["text"], bold=True, raw=True)
+        draw_text(surf, "Kaynak: " + D.NASA_SOURCE, (r.right - 20, r.y + 22), 12, C["gold"], anchor="topright", raw=True)
+
+        def n(v, d=0):
+            return f"{v:,.{d}f}".replace(",", "§").replace(".", ",").replace("§", ".")
+        rot = nd["rot_h"]
+        rows = [
+            ("Yerçekimi", f"{n(nd['g'], 2)} m/s²"), ("Çap", f"{n(nd['diam_km'])} km"),
+            ("Kaçış hızı", f"{n(nd['escape'], 1)} km/s"), ("Ortalama sıcaklık", f"{nd['temp_c']} °C"),
+            ("Dönüş süresi", f"{n(abs(rot), 1)} saat" + (" (ters yön)" if rot < 0 else "")),
+            ("Gün uzunluğu", f"{n(nd['day_h'], 1)} saat"),
+            ("Yüzey basıncı", "katı yüzey yok" if nd["bar"] is None else ("yok denecek kadar az" if nd["bar"] == 0 else f"{n(nd['bar'], 2)} bar")),
+            ("Uydu sayısı", str(nd["moons"])),
+            ("Yörünge süresi", f"{n(nd['year_d'], 1)} gün"),
+            ("Uzaklık", f"Dünya'ya {n(nd['earth_km'])} km" if "earth_km" in nd else f"Güneş'e {n(nd['sun_mkm'], 1)} milyon km"),
+        ]
+        for i, (k, v) in enumerate(rows):
+            cx = r.x + 24 + (i % 2) * 410
+            cy = r.y + 56 + (i // 2) * 25
+            draw_text(surf, k, (cx, cy), 14, C["text_dim"])
+            draw_text(surf, v, (cx + 380, cy), 15, C["text"], bold=True, anchor="topright", raw=True)
 
     def draw_name(self, surf, t):
         self.question(surf, t, "name", "Sen bir kişi değil, koca bir ajanssın. Bu isim üssünde, roketinde, bayrağında yazacak.",
