@@ -1,13 +1,22 @@
 # KOZMOGENİS · Uzay Ajansı ve Medeniyet Simülasyonu
 
-**Ana oyun: Unreal Engine 5 sürümü** → [`kozmogenis/`](kozmogenis/) (C++ çekirdek KozmoCore + UE5 istemcisi).
-Durum: çekirdek derlenip test edildi (101 test, 0 başarısız, Linux + Windows MSVC CI); UE5 istemcisi yazıldı
-ama UE5 kurulu bir bilgisayar olmadığı için **henüz derlenmedi** — ilk derleme ve Windows EXE hedef PC'de yapılacak.
-Ayrıntı: [`kozmogenis/docs/V41_DURUM_RAPORU.md`](kozmogenis/docs/V41_DURUM_RAPORU.md) (V41 dikey dilim: kokpit, iniş, gezilebilir koloni, yaşayan NPC, NOVA) ve [`V30_DURUM_RAPORU.md`](kozmogenis/docs/V30_DURUM_RAPORU.md).
+## ▶ Tarayıcıda oyna: https://ceablood.github.io/Nasa-space-apps/
 
-Aşağıdaki tarayıcı sürümü (Python/pygame) ilk prototiptir ve oynanabilir durumdadır.
+Ana oyun bu Python/pygame sürümüdür (aşağıda). Deneysel 3B sürüm (C++ çekirdeği + Three.js):
+https://ceablood.github.io/Nasa-space-apps/3d/ · Unreal Engine 5 sürümü ve C++ çekirdeği: [`kozmogenis/`](kozmogenis/)
+(UE5 istemcisi henüz derlenmedi).
 
----
+## Sürüm 3.2 yenilikleri
+
+- **Motorlu iniş (yeni mini oyun):** Ay, Mars ve Venüs'e inen görevlerde yolculuktan sonra iniş aracını sen
+  indiriyorsun. Motoru yak (W / SPACE / basılı tut), aracı eğ (A-D / ekrana dokun), iniş alanına yumuşakça kon.
+  Yerçekimleri gerçek (1,62 · 3,71 · 8,87 m/s²); Mars'ta ince, Venüs'te kalın atmosfer düşüşü etkiler.
+  Göstergeler: irtifa, dikey/yatay hız, eğim, hedefe mesafe, yakıt (Δv) ve güvenli bandı gösteren düşüş şeridi.
+  NOVA 1000/500/100/30 metrede seslenir, "motoru yak" uyarısı verir; **L** ile NOVA iniş desteği aracı kendisi
+  indirir (bir tuşa basınca kumandayı sana bırakır). Koloni varsa koloninin iniş alanına inilir.
+  Sonuçlar: yumuşak iniş · hassas iniş (alanın içine) ek kargo · sert iniş (gövde hasarı) · başarısız iniş
+  (acil kalkışla yörüngeye dönüş, yüzey madenciliği yok) · **X** ile iniş iptali. Yakıt bütçesi, NOVA güdümünün
+  o arazide harcayacağı Δv'ye ve yolculuktan kalan yakıta göre hesaplanır. Jüpiter (gaz devi) için iniş yok.
 
 ## Tarayıcı prototipi (Python / pygame, eski adı AETHER-X)
 

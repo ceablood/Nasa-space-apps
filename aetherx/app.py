@@ -32,6 +32,7 @@ SCENES = {
     "hangar": ("hangar", "HangarScene"),
     "launch": ("launch", "LaunchScene"),
     "flight": ("flight", "FlightScene"),
+    "landing": ("landing", "LandingScene"),
     "results": ("results", "ResultsScene"),
     "research": ("research", "ResearchScene"),
     "crew": ("crew", "CrewScene"),

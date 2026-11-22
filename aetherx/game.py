@@ -1218,6 +1218,12 @@ class Game:
         mode = res["mode"]
         summary = {"money": 0, "rp": 0, "lines": [], "first_landing": False, "first_visit": False,
                    "minerals": {}, "can_found": False}
+        td = res.get("touchdown")
+        if td and res.get("landed"):
+            line = f"Motorlu iniş: temas {td[0]:.1f} m/s, hedefe {td[3]:.0f} m"
+            if res.get("landing_bonus"):
+                line += f" · hassas iniş +{res['landing_bonus']} kargo"
+            summary["lines"].append(line)
 
         reached = out in ("success", "partial")
         if reached:

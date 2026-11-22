@@ -591,7 +591,7 @@ class FlightSim:
             "photos": self.stats["photos"], "stardust": self.stats["stardust"], "rescues": self.stats["rescues"],
             "asteroids": self.stats["asteroids"], "minerals": minerals, "crew": self.crew,
             "damage": self.stats["damage"], "landed": self.landed and self.outcome != "fail",
-            "radiation": bool(self.eng.get("radiation")), "sick_ids": sick, "fuel_left": self.fuel,
+            "radiation": bool(self.eng.get("radiation")), "sick_ids": sick, "fuel_left": self.fuel, "fuel_max": self.fuel_max,
             "elapsed": self.elapsed, "hull": self.hull["key"],
         }
 
@@ -883,7 +883,9 @@ class FlightScene(Scene):
         self._finished = True
         res = self.sim.result()
         self.app.mission["result"] = res
-        self.app.go("results")
+        # yüzeye inen görev: önce oyuncunun yönettiği motorlu iniş (Jüpiter gaz devi: iniş yok)
+        from .landing import LANDABLE
+        self.app.go("landing" if res["landed"] and res["planet"] in LANDABLE else "results")
 
     def exit(self):
         self._finished = False

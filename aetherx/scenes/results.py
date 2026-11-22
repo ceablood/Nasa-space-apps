@@ -59,6 +59,8 @@ class ResultsScene(Scene):
         self.summary = g.complete_mission(res)
         self.phase = "landing" if res["landed"] else ("return" if res["outcome"] != "fail" or res["crew"] else "summary")
         self.phase_t = 0.0
+        if self.phase == "landing" and res.get("touchdown"):
+            self.phase_t = 3.6       # iniş oyuncu tarafından zaten yapıldı: yalnız yüzey sahnesinin sonu gösterilir
         self.ps.clear()
         self.widgets = []
         self.colony_btn = None
