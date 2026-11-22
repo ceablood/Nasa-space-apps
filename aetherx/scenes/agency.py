@@ -9,10 +9,9 @@ import pygame
 
 from . import Scene
 from .. import data as D
-from .. import i18n
 from ..config import C, H, RENAME_COST, TOPBAR_H, W, SAVE_FILE
 from ..fx import draw_glow, scale_color
-from ..ui import (UI, Button, Slider, Tabs, TextInput, Toggle, chip, draw_bar, draw_icon, draw_paragraph, draw_text,
+from ..ui import (Button, Tabs, TextInput, chip, draw_bar, draw_icon, draw_paragraph, draw_text,
                   glass_panel, fmt_num)
 
 
@@ -68,7 +67,6 @@ class AgencyScene(Scene):
                 else:
                     b2.pulse = True
         elif self.tab == 3:
-            s = g.s["settings"]
             x = 40
             self.name_input = self.add(TextInput((x, TOPBAR_H + 210, 560, 64), g.name, "Yeni ajans adı", 28,
                                                  on_submit=lambda t: self.rename(), accent=g.color, size=26))
@@ -76,69 +74,27 @@ class AgencyScene(Scene):
             rb = self.add(Button((x + 580, TOPBAR_H + 212, 280, 60), f"ADI DEĞİŞTİR · {RENAME_COST} P", self.rename,
                                  accent=C["gold"], icon="flag", size=15))
             rb.set_enabled(g.money >= RENAME_COST, f"{RENAME_COST} Para gerekli")
-            self.add(Toggle((x, TOPBAR_H + 320, 380, 40), s.get("sound", True), self.set_sound, "Ses ve müzik"))
-            self.add(Slider((x, TOPBAR_H + 410, 380, 24), s.get("music", 0.55), self.set_music, C["cyan"], "MÜZİK"))
-            self.add(Slider((x, TOPBAR_H + 480, 380, 24), s.get("sfx", 0.8), self.set_sfx, C["orange"], "EFEKTLER"))
-            self.add(Button((x, TOPBAR_H + 540, 380, 50), "TAM EKRAN (F11)", self.app.toggle_fullscreen,
-                            accent=C["violet"], size=15))
-            self.add(Button((x + 500, TOPBAR_H + 320, 360, 50), "ŞİMDİ KAYDET", self.save_now, accent=C["green"],
+            self.add(Button((x, TOPBAR_H + 330, 560, 64), "TÜM AYARLAR", lambda: self.app.go("settings", back="agency"),
+                            accent=C["violet"], icon="settings", size=19, style="big"))
+            for i, (cat, lab, ic) in enumerate((("gfx", "GÖRÜNTÜ", "eye"), ("audio", "SES", "nova"),
+                                                 ("access", "ERİŞİLEBİLİRLİK", "astro"), ("lang", "DİL", "planet"))):
+                self.add(Button((x + (i % 2) * 284, TOPBAR_H + 410 + (i // 2) * 58, 276, 50), lab,
+                                (lambda c=cat: self.app.go("settings", cat=c, back="agency")), accent=C["violet"], icon=ic,
+                                size=14, style="tab"))
+            self.add(Button((x + 640, TOPBAR_H + 330, 360, 50), "ŞİMDİ KAYDET", self.save_now, accent=C["green"],
                             icon="save", size=15))
-            self.add(Button((x + 500, TOPBAR_H + 380, 360, 50), "ANA MENÜYE DÖN", self.to_menu, accent=C["cyan"],
+            self.add(Button((x + 640, TOPBAR_H + 390, 360, 50), "ANA MENÜYE DÖN", self.to_menu, accent=C["cyan"],
                             icon="home", size=15))
-            db = self.add(Button((x + 500, TOPBAR_H + 440, 360, 50),
+            db = self.add(Button((x + 640, TOPBAR_H + 450, 360, 50),
                                  "EMİN MİSİN? TEKRAR TIKLA" if self.confirm_delete else "KAYDI SİL", self.delete,
                                  accent=C["red"], icon="cross", size=15, style="danger"))
             db.pulse = self.confirm_delete
-            for i, (code, label) in enumerate(i18n.LANGS):
-                b = self.add(Button((x + 940 + (i % 3) * 170, TOPBAR_H + 200 + (i // 3) * 56, 160, 48), label,
-                                    (lambda c=code: self.set_lang(c)),
-                                    accent=C["cyan"], size=15, style="tab"))
-                b.selected = (i18n.LANG == code)
-            on = i18n.PREFS.get("cinematic", True)
-            cb = self.add(Button((x + 500, TOPBAR_H + 540, 360, 46), "AÇIK" if on else "KAPALI", self.toggle_cinema,
-                                 accent=C["magenta"] if on else C["text_dim"], icon="star", size=15, style="tab"))
-            cb.selected = on
-            for i, q in enumerate(i18n.QUALITY_ORDER):
-                b = self.add(Button((x + 940 + i * 128, TOPBAR_H + 340, 120, 50), i18n.QUALITY_LABEL[q][0],
-                                    (lambda qq=q: self.set_quality(qq)), accent=C["gold"], size=13, style="tab"))
-                b.selected = (i18n.PREFS.get("quality") == q)
 
     # ---------------------------------------------------------------- eylemler
     def rename(self):
         new = self.name_input.text.strip() if self.name_input else ""
         if self.act(self.game.rename, new, ok_sound="success"):
             self.app.say(f"Merhaba {self.game.name}! Yeni adın tabelada, roketlerde ve bayraklarda.", "happy")
-
-    def set_lang(self, code):
-        i18n.set_lang(code)
-        i18n.save_prefs()
-        self.app.on_game_ready()
-        self.app.audio.play("success", 0.5)
-        self.rebuild()
-
-    def toggle_cinema(self):
-        i18n.PREFS["cinematic"] = not i18n.PREFS.get("cinematic", True)
-        i18n.save_prefs()
-        self.app.audio.play("click")
-        self.rebuild()
-
-    def set_quality(self, q):
-        i18n.PREFS["quality"] = q
-        i18n.save_prefs()
-        self.app.audio.play("click")
-        self.rebuild()
-
-    def set_sound(self, v):
-        self.game.s["settings"]["sound"] = v
-        self.app.audio.set_enabled(v)
-
-    def set_music(self, v):
-        self.game.s["settings"]["music"] = v
-        self.app.audio.set_volumes(music=v)
-
-    def set_sfx(self, v):
-        self.game.s["settings"]["sfx"] = v
-        self.app.audio.set_volumes(sfx=v)
 
     def save_now(self):
         ok = self.game.save()
@@ -264,16 +220,9 @@ class AgencyScene(Scene):
             draw_text(surf, e["text"][:120], (r.x + 190, y), 14, C["text"])
 
     def draw_3(self, surf):
-        g = self.game
         draw_text(surf, "AJANS ADI", (40, TOPBAR_H + 180), 14, C["text_dim"], bold=True)
-        draw_text(surf, "DİL", (980, TOPBAR_H + 180), 14, C["text_dim"], bold=True)
-        draw_text(surf, "GÖRÜNTÜ KALİTESİ", (980, TOPBAR_H + 316), 14, C["text_dim"], bold=True)
-        draw_paragraph(surf, i18n.QUALITY_LABEL.get(i18n.PREFS.get("quality"), ("", ""))[1],
-                       (980, TOPBAR_H + 404), 520, 14, C["text"], max_lines=4)
-        draw_text(surf, "SİNEMATİK EFEKTLER", (540, TOPBAR_H + 516), 14, C["text_dim"], bold=True)
-        draw_paragraph(surf, "Işık huzmeleri, süzülen toz, renkli kenar ışığı, mürekkep çizgileri, fırça dokusu ve kenar "
-                             "yumuşatma. Yavaş bilgisayarlarda kapatabilirsin.", (980, TOPBAR_H + 520), 520, 13,
-                       C["text_dim"])
+        draw_paragraph(surf, "Görüntü kalitesi, ses düzeyleri, oyun seçenekleri, erişilebilirlik ve dil artık ayrı AYARLAR "
+                             "ekranında. Ana menüden de açılır.", (40, TOPBAR_H + 540), 560, 13, C["text_dim"])
         draw_text(surf, f"Kayıt dosyası: {SAVE_FILE}", (40, H - 130), 12, C["text_mute"])
         draw_text(surf, "Oyun otomatik kaydedilir: her fırlatma, koloni, araştırma, NOVA seviyesi ve ajans adı.",
                   (40, H - 108), 13, C["text_dim"])

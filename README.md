@@ -6,6 +6,34 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.6 — Görsel YAŞAM ekranı, temiz ses, ayrıntılı ayarlar
+
+* **YAŞAM görselleri** ([`aetherx/life_art.py`](aetherx/life_art.py)), hepsi Yaşam Motoru verisinden prosedürel çizilir:
+  * **Gezegen sekmesi:** NASA dokulu dönen küre (kurgusal gezegenlerde temsilî), atmosfer halesi, biyosfer halkası, kutup ışıkları,
+    yaşanabilirlik radar grafiği ve kökeni anlatan zincir diyagramı (amino asit → protohücre).
+  * **Yaşam sekmesi:** hareketli biyom dioraması. Gökyüzü atmosferden, zemin biyomdan gelir; canlı sayısı biyokütleyle orantılı.
+    Gün-gece döngüsü ve fırtına var. Her türün genomundan bir figürü, seçili tür için büyük portre, figürlü besin ağı.
+  * **Zaman çizelgesi:** Dünya'nın resimli jeolojik şeridi (yayımlanmış tarihler) ve alemlere göre yığılmış tür grafiği.
+  * **Olaylar:** olay simgeleri ve canlandırma (meteor, volkan, buzul, kuraklık, fırtına, radyasyon...).
+  * **Ses gözlemevi:** katmanların gerçek dalga biçimleri.
+* **Ses temizliği:**
+  * Bütün seslerden geçen ortak bir son işleme zinciri var. DC kayması ve 25 Hz altı uğultuyu temizler, 14 kHz üstü tıslamayı
+    yumuşakça keser. Başta ve sonda kısa geçiş yaptığı için tık kalmaz; tanh doyumu (bozulma) kaldırıldı.
+  * Ham beyaz gürültü yerine bant sınırlı gürültü kullanılıyor; fırlatmadaki rastgele çatırtı dürtüleri kaldırıldı.
+  * Kare ve testere dalgaları bant sınırlı yapıldı (örtüşme yok).
+  * Yankı artık FFT evrişimiyle üretiliyor; metalik çınlama yok.
+  * Müzik döngülerinde kuyruklar başa sarılıyor, döngü dikişi tıksız.
+  * Kanallar toplanınca kırpılma olmasın diye karıştırma payı bırakıldı.
+  * Bozulmasız bir "ani yüksek sesleri sınırla" eklendi.
+  * Test: [`tests/test_audio_clean.py`](tests/test_audio_clean.py).
+* **AYARLAR ekranı:** ana menüden ve AJANS'tan açılır, tercih dosyasında saklanır.
+  * Görüntü: kalite kademesi, parlama, toz zerreleri, yıldız yoğunluğu, parçacık miktarı, sinematik efektler, FPS sınırı,
+    FPS göstergesi, tam ekran.
+  * Ses: ana ses, müzik, efekt, ortam, arayüz ve NOVA sesi; arka planda susturma; ses testi.
+  * Oyun: NOVA ipuçları, otomatik kayıt aralığı, açıklama balonları.
+  * Erişilebilirlik: hareketi azalt, ekran sarsıntısı, altyazı, mono, tiz azaltma, ses sınırlayıcı, oyun imleci.
+  * Dil, kontrol listesi ve veri (kaydet, sıfırla, sil).
+
 ## Sürüm 3.4 — Yaşayan Gezegenler ve Kozmik Ses Motoru
 
 Yeni **YAŞAM** ekranı (üst menü). Kod: [`aetherx/life/`](aetherx/life/) (KOZMOGENİS Life Engine),

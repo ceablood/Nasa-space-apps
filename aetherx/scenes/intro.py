@@ -176,8 +176,10 @@ class IntroScene(Scene):
                              hotkey=None if self.summary else pygame.K_RETURN))
         nb.pulse = not self.summary
         y += 72
-        self.add(Button((x, y, 205, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=15))
-        self.add(Button((x + 215, y, 205, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=15))
+        self.add(Button((x, y, 136, 48), "AYARLAR", lambda: self.app.go("settings", back="intro"), accent=C["violet"], size=14,
+                        icon="settings"))
+        self.add(Button((x + 142, y, 136, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=14))
+        self.add(Button((x + 284, y, 136, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=14))
         y += 84
         self.q_y = y
         for i, q in enumerate(i18n.QUALITY_ORDER):
@@ -197,9 +199,8 @@ class IntroScene(Scene):
 
     def continue_game(self):
         if self.game.load():
-            st = self.game.s["settings"]
-            self.app.audio.set_enabled(st.get("sound", True))
-            self.app.audio.set_volumes(st.get("music"), st.get("sfx"))
+            from .. import settings as SET
+            SET.apply_audio(self.app)          # ses ayarları tercih dosyasından (kampanyadan bağımsız)
             self.app.on_game_ready()
             self.app.go("base")
             self.app.say(self.app.nova.greet())

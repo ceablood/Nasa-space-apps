@@ -133,7 +133,8 @@ def ice_crack(seed=8):
     rng = np.random.default_rng(seed)
     out = np.zeros(S.n_of(d), dtype=S.F32)
     for _ in range(6):
-        c = S.shaped_noise(0.04, 1500, 6000, 0.2, int(rng.integers(1e6))) * np.exp(-S.t_of(0.04) / 0.006)
+        tt = S.t_of(0.04)
+        c = S.shaped_noise(0.04, 1500, 6000, 0.2, int(rng.integers(1e6))) * np.exp(-tt / 0.006) * (1 - np.exp(-tt / 0.0008))
         S.place(out, c.astype(S.F32) * rng.uniform(0.3, 1), rng.uniform(0, d - 0.05) * S.SR)
     out += S.tone(lambda t: 900 - t * 600, d) * np.exp(-S.t_of(d) / 0.12) * 0.25
     return S.fade_edges(out)
