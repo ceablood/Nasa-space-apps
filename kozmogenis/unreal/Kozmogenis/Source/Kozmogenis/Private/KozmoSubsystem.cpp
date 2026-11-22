@@ -3,6 +3,13 @@
 #include "HAL/PlatformTime.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "KozmoGraphics.h"
+
+THIRD_PARTY_INCLUDES_START
+#include "kozmo/planner.hpp"
+#include "kozmo/savefmt.hpp"
+#include "kozmo/solar.hpp"
+THIRD_PARTY_INCLUDES_END
 
 DEFINE_LOG_CATEGORY(LogKozmo);
 
@@ -34,6 +41,7 @@ void UKozmoSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Nova = MakeUnique<kozmo::nova::Nova>(*Game);      // Game nesnesi yeni oyun/yüklemede yerinde güncellenir
 	SubscribeEvents();
 	NewGame(TEXT("AETHER"));
+	LoadSettings();
 	LoadPresetDesign(TEXT("f9"));
 	SetQuality(KozmoGraphics::Recommend(QualityReason));   // ilk açılışta donanıma göre öneri
 	TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UKozmoSubsystem::TickGame));
@@ -86,6 +94,16 @@ void UKozmoSubsystem::NewGame(const FString& Agency)
 		Game->research().add_points(1e6, nullptr);
 	}
 	Messages.Reset();
+	AgencyBase = kozmo::agency::Base();
+	ContractBoard = kozmo::contracts::Board();
+	SatFleet = kozmo::sats::Fleet();
+	CrewRoster = kozmo::crew::Roster();
+	Civilization = kozmo::civ::Civilization();
+	OrbitalStation = MakeUnique<kozmo::station::Station>(kozmo::station::iss_like());
+	for (const char* N : {"Ayşe Yıldız", "Burak Demir", "Cemre Kaya", "Deniz Aksoy"}) (void)CrewRoster.hire(N, MgmtRng);
+	ContractBoard.refresh(0, AgencyBase.capabilities().contract_slots, MgmtRng);
+	LastManagedDay = 0;
+	NewsFeed.report(std::string("Yeni ajans kuruldu: ") + KozmoStd(Agency), 0);
 	Push(FString::Printf(TEXT("Yeni oyun: %s"), *Agency));
 }
 
@@ -142,6 +160,7 @@ bool UKozmoSubsystem::TickGame(float DeltaTime)
 	{
 		// kare başına en fazla 2 oyun günü: yavaş karelerde simülasyon patlamasın
 		Game->advance(FMath::Min<double>(DeltaTime * DaysPerSecond, 2.0));
+		if (Game->day() - LastManagedDay >= 1.0) ManageDaily();
 	}
 	return true;  // ticker kalsın
 }
@@ -307,9 +326,149 @@ FString UKozmoSubsystem::SlotPath(const FString& SlotName) const
 	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Kozmo"), SlotName + TEXT(".json"));
 }
 
+void UKozmoSubsystem::ManageDaily()
+{
+	const double Day = Game->day();
+	for (const auto& M : AgencyBase.advance(Day, Game->wallet())) Push(KozmoStr(M));
+	for (const auto& M : ContractBoard.expire(Day, Game->wallet())) Push(KozmoStr(M));
+	ContractBoard.refresh(Day, AgencyBase.capabilities().contract_slots, MgmtRng);
+	const double Solar = kozmo::solar::density_factor(kozmo::solar::year_from_game_day(Day));
+	const double Income = SatFleet.advance(Day - LastManagedDay, Solar, MgmtRng);
+	if (Income > 0) Game->wallet().earn(Income, "Uydu hizmet geliri", Day);
+	if (OrbitalStation) for (const auto& W : OrbitalStation->advance_days(Day - LastManagedDay, Solar).warnings) Push(KozmoStr(OrbitalStation->name() + ": " + W));
+	for (const auto& M : Civilization.update(*Game)) Push(KozmoStr(M));
+	(void)CrewRoster.train(8.0 * (Day - LastManagedDay) * AgencyBase.capabilities().training_speed);
+	CrewRoster.rest(16.0 * (Day - LastManagedDay));
+	kozmo::progress::Snapshot Snap;
+	Snap.colonies = static_cast<int>(Game->colonies().size());
+	for (const auto& [Id, C] : Game->colonies()) Snap.population += C.population();
+	Snap.missions = static_cast<int>(Game->missions().size());
+	Snap.research_done = static_cast<int>(Game->research().unlocked_list().size());
+	for (const auto& C : SatFleet.constellations()) Snap.satellites += C.active;
+	Snap.max_base = AgencyBase.max_base();
+	Snap.credits = Game->wallet().balance();
+	Snap.day = Day;
+	for (const auto& K : AchievementTracker.update(Snap))
+		for (const auto& A : kozmo::progress::achievements())
+			if (A.key == K) Push(TEXT("BAŞARIM: ") + KozmoStr(A.title));
+	LastManagedDay = Day;
+}
+
+FString UKozmoSubsystem::SettingsPath() const { return FPaths::ProjectSavedDir() / TEXT("kozmo_ayarlar.json"); }
+
+FString UKozmoSubsystem::ApplySettings()
+{
+	const auto Fixed = UserSettings.validate();
+	const auto Conflicts = kozmo::settings::key_conflicts(UserSettings.keys);
+	FFileHelper::SaveStringToFile(KozmoStr(UserSettings.to_json().dump()), *SettingsPath(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	FString S = TEXT("Ayarlar kaydedildi");
+	if (!Fixed.empty()) S += FString::Printf(TEXT(" (%d değer sınırlandı)"), static_cast<int32>(Fixed.size()));
+	for (const auto& C : Conflicts) S += TEXT("\nTuş çakışması: ") + KozmoStr(C.first) + TEXT(" / ") + KozmoStr(C.second);
+	return S;
+}
+
+void UKozmoSubsystem::LoadSettings()
+{
+	FString Text;
+	if (!FFileHelper::LoadFileToString(Text, *SettingsPath())) return;
+	auto J = kozmo::json::parse(KozmoStd(Text));
+	if (!J.ok()) return;
+	auto R = kozmo::settings::Settings::from_json(J.value());
+	if (R.ok()) UserSettings = R.value();
+}
+
+FString UKozmoSubsystem::GetManagementText() const
+{
+	const auto Cap = AgencyBase.capabilities();
+	FString S = FString::Printf(TEXT("ÜS: rampa %d, en büyük roket %.0f t, eşzamanlı görev %d, araştırma x%.2f, iletişim %.0f milyon km, NOVA seviye %d, günlük gider %.0f\n"),
+		Cap.pads, Cap.max_liftoff_t, Cap.concurrent_missions, Cap.research_speed, Cap.comms_range_km / 1e6, Cap.nova_level, AgencyBase.upkeep_per_day());
+	for (int32 i = 0; i < kozmo::agency::kFacilityCount; ++i)
+	{
+		const auto F = static_cast<kozmo::agency::Facility>(i);
+		S += FString::Printf(TEXT("  %d) %s: %d/%d\n"), i, *KozmoStr(kozmo::agency::spec(F).name), AgencyBase.level(F), kozmo::agency::spec(F).max_level);
+	}
+	S += FString::Printf(TEXT("SÖZLEŞMELER (itibar %%%.0f):\n"), ContractBoard.reputation() * 100);
+	for (const auto& C : ContractBoard.contracts())
+		if (C.status == kozmo::contracts::Status_::Offered || C.status == kozmo::contracts::Status_::Accepted)
+			S += FString::Printf(TEXT("  #%d %s: %.2f t -> %s, ödül %.0f, son gün %.0f [%s]\n"), C.id, *KozmoStr(C.client), C.payload_t, *KozmoStr(kozmo::contracts::to_string(C.dest)),
+				C.reward, C.deadline_day, *KozmoStr(kozmo::contracts::to_string(C.status)));
+	for (const auto& C : SatFleet.constellations())
+		S += FString::Printf(TEXT("UYDU %s: %d etkin, kapsama %%%.0f, %.0f kredi/gün\n"), *KozmoStr(C.name), C.active, C.coverage() * 100, C.revenue_per_day());
+	const auto M = Civilization.measure(*Game);
+	S += FString::Printf(TEXT("MEDENİYET: %s, nüfus %d, istikrar %%%.0f, politika: %s\n"), *KozmoStr(kozmo::civ::to_string(M.era)), M.population, M.stability * 100,
+		*KozmoStr(kozmo::civ::to_string(Civilization.policy())));
+	if (OrbitalStation)
+		S += FString::Printf(TEXT("İSTASYON %s: %.1f km, %d/%d mürettebat, sarf %.0f gün\n"), *KozmoStr(OrbitalStation->name()), OrbitalStation->altitude() / 1000.0,
+			OrbitalStation->crew(), OrbitalStation->crew_capacity(), OrbitalStation->days_of_supplies());
+	S += FString::Printf(TEXT("EKİP: %d astronot, başarım %d/%d"), static_cast<int32>(CrewRoster.astronauts().size()), AchievementTracker.count(),
+		static_cast<int32>(kozmo::progress::achievements().size()));
+	return S;
+}
+
+FString UKozmoSubsystem::UpgradeFacility(int32 F)
+{
+	if (F < 0 || F >= kozmo::agency::kFacilityCount) return TEXT("Geçersiz tesis");
+	auto St = AgencyBase.upgrade(static_cast<kozmo::agency::Facility>(F), Game->wallet(), Game->day());
+	return St.ok() ? TEXT("Yükseltme başladı") : KozmoStr(St.error().message);
+}
+
+FString UKozmoSubsystem::AcceptContract(int32 Id)
+{
+	auto St = ContractBoard.accept(Id, AgencyBase.capabilities().concurrent_missions);
+	return St.ok() ? TEXT("Sözleşme kabul edildi") : KozmoStr(St.error().message);
+}
+
+FString UKozmoSubsystem::LaunchConstellation(int32 Purpose, int32 Orbit, int32 Count)
+{
+	if (Purpose < 0 || Purpose > 3 || Orbit < 0 || Orbit > 3 || Count <= 0) return TEXT("Geçersiz takımyıldızı");
+	const double Cost = 2000.0 * Count;   // uydu + fırlatma payı (oyun ölçeği, kredi)
+	if (!Game->wallet().spend(Cost, "Uydu fırlatma", Game->day()).ok()) return TEXT("Yetersiz bakiye");
+	auto Id = SatFleet.create(std::string("Takımyıldızı ") + std::to_string(SatFleet.constellations().size() + 1), static_cast<kozmo::sats::Purpose>(Purpose),
+		static_cast<kozmo::sats::Orbit>(Orbit), 300);
+	if (!Id.ok()) return KozmoStr(Id.error().message);
+	(void)SatFleet.deploy(Id.value(), Count, Game->day());
+	return FString::Printf(TEXT("%d uydu %s yörüngesine yerleştirildi"), Count, *KozmoStr(kozmo::sats::to_string(static_cast<kozmo::sats::Orbit>(Orbit))));
+}
+
+FString UKozmoSubsystem::HireAstronaut(const FString& Name)
+{
+	if (static_cast<int32>(CrewRoster.astronauts().size()) >= AgencyBase.capabilities().astronaut_capacity) return TEXT("Astronot merkezi kapasitesi dolu");
+	const int Id = CrewRoster.hire(KozmoStd(Name), MgmtRng);
+	(void)CrewRoster.enroll(Id, "ascan");
+	return FString::Printf(TEXT("%s işe alındı; temel eğitime başladı"), *Name);
+}
+
+FString UKozmoSubsystem::SetPolicy(int32 P)
+{
+	if (P < 0 || P > static_cast<int32>(kozmo::civ::Policy::Expansion)) return TEXT("Geçersiz politika");
+	(void)Civilization.set_policy(static_cast<kozmo::civ::Policy>(P));
+	return KozmoStr(std::string(kozmo::civ::to_string(Civilization.policy())) + ": " + kozmo::civ::describe(Civilization.policy()));
+}
+
+FString UKozmoSubsystem::PlanMission(const FString& Target, int32 Crew)
+{
+	auto P = kozmo::planner::plan(*Game, KozmoStd(Target), Crew, 10.0, Target == TEXT("moon") ? 14.0 : 30.0, true);
+	return P.ok() ? KozmoStr(P.value().summary()) : KozmoStr(P.error().message);
+}
+
 bool UKozmoSubsystem::SaveToSlot(const FString& SlotName)
 {
-	const bool bOk = FFileHelper::SaveStringToFile(KozmoStr(Game->save()), *SlotPath(SlotName),
+	// sürümlü zarf (v3): oyun + ajans + uydular + sözleşmeler + ekip + medeniyet + istasyon + ilerleme; FNV sağlama
+	kozmo::json::Value P = kozmo::json::Value::object();
+	P.set("game", kozmo::json::parse(Game->save()).value());
+	P.set("agency", AgencyBase.to_json());
+	P.set("satellites", SatFleet.to_json());
+	P.set("contracts", ContractBoard.to_json());
+	P.set("crew", CrewRoster.to_json());
+	P.set("civ", Civilization.to_json());
+	if (OrbitalStation) P.set("station", OrbitalStation->to_json());
+	kozmo::json::Value Prog = kozmo::json::Value::object();
+	Prog.set("achievements", AchievementTracker.to_json());
+	Prog.set("tutorial", TutorialSteps.to_json());
+	Prog.set("news", NewsFeed.to_json());
+	P.set("progress", Prog);
+	P.set("settings", UserSettings.to_json());
+	const bool bOk = FFileHelper::SaveStringToFile(KozmoStr(kozmo::savefmt::wrap(P)), *SlotPath(SlotName),
 		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
 	Push(bOk ? FString::Printf(TEXT("Kaydedildi: %s"), *SlotName) : TEXT("Kayıt yazılamadı"));
 	return bOk;
@@ -319,8 +478,21 @@ FString UKozmoSubsystem::LoadFromSlot(const FString& SlotName)
 {
 	FString Text;
 	if (!FFileHelper::LoadFileToString(Text, *SlotPath(SlotName))) return TEXT("Kayıt bulunamadı");
-	auto R = Game->load(KozmoStd(Text));
+	auto L = kozmo::savefmt::unwrap(KozmoStd(Text));   // sağlama + eski sürüm taşıma (yalnız bellekte; dosya değişmez)
+	if (!L.ok()) return KozmoStr(L.error().message);
+	const auto& P = L.value().payload;
+	auto R = Game->load(P["game"].dump());
 	if (!R.ok()) return KozmoStr(R.error().message);
+	if (P["agency"].has("levels")) (void)AgencyBase.from_json(P["agency"]);
+	if (P["satellites"].has("list")) (void)SatFleet.from_json(P["satellites"]);
+	if (P["contracts"].has("list")) (void)ContractBoard.from_json(P["contracts"]);
+	if (P.has("crew")) (void)CrewRoster.from_json(P["crew"]);
+	if (P.has("civ")) (void)Civilization.from_json(P["civ"]);
+	if (P.has("station"))
+		if (auto S = kozmo::station::Station::from_json(P["station"]); S.ok()) OrbitalStation = MakeUnique<kozmo::station::Station>(S.value());
+	if (P["progress"].has("achievements")) (void)AchievementTracker.from_json(P["progress"]["achievements"]);
+	LastManagedDay = Game->day();
+	for (const auto& N : L.value().notes) Push(KozmoStr(N));
 	Push(FString::Printf(TEXT("Yüklendi: %s"), *SlotName));
 	return FString();
 }

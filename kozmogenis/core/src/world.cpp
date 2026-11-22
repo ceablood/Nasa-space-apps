@@ -163,6 +163,7 @@ Status Expedition::enter_craft() {
     if (pad && std::hypot(player_.x - pad->x, player_.y - pad->y) > 25) return make_error(ErrorCode::Infeasible, "Araç çok uzakta (iniş alanına yürü)");
     player_.mode = PlayerMode::InCabin;
     player_.route.clear();
+    quest_event(quest::Goal::ReturnToCraft);
     return ok_status();
 }
 
@@ -200,6 +201,7 @@ Status Expedition::enter_building(const std::string& id) {
     player_.y = b->y;
     player_.route.clear();
     push(b->name + " içine girildi" + std::string(b->pressurized ? " (hava kilidi, basınçlı)" : ""));
+    quest_event(quest::Goal::EnterDistrict, static_cast<int>(b->district));
     return ok_status();
 }
 
@@ -240,6 +242,7 @@ Result<std::string> Expedition::change_floor(int floor, bool use_elevator) {
 Status Expedition::collect_sample() {
     if (player_.mode != PlayerMode::OnFoot) return make_error(ErrorCode::Infeasible, "Numune dışarıda toplanır");
     ++player_.samples;
+    quest_event(quest::Goal::CollectSamples);
     push(env_.name + " yüzeyinden numune toplandı (" + std::to_string(player_.samples) + ")");
     return ok_status();
 }
@@ -258,7 +261,10 @@ Result<std::string> Expedition::talk(int id, const std::string& topic) {
     if (!c) return make_error(ErrorCode::NotFound, "Burada koloni yok");
     auto here = npcs_here();
     if (std::find(here.begin(), here.end(), id) == here.end()) return make_error(ErrorCode::Infeasible, "Konuşmak için yanına git");
-    return society_.talk(id, topic, game_.day(), *c);
+    auto r = society_.talk(id, topic, game_.day(), *c);
+    if (r)
+        if (const colony::Colonist* k = c->colonist(id)) quest_event(quest::Goal::TalkToJob, static_cast<int>(k->job));
+    return r;
 }
 
 Result<std::string> Expedition::use(const std::string& item) {
@@ -278,6 +284,7 @@ Result<std::string> Expedition::use(const std::string& item) {
                                                      (b->elevator ? " (asansörü kullan)" : " (merdiveni kullan)"));
     colony::Colony* c = colony();
     if (!c) return make_error(ErrorCode::NotFound, "Koloni yok");
+    quest_event(quest::Goal::UseItem, 0, item);
     const std::string& a = it->action;
     if (a == "map") {
         std::string s = "Yerleşim: " + std::string(life::to_string(settlement_.layout())) + ", " + std::to_string(settlement_.buildings().size()) + " bölge:";
@@ -313,6 +320,7 @@ Result<std::string> Expedition::use(const std::string& item) {
         if (c->module_condition(colony::ModuleType::SolarArray) < 0.8) {
             for (int i = 0; i < 8; ++i) c->repair(colony::ModuleType::SolarArray, 0.35);
             push("Oyuncu enerji tesisindeki arızayı giderdi");
+            quest_event(quest::Goal::RepairPower);
             update_events();
             return std::string("Arıza giderildi: güneş dizileri %" + f0(c->module_condition(colony::ModuleType::SolarArray) * 100) + " durumda.");
         }
@@ -324,6 +332,7 @@ Result<std::string> Expedition::use(const std::string& item) {
         c->add_resource("rp", 25.0);
         society_.raise(life::ColonyEvent::Discovery, game_.day(), *c, settlement_);
         push("Numune analiz edildi: +25 araştırma puanı, bilim ekibi laboratuvara çağrıldı");
+        quest_event(quest::Goal::AnalyzeSample);
         return std::string("Numune " + env_.name + " kökenli: analiz tamam, +25 araştırma puanı. Bilim insanları incelemeye geliyor.");
     }
     if (a == "samples") return std::string("Numune dolabı: oyuncuda " + std::to_string(player_.samples) + " numune");
@@ -418,6 +427,7 @@ void Expedition::update_construction(double dt_h) {
     construction_.work(society_.take_construction_labor());
     for (auto t : construction_.complete(*c, game_.research().unlocked_list())) {
         push(std::string("İnşaat tamamlandı: ") + colony::module_name(t));
+        quest_event(quest::Goal::BuildModule, static_cast<int>(t));
         settlement_.refresh(*c);
     }
     for (const auto& q : construction_.projects())
@@ -465,6 +475,7 @@ Result<std::string> Expedition::analyze_onboard() {
     --player_.samples;
     game_.research().add_points(25.0, &game_.bus());
     push("Araç laboratuvarında numune analizi: +25 araştırma puanı");
+    quest_event(quest::Goal::AnalyzeSample);
     return std::string(env_.name + " numunesi analiz edildi: +25 araştırma puanı (etkin araştırmaya eklendi).");
 }
 
@@ -475,6 +486,37 @@ Result<life::MissionReport> Expedition::assign_mission(life::MissionKind k, colo
     auto r = society_.assign({k, job, where, hours, description}, count, game_.day(), *c, settlement_);
     push(std::string("Görev: ") + description + " — kabul " + std::to_string(r.accepted.size()) + ", sorun " + std::to_string(r.problems.size()));
     return r;
+}
+
+void Expedition::quest_event(quest::Goal g, int arg, const std::string& item, int amount) {
+    for (const auto& c : quests_.notify({g, arg, item, amount}, hours_)) {
+        completed_.push_back(c);
+        if (c.reward.credits > 0) game_.wallet().earn(c.reward.credits, "Görev ödülü: " + c.title, game_.day());
+        if (c.reward.research > 0) game_.research().add_points(c.reward.research, &game_.bus());
+        if (c.giver > 0 && c.reward.affinity != 0) {
+            life::Relation& r = society_.relation(life::Society::kPlayer, c.giver);
+            r.affinity = std::clamp(r.affinity + c.reward.affinity, -1.0, 1.0);
+            if (life::Npc* n = society_.npc(c.giver)) society_.remember(*n, {game_.day(), life::Society::kPlayer, "Oyuncu verdiğim görevi bitirdi: " + c.title, 0.8, 0.9});
+        }
+        push("Görev tamamlandı: " + c.title + " (+" + f0(c.reward.credits) + " kredi)");
+    }
+}
+
+Result<int> Expedition::accept_quest(const std::string& key, int giver) {
+    auto r = quests_.offer(key, giver, hours_);
+    if (r) push("Görev alındı: " + quests_.find(r.value())->title);
+    return r;
+}
+
+Result<dialogue::Conversation> Expedition::converse(int npc) {
+    colony::Colony* c = colony();
+    if (!c) return make_error(ErrorCode::NotFound, "Burada koloni yok");
+    auto here = npcs_here();
+    if (std::find(here.begin(), here.end(), npc) == here.end()) return make_error(ErrorCode::Infeasible, "Konuşmak için yanına git");
+    dialogue::Conversation conv(npc, society_, *c, quests_, game_.day(), hours_);
+    if (!conv.active()) return make_error(ErrorCode::NotFound, "Bu kişiyle konuşulamıyor");
+    if (const colony::Colonist* k = c->colonist(npc)) quest_event(quest::Goal::TalkToJob, static_cast<int>(k->job));
+    return conv;
 }
 
 void Expedition::fail_power() {
@@ -539,7 +581,10 @@ void Expedition::tick(double dt_s) {
         if (craft_.docking().active) craft_.step_docking(dt_s);
         if (before != craft_.phase()) {
             if (craft_.phase() == craft::FlightPhase::Landed) push("İniş tamam: temas hızı " + f1(craft_.touchdown_speed()) + " m/s");
-            else if (craft_.phase() == craft::FlightPhase::Orbit) push("Yörüngeye girildi: " + f0(craft_.altitude() / 1000.0) + " km, " + f0(craft_.horizontal_speed()) + " m/s");
+            else if (craft_.phase() == craft::FlightPhase::Orbit) {
+                push("Yörüngeye girildi: " + f0(craft_.altitude() / 1000.0) + " km, " + f0(craft_.horizontal_speed()) + " m/s");
+                quest_event(quest::Goal::ReachOrbit);
+            }
             else push("ARAÇ YÜZEYE ÇARPTI (" + f0(craft_.touchdown_speed()) + " m/s)");
         }
     }
@@ -666,6 +711,8 @@ std::vector<std::string> Expedition::tasks() const {
         for (const auto& i : society_.issues(*c)) t.push_back("Ekip: " + i);
     }
     if (player_.samples > 0) t.push_back("Numuneleri laboratuvarda analiz et");
+    for (const auto& q : quests_.quests())
+        if (q.state == quest::State::Active) t.push_back("Görev: " + q.title + " (%" + f0(q.progress() * 100) + ")");
     if (!craft_.warnings().empty()) t.push_back("Araç uyarılarını gider");
     if (t.empty()) t.push_back("Yüzeyden numune topla ve laboratuvara getir");
     return t;
@@ -690,6 +737,7 @@ json::Value Expedition::to_json() const {
     v.set("hours", hours_);
     v.set("power_alarm", power_alarm_);
     v.set("water_found", water_found_);
+    v.set("quests", quests_.to_json());
     v.set("construction", construction_.to_json());
     return v;
 }
@@ -716,6 +764,10 @@ Status Expedition::from_json(const json::Value& v) {
     hours_ = v["hours"].as_number();
     power_alarm_ = v["power_alarm"].as_bool();
     water_found_ = v["water_found"].as_bool();
+    if (v.has("quests")) {
+        auto qs = quests_.from_json(v["quests"]);
+        if (!qs) return qs;
+    }
     if (v.has("construction")) {
         auto cs = construction_.from_json(v["construction"]);
         if (!cs) return cs;

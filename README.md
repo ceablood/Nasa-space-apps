@@ -40,7 +40,7 @@ fırlat, yolculuğu yönet, gezegenlere in, koloni kur ve en sonunda
 
 ## Sürüm 3 yenilikleri
 
-- **Tarayıcı sürümü:** Oyun pygbag ile WebAssembly'ye derlenip GitHub Pages'te yayınlanır (`.github/workflows/pages.yml`).
+- **Tarayıcı sürümü:** Sitenin ana sayfası artık KOZMOGENİS'in C++ çekirdeğiyle (WebAssembly + Three.js) çalışan 3B sürümüdür (`kozmogenis/web/`); bu Python sürümü `/prototip/` altında yayınlanır (`.github/workflows/pages.yml`).
 - **Sinematik katman her yerde:** Hacimsel ışık huzmeleri, pus, toz zerreleri, fırça dokusu ve tamamlayıcı
   renk uyumu artık bütün ekranlarda (hangar, AR-GE, ekip, görevler, depo, görev kontrol, ajans, yolculuk, üs,
   NOVA odası). Tüm ekrana yumuşak parlama (bloom). Roket, güçlendirici ve asteroitlerde renkli kenar ışığı,

@@ -9,6 +9,8 @@
 
 #include "kozmo/challenge.hpp"
 #include "kozmo/construction.hpp"
+#include "kozmo/dialogue.hpp"
+#include "kozmo/quest.hpp"
 #include "kozmo/game.hpp"
 #include "kozmo/life.hpp"
 #include "kozmo/spacecraft.hpp"
@@ -97,6 +99,14 @@ public:
     Result<life::MissionReport> assign_mission(life::MissionKind k, colony::Job job, life::District where, int count, double hours,
                                                const std::string& description);
 
+    // --- görevler ve dallanan diyalog
+    quest::Log& quests() { return quests_; }
+    const quest::Log& quests() const { return quests_; }
+    Result<int> accept_quest(const std::string& template_key, int giver = -1);
+    // yakındaki NPC ile dallanan konuşma başlat (koşullar ilişki/hafıza/ihtiyaç/görev durumuna bağlı)
+    Result<dialogue::Conversation> converse(int npc_id);
+    const std::vector<quest::Completion>& completed_quests() const { return completed_; }
+
     // --- senaryo olayları
     void fail_power();                              // enerji tesisi arızası (§7.3)
     void evacuate();                                // tüm NPC'ler sığınağa (NOVA onayı sonrası)
@@ -138,6 +148,9 @@ private:
     bool in_orbit_ = false;
     bool water_found_ = false;
     build::Manager construction_;
+    quest::Log quests_;
+    std::vector<quest::Completion> completed_;
+    void quest_event(quest::Goal g, int arg = 0, const std::string& item = "", int amount = 1);
     void update_construction(double dt_h);
 };
 

@@ -27,7 +27,8 @@ enum class Intent {
     Unknown, Help, Status, PlanetInfo, LaunchWindow, RocketAdvice, ColonyAdvice, ResearchAdvice,
     StartResearch, LaunchColonyKit, Confirm, Cancel, Economy,
     VehicleStatus, PlanetRisk, ProductionDiagnosis, Evacuate,     // V41: sefer (araç/gezegen/koloni) bağlamı
-    DamageReport, AssignTask, BuildModule, FoundColony
+    DamageReport, AssignTask, BuildModule, FoundColony,
+    Quests, AsteroidThreat, Civilization, MissionPlan
 };
 const char* intent_name(Intent i);
 

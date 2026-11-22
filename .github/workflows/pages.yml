@@ -1,4 +1,6 @@
-# KOZMOGENİS'i tarayıcı sürümü olarak derler (pygbag / WebAssembly) ve GitHub Pages'te yayınlar.
+# KOZMOGENİS web sürümünü GitHub Pages'te yayınlar.
+#  /           -> kozmogenis/web: Unreal sürümüyle aynı KozmoCore C++ çekirdeği (WebAssembly) + Three.js 3B istemci
+#  /prototip/  -> eski Python (pygbag) prototipi
 # Bir kez: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions" seçilmeli.
 name: Web sürümünü yayınla (GitHub Pages)
 
@@ -13,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -24,19 +26,33 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Web istemcisini doğrula (wasm ve dosyalar mevcut)
+        run: |
+          for f in index.html css/style.css js/main.js js/core.js js/scene.js js/hud.js js/loading.js vendor/three.module.min.js dist/kozmo.js dist/kozmo.wasm; do
+            test -s "kozmogenis/web/$f" || { echo "eksik: $f"; exit 1; }
+          done
+          head -c 4 kozmogenis/web/dist/kozmo.wasm | od -An -tx1 | grep -q "00 61 73 6d" || { echo "kozmo.wasm geçerli değil"; exit 1; }
       - name: pygbag kur
         run: python -m pip install pygbag==0.9.3
-      - name: Web paketi derle
+      - name: Python prototipini derle
         run: |
           mkdir -p web_src/aetherx-x
           cp -r main.py aetherx web_src/aetherx-x/
           find web_src -name __pycache__ -prune -exec rm -rf {} +
           python -m pygbag --build --title KOZMOGENIS --app_name aetherx web_src/aetherx-x
+      - name: Site klasörünü birleştir
+        run: |
+          mkdir -p _site
+          cp -r kozmogenis/web/index.html kozmogenis/web/css kozmogenis/web/js kozmogenis/web/vendor kozmogenis/web/dist _site/
+          cp -r web_src/aetherx-x/build/web _site/prototip
+          touch _site/.nojekyll
+          du -sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web_src/aetherx-x/build/web
+          path: _site
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: build
     runs-on: ubuntu-latest
     environment:
