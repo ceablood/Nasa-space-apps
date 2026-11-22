@@ -288,4 +288,7 @@ ROWS = [
     ("MÜZIK", "MUSIC"), ("SINEMATIK", "CINEMATIC"), ("JEOLOJI", "GEOLOGY"), ("ARAYÜZ", "INTERFACE"),
     ("[Yeni yaşam formu keşfedildi: {0}]", "[New lifeform discovered: {0}]"), ("[Yeni biyom keşfedildi ({0})]", "[New biome discovered ({0})]"),
     ("[{0} ({1})]", "[{0} ({1})]"), ("[{0}: {1}]", "[{0}: {1}]"),
+    # ---------------------------------------------------------------- giriş ekranı
+    ("Dil", "Language"), ("Orion Space", "Orion Space"), ("Horizon Space Agency", "Horizon Space Agency"),
+    ("Nova Space", "Nova Space"), ("Stellar Frontier", "Stellar Frontier"),
 ]
