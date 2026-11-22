@@ -156,6 +156,8 @@ class LandingScene(Scene):
         self.cam = [self.L.x, self.L.y]
         self.callouts = {1000: False, 500: False, 200: False, 100: False, 30: False, 10: False}
         self.warn_t = 0.0
+        self._eng_on = False
+        self._eng_vol = 0.0
         self.warn = False
         self.hard = False
         self.landed_pad = False
@@ -280,9 +282,10 @@ class LandingScene(Scene):
         ground = self.terrain.at(L.x)
         alt = L.y - ground
         # efektler
+        # motor sesi: sürekli döngü, şiddeti itkiyle (eskiden 0,09 sn'de bir "vuruş" efekti çatırtı yapıyordu).
+        # Ay'da dışarıda ses yoktur; duyulan, araç gövdesinden kabine iletilen uğultudur.
+        self.engine_sound(L.throttle)
         if L.throttle > 0:
-            if self.app.audio:
-                self.app.audio.play("hit", 0.08, min_gap=0.09)
             if alt < 45:
                 k = 1 - alt / 45
                 gx, gy = self.to_screen(L.x, ground)
@@ -304,6 +307,28 @@ class LandingScene(Scene):
         self.scale = lerp(self.scale, want, 1 - math.exp(-dt * 3.5))
         self.cam[0] = lerp(self.cam[0], L.x, 1 - math.exp(-dt * 12))
         self.cam[1] = lerp(self.cam[1], (L.y + ground) / 2 + 6, 1 - math.exp(-dt * 12))
+
+    def engine_sound(self, thr):
+        au = self.app.audio
+        if not au or not getattr(au, "ok", False):
+            return
+        if thr > 0.02 and not self._eng_on:
+            au.loop("engine", 0.0, fade=250)
+            self._eng_on = True
+            cae = getattr(self.app, "cae", None)
+            if cae and cae.bus:
+                cae.bus.publish("EngineStart", planet=self.key)
+        if self._eng_on:
+            k = getattr(self, "_eng_vol", 0.0)
+            k += (thr * 0.75 - k) * 0.15
+            self._eng_vol = k
+            try:
+                au.loop_ch.set_volume(k * au.sfx_vol)
+            except Exception:
+                pass
+            if thr <= 0.02 and k < 0.02:
+                au.stop_loop(300)
+                self._eng_on = False
 
     def guidance(self, L=None):
         """NOVA iniş desteği: iniş alanına frenleme profiliyle yaklaş (vx² = 2·a·mesafe), yatay hız
@@ -402,6 +427,12 @@ class LandingScene(Scene):
         self.end_t = 0.0
         L.vx = L.vy = 0.0
         L.throttle = 0.0
+        if self.app.audio and getattr(self.app.audio, "ok", False):
+            self.app.audio.stop_loop(400)
+        self._eng_on = False
+        cae = getattr(self.app, "cae", None)
+        if cae and cae.bus and self.state == "landed":
+            cae.bus.publish("PlanetLanding", planet=self.key, soft=not getattr(self, "hard", False))
 
     def finish(self):
         """Sonucu görev sonucuna işler ve sonuç ekranına geçer."""
@@ -433,6 +464,9 @@ class LandingScene(Scene):
         self.app.go("results")
 
     def exit(self):
+        if self.app.audio and getattr(self.app.audio, "ok", False):
+            self.app.audio.stop_loop(300)
+        self._eng_on = False
         self._done = False
         self.hard = False
         self.landed_pad = False

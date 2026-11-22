@@ -1,0 +1,26 @@
+# AETHER-X (Python) testleri: Yaşam Motoru + Kozmik Ses Motoru (ses aygıtı/pencere gerekmez)
+name: AETHER-X testleri
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["aetherx/**", "tests/**", "main.py", ".github/workflows/aetherx-tests.yml"]
+  pull_request:
+    paths: ["aetherx/**", "tests/**", "main.py", ".github/workflows/aetherx-tests.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install numpy pygame-ce
+      - name: Birim testleri
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
+        run: python -m unittest discover -s tests -v
+      - name: Derleme denetimi
+        run: python -m compileall -q aetherx main.py

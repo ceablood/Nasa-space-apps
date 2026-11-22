@@ -6,6 +6,44 @@ Ana oyun bu Python/pygame sürümüdür. Deneysel 3B sürüm (KOZMOGENİS C++ ç
 https://ceablood.github.io/Nasa-space-apps/3d/ · Unreal Engine 5 sürümü ve C++ çekirdeği: [`kozmogenis/`](kozmogenis/)
 (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.4 — Yaşayan Gezegenler ve Kozmik Ses Motoru
+
+Yeni **YAŞAM** ekranı (üst menü). Kod: [`aetherx/life/`](aetherx/life/) (KOZMOGENİS Life Engine),
+[`aetherx/cae/`](aetherx/cae/) (Cosmic Audio Engine), arayüz [`aetherx/scenes/life.py`](aetherx/scenes/life.py),
+testler [`tests/test_life_audio.py`](tests/test_life_audio.py) (25 test; CI: `AETHER-X testleri`).
+
+- **Cızırtı giderildi.** Ortam seslerinin tabanı beyaz gürültüydü; kayan ortalama süzgeç tizleri geçirdiği için
+  sürekli tıslama vardı (ör. koloni sesinde enerjinin %1,9'u 8 kHz üstünde). Gürültü artık frekans uzayında bant
+  sınırlı üretiliyor (%0,00), döngüler dikişsiz; ses tamponu 512 → 2048 (tarayıcıda 4096) örnek ve `pre_init`
+  artık `pygame.init()`'ten önce; sert kırpma yerine yumuşak sınırlayıcı; iniş motoru 0,09 sn'de bir çalan
+  "vuruş" yerine sürekli motor döngüsü.
+- **Gezegen çevresi (NASA):** NSSDC bilgi tablolarından kütle, yarıçap, yerçekimi, dönüş/yörünge, Güneş ışınımı,
+  manyetik alan, basınç, **atmosfer bileşimi** (Mars CO₂ %95,1 · N₂ %2,59 · Ar %1,94; Venüs CO₂ %96,5; Dünya N₂ %78,08 ·
+  O₂ %20,95; Jüpiter H₂ %89,8 · He %10,2), sıcaklık. Ses hızı ideal gaz yasasından: Dünya 341 m/s, Mars 232 m/s
+  (Perseverance ölçümü ~240 m/s), Ay'da vakum.
+- **Yaşanabilirlik ≠ yaşam:** 5 sınıf (elverişli / olası / aşırı / elverişsiz / yetersiz veri) ve gerekçeleri;
+  "yaşam bulundu mu" ayrı tutulur (NASA: yalnız Dünya).
+- **Yaşamın kökeni:** bilimsel hipotezler (hidrotermal baca, RNA dünyası, lipit kesecikleri, gölcükler, panspermi)
+  ile kurgusal senaryolar ayrı etiketli; küçük prebiyotik tepkime ağı (oyun modeli).
+- **Mikrop, bitki, hayvan, evrim, ekosistem:** genomlu türler; Lotka–Volterra besin ağı (Holling doyması, avcı
+  girişimi, Kleiber metabolik ölçeklemesi), döküntü ve ayrıştırıcılar, karbon/azot/oksijen/su döngüleri;
+  mutasyon, doğal seçilim, nötr sürüklenme, darboğaz, göçle izolasyon, türleşme, yok oluş.
+- **Dünya gerçek:** 20 gerçek canlı grubu (temsilî özelliklerle) ve yayımlanmış jeolojik tarihler (3,7 milyar yıl
+  önce ilk izler, Büyük Oksijenlenme, Kambriyen, 5 büyük yok oluş, K-Pg). Ay/Mars/Venüs/Jüpiter: "yaşam
+  bulunmamıştır"; isteğe bağlı kurgusal mikrobiyal senaryo. 6 kurgusal ötegezegen (Dünya benzeri, okyanus, buz,
+  volkanik, kurak, radyasyonlu) — bütün canlılar **KURGUSAL** etiketli.
+- **Çevresel olaylar:** volkan, meteor, kuraklık, buzul dönemi, aşırı sıcak, atmosfer, deniz seviyesi, radyasyon,
+  yıldız patlaması, fırtına → çevre + popülasyon + zaman çizelgesi + ses. Zaman ×1 yıl/sn … ×1 milyon yıl/sn.
+- **Kozmik Ses Motoru:** atmosfere göre rüzgâr/yağmur/gök gürültüsü (Mars ~20 dB kısık, tizleri sönük; Venüs yoğun
+  alçak frekans; Ay'da dış ses yok, yalnız araç içi), okyanus ve su altı, jeoloji, yalnız rüzgârda yaprak hışırtısı,
+  **popülasyon tabanlı canlı katmanı** ve türün biyolojisinden türetilen sesler (büyük beden = alçak ses), mikrobiyal
+  sesler "görsel-işitsel temsil" etiketli, motor sesi vakumda "sinematik" etiketli. Konumsal ses (yön, uzaklık,
+  mağara/su altı/kabin profili), olay yöneticisi (öncelik, yineleme koruması, ses bütçesi), dinamik müzik (yumuşak
+  geçiş, en kısa kalma süresi), 10 kategori ses ayarı, mono, kulaklık, altyazı, yüksek frekans azaltma, ani ses
+  sınırlama (ayarlar kaydedilir), bellek bütçeli önbellek, performans sayaçları.
+- **Ses Gözlemevi:** ortam katmanları, akustik profil, konumsal ses testi, olay → ses günlüğü (geliştirici),
+  performans ve ses varlığı künyeleri (hepsi özgün prosedürel sentez; lisans gerektiren kayıt yok).
+
 ## Sürüm 3.3 yenilikleri
 
 - **Yeni isim: AETHER-X.**
