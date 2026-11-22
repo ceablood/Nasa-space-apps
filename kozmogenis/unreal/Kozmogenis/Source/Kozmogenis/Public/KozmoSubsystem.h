@@ -14,6 +14,14 @@ THIRD_PARTY_INCLUDES_START
 #include "kozmo/universe.hpp"
 #include "kozmo/vehicle.hpp"
 #include "kozmo/world.hpp"
+#include "kozmo/agency.hpp"
+#include "kozmo/civ.hpp"
+#include "kozmo/contracts.hpp"
+#include "kozmo/crew.hpp"
+#include "kozmo/progression.hpp"
+#include "kozmo/satellites.hpp"
+#include "kozmo/settings.hpp"
+#include "kozmo/station.hpp"
 THIRD_PARTY_INCLUDES_END
 
 #include "KozmoGraphics.h"
@@ -117,6 +125,29 @@ public:
 	kozmo::world::Expedition* GetExpedition() { return Expedition.Get(); }
 	const kozmo::world::Expedition* GetExpedition() const { return Expedition.Get(); }
 
+	// --- Yönetim katmanı: ajans üssü, sözleşmeler, uydular, ekip, medeniyet, istasyon (çekirdekte test edildi) ---
+	kozmo::agency::Base& Base() { return AgencyBase; }
+	kozmo::contracts::Board& Contracts() { return ContractBoard; }
+	kozmo::sats::Fleet& Fleet() { return SatFleet; }
+	kozmo::crew::Roster& Roster() { return CrewRoster; }
+	kozmo::civ::Civilization& Civ() { return Civilization; }
+	kozmo::station::Station& Station() { return *OrbitalStation; }
+	kozmo::progress::Tracker& Achievements() { return AchievementTracker; }
+	kozmo::progress::Tutorial& Tutorial() { return TutorialSteps; }
+	kozmo::progress::News& News() { return NewsFeed; }
+	kozmo::settings::Settings& Settings() { return UserSettings; }
+	/** Ayarları doğrular, uygular (grafik/kamera/ses) ve Saved/kozmo_ayarlar.json dosyasına yazar. */
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Settings") FString ApplySettings();
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Settings") void LoadSettings();
+	/** Yönetim özet metni (ajans, sözleşmeler, uydular, medeniyet) — panel için */
+	UFUNCTION(BlueprintPure, Category = "Kozmo|Management") FString GetManagementText() const;
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString UpgradeFacility(int32 Facility);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString AcceptContract(int32 Id);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString LaunchConstellation(int32 Purpose, int32 Orbit, int32 Count);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString HireAstronaut(const FString& Name);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString SetPolicy(int32 Policy);
+	UFUNCTION(BlueprintCallable, Category = "Kozmo|Management") FString PlanMission(const FString& Target, int32 Crew);
+
 	// --- Grafik kalite profilleri (V30 §27) ---
 	UFUNCTION(BlueprintCallable, Category = "Kozmo|Graphics") void SetQuality(EKozmoQuality Q);
 	UFUNCTION(BlueprintPure, Category = "Kozmo|Graphics") FString GetQualityText() const;
@@ -145,6 +176,20 @@ private:
 	TUniquePtr<kozmo::world::Expedition> Expedition;
 	TUniquePtr<kozmo::nova::Nova> SliceNova;
 	float ExpeditionTimeScale = 1.f;
+	kozmo::agency::Base AgencyBase;
+	kozmo::contracts::Board ContractBoard;
+	kozmo::sats::Fleet SatFleet;
+	kozmo::crew::Roster CrewRoster;
+	kozmo::civ::Civilization Civilization;
+	TUniquePtr<kozmo::station::Station> OrbitalStation;
+	kozmo::progress::Tracker AchievementTracker;
+	kozmo::progress::Tutorial TutorialSteps;
+	kozmo::progress::News NewsFeed;
+	kozmo::settings::Settings UserSettings;
+	kozmo::Rng MgmtRng{20300101};
+	double LastManagedDay = 0;
+	void ManageDaily();
+	FString SettingsPath() const;
 	FString QualityReason;
 	void DesignChanged();
 };
