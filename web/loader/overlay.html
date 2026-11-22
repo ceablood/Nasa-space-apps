@@ -1,0 +1,21 @@
+<!-- AETHER-X yükleme katmanı: Python/pygame tarayıcıya inerken gösterilir. Gezegenler NASA haritalarıyla
+     (Blue Marble, LRO, Viking, Cassini) piksel başına döndürülen kürelerdir; sayılar NASA NSSDC bilgi tablosundan. -->
+<div id="kz">
+  <canvas id="kzsky"></canvas>
+  <div class="kz-frame"><i></i><i></i><i></i><i></i></div>
+  <div class="kz-top">
+    <div class="kz-kick">UZAY AJANSI · KOLONİ · MEDENİYET</div>
+    <h1 class="kz-title">AETHER-X</h1>
+    <div class="kz-sub">Gezegenler NASA görüntüleri ve NASA verileriyle</div>
+  </div>
+  <div class="kz-planets" id="kzplanets"></div>
+  <div class="kz-src">Görüntüler: NASA SVS Blue Marble · NASA LRO · NASA Mars Trek (Viking) · NASA/JPL Cassini — Veriler: NASA NSSDC Gezegen Bilgi Tablosu</div>
+  <div class="kz-load">
+    <div class="kz-stages" id="kzstages"></div>
+    <div class="kz-bar"><div id="kzfill"></div><div class="kz-shine"></div></div>
+    <div class="kz-meta"><span id="kzlabel">Başlatılıyor…</span><span id="kzpct"></span></div>
+  </div>
+  <div class="kz-fact" id="kzfact"></div>
+  <button class="kz-start" id="kzstart">BAŞLAMAK İÇİN DOKUN</button>
+  <div class="kz-foot">İlk açılışta Python, pygame ve numpy tarayıcıya iner (~20 MB); sonraki açılışlar hızlıdır. · <a href="3d/">deneysel 3B sürüm</a></div>
+</div>

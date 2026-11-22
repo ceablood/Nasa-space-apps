@@ -8,7 +8,7 @@ from pathlib import Path
 # ---------------------------------------------------------------------------
 # EKRAN
 # ---------------------------------------------------------------------------
-TITLE = "KOZMOGENİS  //  Uzay Ajansı Komuta Simülasyonu"
+TITLE = "AETHER-X  //  Uzay Ajansı Komuta Simülasyonu"
 W, H = 1600, 900            # mantıksal çözünürlük (SCALED ile pencereye sığar)
 FPS = 60
 TOPBAR_H = 64

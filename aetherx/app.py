@@ -115,9 +115,14 @@ class App:
         from . import paint
         from . import space3d as S3
         self.load_steps = []
+        self.load_planets = {}
         if not paint.is_ready("menu", (W + 48, H + 27)):
+            # her adım bir NASA dokusunu hazırlar; yükleme ekranı hazır olan gezegeni hemen gösterir
             self.load_steps = [("earth", lambda: S3.texture("earth", 1024)),
                                ("moon", lambda: S3.texture("moon", 512)),
+                               ("mars", lambda: S3.texture("mars", 512)),
+                               ("venus", lambda: S3.texture("venus", 512)),
+                               ("jupiter", lambda: S3.texture("jupiter", 512)),
                                ("menu", lambda: paint.warm("menu", (W + 48, H + 27)))]
         self.load_done = 0
         self.load_error = None
@@ -147,26 +152,85 @@ class App:
         self.load_t = 0.0
         threading.Thread(target=work, daemon=True).start()
 
+    LOAD_LABEL = {"earth": "Dünya · NASA Blue Marble + Black Marble", "moon": "Ay · NASA LRO renkli mozaiği",
+                  "mars": "Mars · NASA Viking küresel mozaiği", "venus": "Venüs · bulut katmanı",
+                  "jupiter": "Jüpiter · NASA Cassini haritası", "menu": "Ana menü görseli"}
+
+    def _load_planet(self, key, R):
+        """Dokusu hazır gezegeni bir kez 3B çizer (NASA dokusu + Güneş ışığı) ve önbelleğe alır."""
+        img = self.load_planets.get(key)
+        if img is None:
+            from . import space3d as S3
+            import numpy as np
+            th = 1024 if key == "earth" else 512
+            if not S3.has_texture(key, th):
+                return None
+            try:
+                M = S3.rot_z(math.radians(-14)) @ S3.rot_x(0.3)
+                L = S3.norm3(np.array((-0.7, 0.35, 0.62), dtype=np.float32))
+                img = S3.to_surface(S3.render_body(key, R, M, L, {"earth": 1.9, "moon": 0.2, "mars": 2.4}.get(key, 0.6),
+                                                   0.0, th))
+            except Exception:
+                img = False
+            self.load_planets[key] = img
+        return img or None
+
     def draw_loading(self):
         surf = self.screen
         surf.fill((3, 5, 14))
         t = self.load_t
         rng = random.Random(4)
-        for _ in range(220):
+        for _ in range(320):
             x, y = rng.randint(0, W - 1), rng.randint(0, H - 1)
-            b = int(80 + 120 * (0.5 + 0.5 * math.sin(t * rng.uniform(0.5, 2.0) + x)))
+            b = int(70 + 130 * (0.5 + 0.5 * math.sin(t * rng.uniform(0.5, 2.0) + x)))
             surf.set_at((x, y), (b, b, min(255, b + 30)))
-        draw_glow(surf, (W // 2, H // 2 - 60), 260, C["cyan"], 0.25)
-        draw_text(surf, "KOZMOGENİS", (W // 2, H // 2 - 120), 96, C["white"], bold=True, anchor="center", glow=C["cyan"],
+        draw_glow(surf, (W // 2, 150), 360, C["cyan"], 0.16)
+        draw_glow(surf, (W - 200, H - 120), 300, (150, 90, 255), 0.12)
+        draw_text(surf, "UZAY AJANSI · KOLONİ · MEDENİYET", (W // 2, 70), 15, C["cyan"], bold=True, anchor="midtop", raw=True)
+        draw_text(surf, "AETHER-X", (W // 2, 150), 96, C["white"], bold=True, anchor="center", glow=C["cyan"], raw=True)
+        draw_text(surf, "Gezegenler NASA görüntüleri ve NASA verileriyle", (W // 2, 210), 18, C["text_dim"], anchor="midtop",
                   raw=True)
+        # gezegen sırası: dokusu hazır olan NASA görüntüsüyle belirir, olmayan dönen halka
+        keys = ["moon", "mars", "earth", "venus", "jupiter"]
+        sizes = {"moon": 52, "mars": 62, "earth": 84, "venus": 76, "jupiter": 104}
+        xs = [W * 0.14, W * 0.32, W * 0.5, W * 0.68, W * 0.86]
+        cy = 400
+        for key, x in zip(keys, xs):
+            R = sizes[key]
+            img = self._load_planet(key, R)
+            nd = D.NASA[key]
+            if img:
+                draw_glow(surf, (int(x), cy), R * 1.5, {"earth": (110, 170, 255), "mars": (255, 150, 100),
+                                                        "venus": (255, 220, 160), "jupiter": (255, 200, 150)}.get(key, (180, 190, 220)), 0.22)
+                surf.blit(img, (x - img.get_width() / 2, cy - img.get_height() / 2))
+                col = C["text"]
+            else:
+                a = (t * 3 + x) % math.tau
+                pygame.draw.circle(surf, (30, 40, 70), (int(x), cy), R, 1)
+                pygame.draw.arc(surf, C["cyan"], (x - R, cy - R, R * 2, R * 2), a, a + 1.4, 2)
+                col = C["text_dim"]
+            draw_text(surf, nd["name"].upper(), (x, cy + 118), 17, col, bold=True, anchor="midtop", raw=True)
+            g = f"{nd['g']:.2f}".replace(".", ",")
+            dk = f"{nd['diam_km']:,}".replace(",", ".")
+            draw_text(surf, f"{g} m/s² · {dk} km", (x, cy + 142), 13, C["text_dim"],
+                      anchor="midtop", raw=True)
+            draw_text(surf, f"ort. {nd['temp_c']} °C", (x, cy + 160), 13, C["text_dim"], anchor="midtop", raw=True)
+        draw_text(surf, f"Kaynak: {D.NASA_SOURCE}", (W // 2, cy + 190), 12, scale_color(C["text_dim"], 0.8),
+                  anchor="midtop", raw=True)
+        # ilerleme
         n = max(1, len(self.load_steps))
         frac = min(1.0, (self.load_done + 0.5) / n)
-        draw_bar(surf, (W // 2 - 260, H // 2 + 10, 520, 12), frac, C["cyan"])
-        draw_text(surf, "Görseller hazırlanıyor…", (W // 2, H // 2 + 40), 20, C["text"], bold=True, anchor="midtop")
-        draw_text(surf, "İlk açılışta bir kez yapılır; sonraki açılışlar hızlıdır.", (W // 2, H // 2 + 72), 15,
-                  C["text_dim"], anchor="midtop")
-        a = (t * 4) % (2 * math.pi)
-        pygame.draw.arc(surf, C["cyan"], (W // 2 - 22, H // 2 + 120, 44, 44), a, a + 4.2, 4)
+        draw_bar(surf, (W // 2 - 320, 650, 640, 12), frac, C["cyan"])
+        cur = self.load_steps[min(self.load_done, n - 1)][0] if self.load_steps else "menu"
+        draw_text(surf, self.LOAD_LABEL.get(cur, "Hazırlanıyor") + " hazırlanıyor…", (W // 2, 676), 17, C["text"],
+                  bold=True, anchor="midtop", raw=True)
+        draw_text(surf, f"{int(frac * 100)}%", (W // 2 + 320, 630), 14, C["cyan"], anchor="bottomright", raw=True)
+        # dönen NASA bilgisi
+        fact, src = D.NASA_FACTS[int(t / 5) % len(D.NASA_FACTS)]
+        r = pygame.Rect(W // 2 - 420, 730, 840, 86)
+        glass_panel(surf, r, C["gold"], 150, 14, glow=False)
+        draw_text(surf, fact, (r.centerx, r.y + 16), 17, C["text"], anchor="midtop", raw=True, max_w=r.w - 40)
+        draw_text(surf, "Kaynak: " + src, (r.centerx, r.y + 52), 13, C["gold"], anchor="midtop", raw=True)
         pygame.display.flip()
 
     # ----------------------------------------------------------------- yardımcı

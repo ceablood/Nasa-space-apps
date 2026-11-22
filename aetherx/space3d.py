@@ -560,9 +560,88 @@ def safe_tex(key, th):
     return th
 
 
+# ===========================================================================
+# NASA DOKULARI (gerçek küresel mozaikler, kamu malı; kaynaklar: tools/fetch_nasa_maps.py)
+#   earth: NASA SVS 2915 Blue Marble · lights: NASA SVS 5276 Black Marble 2023
+#   moon : NASA SVS 4720 LRO LROC renkli mozaik · mars: NASA Mars Trek Viking MDIM 2.1
+#   jupiter: NASA/JPL PIA07782 Cassini silindirik harita
+# Dosya yoksa prosedürel dokuya dönülür.
+# ===========================================================================
+NASA_KEYS = ("earth", "moon", "mars", "jupiter")
+_NASA_IMG = {}
+
+
+def _nasa_path(name):
+    import os
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "nasa", f"{name}.jpg")
+
+
+def _nasa_rgb(name, th):
+    """NASA haritasını (th, 2th, 3) float diziye çevirir; yoksa None."""
+    k = (name, th)
+    if k in _NASA_IMG:
+        return _NASA_IMG[k]
+    arr = None
+    try:
+        import os
+        import pygame
+        path = _nasa_path(name)
+        if os.path.exists(path):
+            img = pygame.image.load(path)
+            if img.get_size() != (th * 2, th):
+                img = pygame.transform.smoothscale(img, (th * 2, th))
+            arr = pygame.surfarray.array3d(img).transpose(1, 0, 2).astype(F32)
+    except Exception:
+        arr = None
+    _NASA_IMG[k] = arr
+    return arr
+
+
+def nasa_texture(key, th):
+    if key not in NASA_KEYS:
+        return None
+    rgb = _nasa_rgb(key, th)
+    if rgb is None:
+        return None
+    t = {"rgb": rgb, "nasa": True}
+    x, y, z, lat, lon = grid(th)
+    if key == "earth":
+        r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+        water = smoothstep(8.0, 30.0, b - np.maximum(r, g)) * (1 - smoothstep(170, 200, r))   # okyanus: mavi baskın
+        t["spec"] = water
+        li = _nasa_rgb("lights", th)
+        if li is not None:
+            lum = li.mean(axis=2) / 255.0
+            t["lights"] = np.clip(lum * 2.2, 0, 1) ** 1.1
+        cw = fbm(x * 2, y * 2, z * 2, 3, 40)
+        cl = fbm(x * 4 + cw * 1.6, y * 6.5, z * 4 + cw * 1.6, 5, 41)
+        t["cloud"] = smoothstep(0.52, 0.72, cl) * 0.85
+        t["cloud_rgb"] = (250, 252, 255)
+        t["cloud_speed"] = 0.35
+    elif key == "mars":
+        dw = fbm(x * 1.6, y * 1.6, z * 1.6, 3, 55)
+        t["cloud"] = smoothstep(0.55, 0.76, fbm(x * 3 + dw * 2.2, y * 3.5, z * 3 + dw * 2.2, 5, 56)) * 0.85
+        t["cloud_rgb"] = (226, 170, 116)
+        t["cloud_speed"] = 0.9
+        t["storm"] = True
+    elif key == "jupiter":
+        t["limb"] = 0.25
+    return t
+
+
 def texture(key, th=256):
     k = (key, th)
     t = _TEX.get(k)
+    if t is None:
+        t = nasa_texture(key, th)
+        if t is not None:
+            t["rgb"] = np.clip(t["rgb"], 0, 255).astype(np.uint8)
+            for q in ("spec", "lights", "cloud"):
+                if q in t:
+                    t[q] = np.clip(t[q], 0, 1).astype(F32)
+            t["th"] = th
+            _TEX[k] = t
+            return t
     if t is None and th >= 1024:
         t = _disk_load(key, th)                    # büyük dokular bir kez üretilip diske yazılır
         if t is not None:
