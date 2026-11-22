@@ -63,7 +63,18 @@ _DIR = Path(__file__).parent / "lang"
 
 
 def quality():
-    return QUALITY.get(PREFS.get("quality"), QUALITY["high"])
+    """Seçili kademe + oyuncunun ince ayarları (AYARLAR > GÖRÜNTÜ: parlama, toz, yıldız, parçacık)."""
+    q = QUALITY.get(PREFS.get("quality"), QUALITY["high"])
+    st = PREFS.get("settings")
+    if not isinstance(st, dict) or not st:
+        return q
+    q = dict(q)
+    q["bloom"] = q["bloom"] * float(st.get("bloom_k", 1.0))
+    if not st.get("motes", True):
+        q["motes"] = 0
+    q["stars"] = int(q["stars"] * float(st.get("stars_k", 1.0)))
+    q["fx"] = q["fx"] * float(st.get("fx_k", 1.0))
+    return q
 
 
 def quality_level():
@@ -78,7 +89,7 @@ def load_prefs():
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         if isinstance(d, dict):
-            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic", "cae", "prefs_version") if k in d})
+            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic", "cae", "settings", "prefs_version") if k in d})
             if d.get("prefs_version", 1) < 2:          # eski kayıt: bir kez İngilizceye geç, kalite adlarını taşı
                 PREFS["lang"] = "en"
                 PREFS["lang_chosen"] = True

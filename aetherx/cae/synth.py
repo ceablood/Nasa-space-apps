@@ -104,6 +104,10 @@ def place(buf, x, start):
 
 def place_wrap(buf, x, start):
     """Döngü tamponuna dairesel yerleştirme: sona taşan kısım başa sarılır (döngüde kesilme yok)."""
+    x = np.array(x, dtype=F32)
+    k0 = min(len(x) // 4, n_of(0.0015))
+    if k0 > 1:                                   # başı yumuşak: anlık başlangıç tık sesi yok
+        x[:k0] *= np.linspace(0, 1, k0, dtype=F32)
     s = int(start) % len(buf)
     k = min(len(x), len(buf) - s)
     buf[s:s + k] += x[:k]
@@ -124,6 +128,30 @@ def reverb(x, room=0.3, size=1.0):
 def soft_limit(x, ceiling=0.9):
     """Yumuşak sınırlayıcı (tanh): ani yüksek sesleri ve sertçe kırpılan dalgayı (çatırtı) önler."""
     return (np.tanh(x / ceiling) * ceiling).astype(F32)
+
+
+def smooth_limit(x, ceiling=0.7, attack_ms=2.0, release_ms=120.0):
+    """Bozulmasız sınırlayıcı: dalgayı eğmek (tanh) yerine kazancı yumuşakça kısar. Ani yüksek sesler tavanı
+    aşmaz, sessiz kısımlar olduğu gibi kalır (erişilebilirlik: "ani yüksek sesleri sınırla")."""
+    x = np.asarray(x, dtype=F32)
+    n = len(x)
+    if n < 64:
+        return x
+    blk = 64
+    m = (n + blk - 1) // blk
+    pk = np.abs(np.pad(x, (0, m * blk - n))).reshape(m, blk).max(axis=1)
+    need = np.minimum(1.0, ceiling / np.maximum(pk, 1e-9))
+    # kazanç: hızlı düş (atak), yavaş toparlan (bırakma); bloklar arası doğrusal geçiş
+    rel = math.exp(-blk / (SR * release_ms / 1000.0))
+    g = np.empty(m, dtype=F32)
+    cur = 1.0
+    for i in range(m):
+        cur = need[i] if need[i] < cur else need[i] + (cur - need[i]) * rel
+        g[i] = cur
+    # ileri bakış: bir blok önceden kıs (tepe gelmeden), sonra örnek düzeyinde yumuşat
+    g = np.minimum(g, np.concatenate([g[1:], g[-1:]]))
+    gs = np.interp(np.arange(n), np.arange(m) * blk + blk / 2, g).astype(F32)
+    return (x * gs).astype(F32)
 
 
 def normalize(x, peak=0.8):

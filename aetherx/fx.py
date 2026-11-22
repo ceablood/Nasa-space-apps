@@ -771,10 +771,12 @@ class Shake:
         self.t = 0.0
 
     def add(self, amount):
-        self.trauma = clamp(self.trauma + amount, 0.0, 1.0)
+        from . import settings
+        self.trauma = clamp(self.trauma + amount * settings.shake_k(), 0.0, 1.0)
 
     def set_min(self, amount):
-        self.trauma = max(self.trauma, amount)
+        from . import settings
+        self.trauma = max(self.trauma, amount * settings.shake_k())
 
     def update(self, dt):
         self.t += dt
@@ -801,6 +803,9 @@ class Transition:
         self.overlay = pygame.Surface((W, H), pygame.SRCALPHA)
 
     def start(self, callback, dur=0.45):
+        from . import settings
+        if settings.get("reduce_motion"):        # hareketi azalt: geçiş neredeyse anında
+            dur = 0.06
         self.active = True
         self.t = 0.0
         self.dur = dur

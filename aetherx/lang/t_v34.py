@@ -291,4 +291,5 @@ ROWS = [
     # ---------------------------------------------------------------- giriş ekranı
     ("Dil", "Language"), ("Orion Space", "Orion Space"), ("Horizon Space Agency", "Horizon Space Agency"),
     ("Nova Space", "Nova Space"), ("Stellar Frontier", "Stellar Frontier"),
+    ("Müzik ve ses", "Music and sound"),
 ]

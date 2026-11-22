@@ -17,7 +17,8 @@ from . import art
 from . import data as D
 from . import i18n
 from .audio import Audio
-from .config import C, FPS, H, TITLE, TOPBAR_H, W
+from .config import C, FPS, H, TITLE, TOPBAR_H, W  # noqa: F401
+from . import settings as SET
 from .fx import overlay, Transition, draw_glow, scale_color, Spring, ease_out_back, clamp
 from .game import Game
 from .nova import NovaBrain, NovaBubble, draw_nova_face
@@ -44,6 +45,7 @@ SCENES = {
     "agency": ("agency", "AgencyScene"),
     "solar": ("solar", "SolarScene"),
     "life": ("life", "LifeScene"),
+    "settings": ("settings_scene", "SettingsScene"),
 }
 
 NAV = [
@@ -104,13 +106,15 @@ class App:
         self.running = True
         self.max_frames = max_frames
         self.frame = 0
-        self.fps_show = False
+        self.fps_show = bool(SET.get("show_fps"))
+        self.save_t = 0.0
         self.modal = None
         self.modal_buttons = []
         self.modal_k = Spring(0.0, 170, 18)
         self.nav_buttons = []
         self._build_nav()
         self.fullscreen = False
+        SET.apply_audio(self)
         self.go("intro", instant=True)
         self.start_loading()
 
@@ -131,6 +135,8 @@ class App:
                                ("venus", lambda: S3.texture("venus", 512)),
                                ("jupiter", lambda: S3.texture("jupiter", 512)),
                                ("menu", lambda: paint.warm("menu", (W + 48, H + 27)))]
+        if self.audio.ok:                     # menü ve üs müziği önceden: sahneye girince takılma olmaz
+            self.load_steps.append(("music", lambda: self.audio.prepare_music(("menu", "base"))))
         self.load_done = 0
         self.load_error = None
         self.loading = False
@@ -161,7 +167,7 @@ class App:
 
     LOAD_LABEL = {"earth": "Dünya · NASA Blue Marble + Black Marble", "moon": "Ay · NASA LRO renkli mozaiği",
                   "mars": "Mars · NASA Viking küresel mozaiği", "venus": "Venüs · bulut katmanı",
-                  "jupiter": "Jüpiter · NASA Cassini haritası", "menu": "Ana menü görseli"}
+                  "jupiter": "Jüpiter · NASA Cassini haritası", "menu": "Ana menü görseli", "music": "Müzik ve ses"}
 
     def _load_planet(self, key, R):
         """Dokusu hazır gezegeni bir kez 3B çizer (NASA dokusu + Güneş ışığı) ve önbelleğe alır."""
@@ -255,12 +261,14 @@ class App:
     # ----------------------------------------------------------------- yardımcı
     def _ui_sound(self, name):
         vol = {"hover": 0.35, "tick": 0.4, "type": 0.5}.get(name, 0.8)
-        self.audio.play(name, vol)
+        self.audio.play(name, vol * self.audio.ui_vol / 0.8)
 
     def toast(self, text, color="cyan", icon="check"):
         self.toasts.push(text, COLOR_KEYS.get(color, color if isinstance(color, tuple) else C["cyan"]), icon)
 
     def say(self, text, mood="calm", highlight=None, priority=False):
+        if not priority and not SET.get("nova_hints"):      # AYARLAR > OYUN: NOVA ipuçları kapalı
+            return
         self.bubble.level = max(1, self.game.nova_level) if self.game.s else 1
         self.bubble.say(text, mood, highlight, priority)
 
@@ -476,7 +484,15 @@ class App:
                 return
             if e.key == pygame.K_F3:
                 self.fps_show = not self.fps_show
+                SET.set("show_fps", self.fps_show)
                 return
+        # pencere odağı kaybolunca sesi duraklat (AYARLAR > SES)
+        if e.type in (getattr(pygame, "WINDOWFOCUSLOST", -1), getattr(pygame, "WINDOWFOCUSGAINED", -1)):
+            if SET.get("audio")["mute_unfocused"] and pygame.mixer.get_init():
+                if e.type == pygame.WINDOWFOCUSLOST:
+                    pygame.mixer.pause()
+                else:
+                    pygame.mixer.unpause()
         if self.trans.active:
             return
         if self.modal:
@@ -550,6 +566,13 @@ class App:
         if self.fps_show:
             draw_text(surf, f"{self.clock.get_fps():.0f} FPS", (W - 10, H - 24), 14, C["lime"], anchor="topright")
         acc = self.game.color if self.game.s else C["cyan"]
+        want_sys = not SET.get("custom_cursor")
+        if want_sys != getattr(self, "_sys_cursor", False):
+            self._sys_cursor = want_sys
+            try:
+                pygame.mouse.set_visible(want_sys)
+            except Exception:
+                pass
         draw_cursor(surf, acc)
         pygame.display.flip()
 
@@ -573,19 +596,28 @@ class App:
             else:
                 self.loading = False
         while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
+            dt = self.clock.tick(SET.get("fps_cap") or 0) / 1000.0
             dt = min(dt, 1 / 20)
             for e in pygame.event.get():
                 self.handle_event(e)
             self.update(dt)
             self.draw()
             self.frame += 1
-            if self.game.s and self.frame % 1800 == 0:
-                try:
-                    self.game.save()
-                except Exception:
-                    pass
+            self.autosave(dt)
             await asyncio.sleep(0)
+
+    def autosave(self, dt):
+        """AYARLAR > OYUN: belirlenen dakikada bir kampanyayı kaydet (0 = yalnız olaylarda kaydedilir)."""
+        m = SET.get("autosave_min")
+        if not (m and self.game.s):
+            return
+        self.save_t += dt
+        if self.save_t >= m * 60:
+            self.save_t = 0.0
+            try:
+                self.game.save()
+            except Exception:
+                pass
 
     def run(self):
         while self.running and getattr(self, "loading", False):
@@ -596,13 +628,14 @@ class App:
                     self.running = False
             self.draw_loading()
         while self.running:
-            dt = self.clock.tick(FPS) / 1000.0
+            dt = self.clock.tick(SET.get("fps_cap") or 0) / 1000.0
             dt = min(dt, 1 / 20)
             for e in pygame.event.get():
                 self.handle_event(e)
             self.update(dt)
             self.draw()
             self.frame += 1
+            self.autosave(dt)
             if self.max_frames and self.frame >= self.max_frames:
                 break
         if self.game.s:

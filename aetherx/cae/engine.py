@@ -60,7 +60,7 @@ class AudioSettings:
         if self.d["reduce_high"]:
             x = S.fft_filter(x, None, 4000)
         if self.d["limit_loud"]:
-            x = S.soft_limit(x, 0.7)
+            x = S.smooth_limit(x, 0.7)
         return x
 
 
@@ -312,7 +312,7 @@ class CosmicAudio:
         if not (self.audio and getattr(self.audio, "ok", False)):
             return None
         try:
-            snd = self.audio._to_sound(arr)
+            snd = self.audio._to_sound(arr, key.startswith("loop:"))
         except Exception:
             return None
         self.assets.put(key, arr, snd)
@@ -401,6 +401,15 @@ class CosmicAudio:
             if snd:
                 ch.play(snd, loops=-1, fade_ms=1200)
                 ch.set_volume(vol)
+
+    def apply_volumes(self):
+        """Ayarlar değişince çalan ortam katmanlarının sesini yeniden sentez yapmadan güncelle."""
+        tg = self.layer_targets() if self.world is not None else {}
+        for name, ch in self.layer_ch.items():
+            try:
+                ch.set_volume(tg.get(name, 0.0) * self.settings.gain(self.layer_cat[name]) * 0.6)
+            except Exception:
+                pass
 
     def stop_ambience(self):
         for ch in self.layer_ch.values():

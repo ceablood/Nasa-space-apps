@@ -115,10 +115,22 @@ def _mix(*parts):
     return out
 
 
+def _taper(x, a_ms=1.5, r_ms=8.0):
+    """Yerleştirilen parçanın başı/sonu yumuşak: sönmemiş bir notanın kesildiği yerde tık oluşmaz."""
+    x = np.array(x, dtype=np.float32)
+    a, r = min(len(x) // 4, _n(a_ms / 1000)), min(len(x) // 3, _n(r_ms / 1000))
+    if a > 1:
+        x[:a] *= np.linspace(0, 1, a, dtype=np.float32)
+    if r > 1:
+        x[-r:] *= np.linspace(1, 0, r, dtype=np.float32)
+    return x
+
+
 def _place(buf, x, start):
     s = int(start)
     if s >= len(buf):
         return
+    x = _taper(x)
     e = min(len(buf), s + len(x))
     buf[s:e] += x[:e - s]
 
@@ -140,6 +152,136 @@ def _reverb(x, delays=(0.031, 0.047, 0.071, 0.113), decay=0.42):
     return out
 
 
+_OSC_CACHE = {}
+
+
+def _memo(fn):
+    """Aynı parametreli dalga bir kez üretilir (müzikte tekrar eden notalar): kopya döner."""
+    def w(*a):
+        k = (fn.__name__,) + tuple(round(v, 4) if isinstance(v, float) else v for v in a)
+        v = _OSC_CACHE.get(k)
+        if v is None:
+            if len(_OSC_CACHE) > 400:
+                _OSC_CACHE.clear()
+            v = _OSC_CACHE[k] = fn(*a)
+        return v.copy()
+    return w
+
+
+@_memo
+def _bl_saw(freq, dur, max_h=60):
+    """Bant sınırlı testere (toplamsal): Nyquist üstü harmonik yok -> örtüşme (aliasing) kaynaklı sertlik yok."""
+    t = _t(dur)
+    out = np.zeros_like(t)
+    K = int(min(max_h, 15000 // max(1.0, freq)))
+    for k in range(1, max(1, K) + 1):
+        out += ((-1) ** (k + 1)) * np.sin(2 * np.pi * k * freq * t) / k
+    return (out * (2 / np.pi)).astype(np.float32)
+
+
+@_memo
+def _bl_square(freq, dur, max_h=40):
+    """Bant sınırlı kare (yalnız tek harmonikler, %50 doluluk: DC yok)."""
+    t = _t(dur)
+    out = np.zeros_like(t)
+    K = int(min(max_h, 15000 // max(1.0, freq)))
+    for k in range(1, max(1, K) + 1, 2):
+        out += np.sin(2 * np.pi * k * freq * t) / k
+    return (out * (4 / np.pi)).astype(np.float32)
+
+
+@_memo
+def _bnoise(dur, lo, hi, seed=0, slope=0.0):
+    """Bant sınırlı gürültü (frekans uzayında biçimlenir): lo..hi dışında enerji yok -> tıslama/cızırtı yok."""
+    from .cae import synth as CS
+    n = _n(dur)
+    x = CS.shaped_noise(max(dur, 0.01), lo, hi, slope, seed)
+    return (x[:n] if len(x) >= n else np.pad(x, (0, n - len(x)))).astype(np.float32)
+
+
+def _fft_band(x, lo=None, hi=None, circular=False):
+    """Yumuşak kenarlı bant süzgeci. Döngülerde dairesel (dikiş bozulmaz), tek seferlik seslerde sıfır dolgulu."""
+    n = len(x)
+    if n < 16 or (not lo and not hi):
+        return x
+    pad = 0 if circular else min(n, _n(0.25))
+    y = np.pad(x, (0, pad)) if pad else x
+    N = len(y)
+    X = np.fft.rfft(y)
+    f = np.fft.rfftfreq(N, 1.0 / SR)
+    g = np.ones_like(f)
+    if hi:
+        g *= 1.0 / np.sqrt(1.0 + (f / hi) ** 6)
+    if lo:
+        g *= 1.0 / np.sqrt(1.0 + (lo / np.maximum(f, 1e-3)) ** 4)
+    y = np.fft.irfft(X * g, N).astype(np.float32)
+    return y[:n]
+
+
+_IR_CACHE = {}
+
+
+def _ir(rt, seed=5):
+    """Yumuşak, yoğun oda yanıtı: erken yansımalar + üstel sönen bant sınırlı gürültü kuyruğu."""
+    key = (round(rt, 2), seed)
+    if key not in _IR_CACHE:
+        n = _n(rt * 1.2)
+        t = np.arange(n, dtype=np.float32) / SR
+        tail = _bnoise(rt * 1.2, 120, 6500, seed, 0.6) * np.exp(-6.9 * t / rt)
+        tail *= np.clip(t / 0.012, 0, 1)                   # ön gecikme: kuru sesle çakışma yok
+        for d, a in ((0.011, 0.5), (0.019, -0.35), (0.029, 0.28), (0.041, -0.2)):
+            k = _n(d)
+            if k < n:
+                tail[k] += a * 8
+        _IR_CACHE[key] = (tail / (np.sqrt(np.sum(tail ** 2)) + 1e-9)).astype(np.float32)
+    return _IR_CACHE[key]
+
+
+def _reverb_soft(x, rt=1.1, wet=0.22, circular=False, seed=5):
+    """FFT evrişimli yankı (tarak süzgeci yerine): metalik çınlama yok. Döngüde kuyruk başa sarılır."""
+    ir = _ir(rt, seed)
+    n = len(x)
+    if circular:
+        # doğrusal evrişim (2'nin kuvveti uzunlukta, hızlı) + taşan kuyruğu başa katla = dairesel evrişim
+        ir = ir[:n]
+        N = 1 << int(np.ceil(np.log2(n + len(ir))))
+        full = np.fft.irfft(np.fft.rfft(x, N) * np.fft.rfft(ir, N), N)[:n + len(ir) - 1]
+        y = full[:n].copy()
+        y[:len(full) - n] += full[n:]
+        y = y.astype(np.float32)
+    else:
+        N = 1 << int(np.ceil(np.log2(n + len(ir))))
+        y = np.fft.irfft(np.fft.rfft(x, N) * np.fft.rfft(ir, N), N)[:n + len(ir) - 1].astype(np.float32)
+        x = np.pad(x, (0, len(y) - n))
+    dry_rms = float(np.sqrt(np.mean(x ** 2))) + 1e-9
+    wet_rms = float(np.sqrt(np.mean(y ** 2))) + 1e-9
+    return (x + y * (wet * dry_rms / wet_rms)).astype(np.float32)
+
+
+MASTER = 0.8          # karıştırma payı: aynı anda çalan kanallar toplandığında kırpılma (çatırtı) olmaz
+
+
+def finish(x, loop=False):
+    """Bütün seslerin son işleme zinciri:
+    DC ve 25 Hz altı uğultu temizlenir, 14 kHz üstü tıslama yumuşakça kesilir, tek seferlik seslerde başta 3 ms /
+    sonda 25 ms geçiş (tık yok), tepe 0,95'i aşarsa yalnız ölçeklenir (tanh doyumu / bozulma yok)."""
+    x = np.asarray(x, dtype=np.float32)
+    if len(x) < 16:
+        return x
+    x = x - float(np.mean(x))
+    x = _fft_band(x, 25, 14000, circular=loop)
+    if not loop:
+        a, r = min(len(x) // 4, _n(0.003)), min(len(x) // 3, _n(0.025))
+        if a > 1:
+            x[:a] *= np.linspace(0, 1, a, dtype=np.float32)
+        if r > 1:
+            x[-r:] *= np.linspace(1, 0, r, dtype=np.float32) ** 2
+    m = float(np.max(np.abs(x)))
+    if m > 0.95:
+        x = x * (0.95 / m)
+    return x.astype(np.float32)
+
+
 def note_freq(n):
     """MIDI nota -> Hz"""
     return 440.0 * (2 ** ((n - 69) / 12.0))
@@ -152,7 +294,7 @@ def sfx_click():
     n = _n(0.045)
     x = _sine(1750, 0.045) * _exp_decay(n, 0.008) * 0.6
     x += _sine(3300, 0.045) * _exp_decay(n, 0.004) * 0.25
-    x += _noise(0.045, 1) * _exp_decay(n, 0.002) * 0.25
+    x += _bnoise(0.045, 1500, 7000, 1) * _exp_decay(n, 0.002) * 0.2
     return _norm(x, 0.5)
 
 
@@ -169,15 +311,15 @@ def sfx_tick():
 
 def sfx_type():
     n = _n(0.03)
-    x = _highpass(_noise(0.03, 3), 6) * _exp_decay(n, 0.004) + _sine(1200, 0.03) * _exp_decay(n, 0.005) * 0.3
+    x = _bnoise(0.03, 1800, 6000, 3) * _exp_decay(n, 0.004) * 0.6 + _sine(1200, 0.03) * _exp_decay(n, 0.005) * 0.4
     return _norm(x, 0.3)
 
 
 def sfx_deny():
     n = _n(0.18)
-    x = _square(150, 0.18, 0.3) * _env(n, 0.005, 0.05, 0.7, 0.08) * 0.5
-    x += _square(142, 0.18, 0.3) * _env(n, 0.005, 0.05, 0.7, 0.08) * 0.5
-    return _norm(_lowpass(x, 8), 0.35)
+    e = _env(n, 0.008, 0.05, 0.7, 0.08)
+    x = (_bl_square(150, 0.18, 12) + _bl_square(142, 0.18, 12)) * e * 0.5      # bant sınırlı, DC yok
+    return _norm(x, 0.35)
 
 
 def sfx_clunk():
@@ -187,15 +329,15 @@ def sfx_clunk():
     x = np.zeros(n, dtype=np.float32)
     for f, a, tau in ((310, 1.0, 0.09), (873, 0.55, 0.05), (1462, 0.35, 0.03), (2210, 0.2, 0.02), (165, 0.7, 0.12)):
         x += _sine(f, d) * _exp_decay(n, tau) * a
-    x += _lowpass(_noise(d, 5), 3) * _exp_decay(n, 0.006) * 1.2
-    return _norm(_reverb(x), 0.75)
+    x += _bnoise(d, 300, 4000, 5) * _exp_decay(n, 0.006) * 0.8
+    return _norm(_reverb_soft(x, 0.6, 0.18), 0.72)
 
 
 def sfx_whoosh():
     d = 0.55
     n = _n(d)
     env = np.sin(np.linspace(0, np.pi, n)) ** 2
-    x = _lowpass(_noise(d, 7), 14) * env
+    x = _bnoise(d, 200, 2500, 7, 0.8) * env
     return _norm(x, 0.45)
 
 
@@ -204,27 +346,29 @@ def sfx_launch():
     d = 7.0
     n = _n(d)
     t = np.arange(n, dtype=np.float32) / SR
-    rumble = _lowpass(_noise(d, 11), 60) * 2.2 + _lowpass(_noise(d, 12), 18) * 0.6
-    crackle = _highpass(_noise(d, 13), 4) * (np.random.default_rng(2).random(n) > 0.985) * 0.8
+    from .cae import synth as CS
+    rumble = _bnoise(d, 25, 260, 11, 1.6) * 1.0 + _bnoise(d, 120, 900, 12, 1.0) * 0.35
+    # alev titremesi: rastgele dürtüler (çatırtı) yerine yavaş genlik dalgalanmalı bant gürültüsü
+    flicker = _bnoise(d, 300, 2200, 13, 0.6) * CS.smooth_lfo(d, 9.0, 3)[:n] * 0.22
     env = np.clip(t / 1.2, 0, 1) * np.clip((d - t) / 2.0, 0, 1)
-    sub = np.sin(2 * np.pi * (38 + t * 3) * t) * 0.5
-    x = (rumble + crackle + sub) * env
+    sub = np.sin(2 * np.pi * np.cumsum(38 + t * 3) / SR) * 0.45
+    x = (rumble + flicker + sub) * env
     return _norm(x, 0.95)
 
 
 def sfx_explosion():
     d = 1.6
     n = _n(d)
-    x = _lowpass(_noise(d, 21), 30) * _exp_decay(n, 0.35) * 1.5
-    x += _lowpass(_noise(d, 22), 6) * _exp_decay(n, 0.06)
+    x = _bnoise(d, 30, 700, 21, 1.4) * _exp_decay(n, 0.35) * 1.2
+    x += _bnoise(d, 200, 3500, 22, 0.8) * _exp_decay(n, 0.06) * 0.7
     x += _sine(lambda t: 90 - t * 40, d) * _exp_decay(n, 0.25) * 0.8
-    return _norm(_reverb(x), 0.9)
+    return _norm(_reverb_soft(x, 1.4, 0.25), 0.88)
 
 
 def sfx_hit():
     d = 0.35
     n = _n(d)
-    x = _lowpass(_noise(d, 31), 10) * _exp_decay(n, 0.06) + _sine(110, d) * _exp_decay(n, 0.08) * 0.7
+    x = _bnoise(d, 80, 2500, 31, 0.8) * _exp_decay(n, 0.06) + _sine(110, d) * _exp_decay(n, 0.08) * 0.7
     return _norm(x, 0.7)
 
 
@@ -260,7 +404,7 @@ def sfx_alarm():
     n = _n(d)
     t = np.arange(n, dtype=np.float32) / SR
     f = np.where((t * 4) % 1 < 0.5, 880, 660)
-    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.6 + _square(110, d, 0.5) * 0.08
+    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.6 + _bl_square(110, d, 15) * 0.06
     x *= _env(n, 0.01, 0.1, 0.9, 0.1)
     return _norm(x, 0.5)
 
@@ -277,16 +421,16 @@ def sfx_success():
     for i, nn in enumerate((72, 76, 79, 84)):
         tone = (_sine(note_freq(nn), 1.0) + _tri(note_freq(nn), 1.0) * 0.3) * _exp_decay(_n(1.0), 0.35)
         _place(buf, tone, SR * 0.11 * i)
-    return _norm(_reverb(buf), 0.6)
+    return _norm(_reverb_soft(buf, 1.2, 0.22), 0.6)
 
 
 def sfx_fail():
     d = 1.6
     buf = np.zeros(_n(d), dtype=np.float32)
     for i, nn in enumerate((67, 63, 60, 55)):
-        tone = _saw(note_freq(nn), 0.7) * _exp_decay(_n(0.7), 0.25)
-        _place(buf, _lowpass(tone, 12), SR * 0.17 * i)
-    return _norm(_reverb(buf), 0.55)
+        tone = _bl_saw(note_freq(nn), 0.7, 14) * _exp_decay(_n(0.7), 0.25)
+        _place(buf, tone, SR * 0.17 * i)
+    return _norm(_reverb_soft(buf, 1.2, 0.22), 0.55)
 
 
 def sfx_repair():
@@ -294,7 +438,7 @@ def sfx_repair():
     buf = np.zeros(_n(d), dtype=np.float32)
     for i in range(7):
         n = _n(0.05)
-        c = _highpass(_noise(0.05, 40 + i), 3) * _exp_decay(n, 0.006) + _sine(1100 + i * 40, 0.05) * _exp_decay(n, 0.01) * 0.4
+        c = _bnoise(0.05, 1200, 5000, 40 + i) * _exp_decay(n, 0.006) * 0.6 + _sine(1100 + i * 40, 0.05) * _exp_decay(n, 0.01) * 0.5
         _place(buf, c, SR * 0.11 * i)
     return _norm(buf, 0.5)
 
@@ -302,8 +446,8 @@ def sfx_repair():
 def sfx_flash():
     d = 0.25
     n = _n(d)
-    x = _highpass(_noise(d, 50), 3) * _exp_decay(n, 0.012)
-    x += _sine(lambda t: 4000 - t * 9000, d) * _exp_decay(n, 0.05) * 0.3
+    x = _bnoise(d, 1500, 7000, 50) * _exp_decay(n, 0.012) * 0.6           # deklanşör
+    x += _sine(lambda t: 3600 - t * 7000, d) * _exp_decay(n, 0.05) * 0.3
     return _norm(x, 0.45)
 
 
@@ -311,10 +455,10 @@ def sfx_storm():
     d = 3.0
     n = _n(d)
     t = np.arange(n, dtype=np.float32) / SR
-    wind = _lowpass(_noise(d, 60), 40) * (0.6 + 0.4 * np.sin(t * 3.1)) + _lowpass(_noise(d, 61), 9) * 0.3
-    crack = _highpass(_noise(d, 62), 3) * (np.random.default_rng(5).random(n) > 0.996) * 2
+    wind = _bnoise(d, 60, 700, 60, 1.2) * (0.6 + 0.4 * np.sin(t * 3.1)) + _bnoise(d, 300, 1800, 61, 0.8) * 0.25
+    rumble = _bnoise(d, 25, 160, 62, 1.5) * _env(n, 0.8, 0.6, 0.5, 1.0) * 0.6     # uzak gök gürültüsü (tık yok)
     env = _env(n, 0.4, 0.3, 0.9, 0.8)
-    return _norm((wind + crack) * env, 0.6)
+    return _norm((wind + rumble) * env, 0.6)
 
 
 def sfx_levelup():
@@ -323,15 +467,15 @@ def sfx_levelup():
     for i, nn in enumerate((67, 71, 74, 79, 83)):
         tone = _sine(note_freq(nn), 0.6) * _exp_decay(_n(0.6), 0.2)
         _place(buf, tone, SR * 0.07 * i)
-    return _norm(_reverb(buf), 0.6)
+    return _norm(_reverb_soft(buf, 1.0, 0.2), 0.6)
 
 
 def sfx_nova_blip(pitch):
     d = 0.075
     n = _n(d)
     f = 280 * pitch
-    x = _square(f, d, 0.35) * 0.35 + _sine(f * 2, d) * 0.4 + _sine(f * 3.02, d) * 0.15
-    x = _lowpass(x, 5) * _env(n, 0.006, 0.02, 0.6, 0.03)
+    x = _bl_square(f, d, 9) * 0.3 + _sine(f * 2, d) * 0.4 + _sine(f * 3.02, d) * 0.12
+    x = x * _env(n, 0.008, 0.02, 0.6, 0.035)
     return _norm(x, 0.28)
 
 
@@ -339,14 +483,14 @@ def sfx_ping():
     d = 0.9
     n = _n(d)
     x = (_sine(1320, d) + _sine(1980, d) * 0.3) * _exp_decay(n, 0.22)
-    return _norm(_reverb(x), 0.4)
+    return _norm(_reverb_soft(x, 1.0, 0.2), 0.4)
 
 
 def sfx_radio():
     d = 0.32
     n = _n(d)
     x = _sine(1050, d) * _env(n, 0.004, 0.02, 0.8, 0.03) * 0.6
-    x += _highpass(_noise(d, 71), 3) * _exp_decay(n, 0.02) * 0.5
+    x += _bnoise(d, 700, 3500, 71) * _exp_decay(n, 0.02) * 0.35         # telsiz paraziti (bant sınırlı)
     return _norm(x, 0.35)
 
 
@@ -354,9 +498,9 @@ def sfx_sep():
     d = 1.1
     n = _n(d)
     x = _sine(lambda t: 120 * np.exp(-t * 6) + 40, d) * _exp_decay(n, 0.12)
-    x += _lowpass(_noise(d, 72), 4) * _exp_decay(n, 0.03) * 0.9
-    x += _highpass(_noise(d, 73), 5) * _env(n, 0.05, 0.2, 0.3, 0.6) * 0.25          # gaz tahliyesi
-    return _norm(_reverb(x), 0.7)
+    x += _bnoise(d, 200, 3500, 72, 0.8) * _exp_decay(n, 0.03) * 0.7
+    x += _bnoise(d, 900, 5500, 73, 0.5) * _env(n, 0.05, 0.2, 0.3, 0.6) * 0.18       # gaz tahliyesi
+    return _norm(_reverb_soft(x, 1.0, 0.2), 0.7)
 
 
 # ===========================================================================
@@ -433,8 +577,8 @@ def _pad(freqs, dur, detune=0.004, bright=0.25):
 
 def _pluck(f, dur, bright=0.6, tau=0.25):
     n = _n(dur)
-    x = _saw(f, dur) * bright + _sine(f, dur)
-    return _lowpass(x, 6) * _exp_decay(n, tau)
+    x = _bl_saw(f, dur, 24) * bright * 0.7 + _sine(f, dur)
+    return x * _exp_decay(n, tau)
 
 
 def _kick(d=0.4):
@@ -444,15 +588,32 @@ def _kick(d=0.4):
 
 def _hat(d=0.06, seed=0):
     n = _n(d)
-    return _highpass(_noise(d, seed), 2) * _exp_decay(n, 0.015) * 0.3
+    return _bnoise(d, 6000, 11000, seed % 6) * _exp_decay(n, 0.015) * 0.18
+
+
+def _smooth_len(n):
+    """n'e en yakın 2·3·5·7 çarpanlı uzunluk: döngü süzgeci/yankısı (FFT) asal uzunlukta yavaşlamaz."""
+    best = None
+    for a in range(0, 24):
+        for b in range(0, 10):
+            for c in range(0, 6):
+                v = (2 ** a) * (3 ** b) * (5 ** c)
+                if v > n * 1.01:
+                    break
+                for d in (1, 7, 49):
+                    w = v * d
+                    if n * 0.995 <= w <= n * 1.005 and (best is None or abs(w - n) < abs(best - n)):
+                        best = w
+    return best or n
 
 
 def music_track(name, bars=8):
+    from .cae.synth import place_wrap as _place      # döngü: taşan kuyruk başa sarılır (kesik nota yok)
     bpm = {"base": 80, "space": 60, "storm": 132, "colony": 108, "launch": 120, "menu": 70}.get(name, 80)
-    beat = 60.0 / bpm
-    bar = beat * 4
-    dur = bar * bars
-    n = _n(dur)
+    n = _smooth_len(_n(60.0 / bpm * 4 * bars))     # FFT'ye uygun uzunluk (tempo farkı < %0,5)
+    dur = n / SR
+    bar = dur / bars
+    beat = bar / 4
     buf = np.zeros(n, dtype=np.float32)
     if name in ("base", "menu"):
         prog = [(57, 60, 64), (53, 57, 60), (48, 52, 55), (55, 59, 62)] * (bars // 4 + 1)
@@ -470,8 +631,10 @@ def music_track(name, bars=8):
                 bell = (_sine(note_freq(81), 3.0) + _sine(note_freq(81) * 2.76, 3.0) * 0.3) * _exp_decay(_n(3), 0.8) * 0.06
                 _place(buf, bell, bar * i)
     elif name == "space":
-        drone = _sine(note_freq(38), dur) * 0.16 + _sine(note_freq(45), dur) * 0.1
-        lfo = 0.6 + 0.4 * np.sin(np.arange(n) / SR * 0.21)
+        def lsine(f):                     # döngüye tam sayıda periyot: dikişte tık yok
+            return _sine(round(f * dur) / dur, dur)[:n]
+        drone = lsine(note_freq(38)) * 0.16 + lsine(note_freq(45)) * 0.1
+        lfo = 0.6 + 0.4 * np.sin(2 * np.pi * np.arange(n) / n)
         buf += (drone * lfo).astype(np.float32)
         chords = [(50, 57, 62, 69), (48, 55, 60, 67), (53, 57, 60, 65), (45, 52, 57, 64)]
         for i in range(bars):
@@ -515,8 +678,8 @@ def music_track(name, bars=8):
             for k in range(8):
                 nn = ch[k % 3] + 12
                 _place(buf, _pluck(note_freq(nn), beat * 0.45, 0.7, 0.07) * 0.09 * k_int, bar * i + k * beat * 0.5)
-        buf += (_lowpass(_noise(dur, 99), 30) * np.linspace(0, 0.12, n)).astype(np.float32)
-    buf = _reverb(buf, (0.05, 0.09, 0.13, 0.21), 0.38)
+        buf += (_bnoise(dur, 60, 900, 99, 1.0) * np.linspace(0, 0.1, n)).astype(np.float32)
+    buf = _reverb_soft(buf, 1.6, 0.28, circular=True)
     return _norm(buf, 0.65)
 
 
@@ -533,14 +696,20 @@ class Audio:
         "levelup": sfx_levelup, "ping": sfx_ping, "radio": sfx_radio, "sep": sfx_sep,
         "engine": lambda: __import__("aetherx.cae.sounds", fromlist=["engine_loop"]).engine_loop(1.0, False),
     }
+    LOOPED = {"engine"}          # dikişsiz döngü: kenar geçişi uygulanmaz
 
     def __init__(self, enabled=True, music_vol=0.55, sfx_vol=0.8):
         self.ok = False
         self.enabled = enabled
         self.music_vol = music_vol
         self.sfx_vol = sfx_vol
+        self.master = 1.0            # ana ses (AYARLAR > SES)
+        self.amb_vol = 0.8           # ortam sesleri
+        self.ui_vol = 0.8            # arayüz tıklamaları
+        self.voice_vol = 0.8         # NOVA konuşma sesi
         self.sounds = {}
         self.tracks = {}
+        self.music_raw = {}           # yükleme sırasında üretilen müzik (numpy); Sound'a çalarken çevrilir
         self.current = None
         self.music_ch = [None, None]
         self.active_ch = 0
@@ -568,10 +737,10 @@ class Audio:
             self.ok = False
 
     # --- dönüştürme --------------------------------------------------------
-    def _to_sound(self, mono):
-        # yumuşak sınırlayıcı: tepe değerler sert kırpılmaz (kırpılan dalga çatırtı/cızırtı üretir)
-        mono = np.tanh(np.asarray(mono, dtype=np.float32) * 1.05) / np.tanh(1.05)
-        arr = np.clip(mono * 32000, -32767, 32767).astype(np.int16)
+    def _to_sound(self, mono, loop=False):
+        # son işleme zinciri (DC, tıslama, tık, tepe) + karıştırma payı; doyum/kırpma bozulması yok
+        mono = finish(mono, loop)
+        arr = np.clip(mono * (32767 * MASTER), -32767, 32767).astype(np.int16)
         init = pygame.mixer.get_init()
         ch = init[2] if init else 2
         if ch == 2:
@@ -582,7 +751,7 @@ class Audio:
         s = self.sounds.get(name)
         if s is None and name in self.SFX:
             try:
-                s = self._to_sound(self.SFX[name]())
+                s = self._to_sound(self.SFX[name](), name in self.LOOPED)
             except Exception:
                 s = False
             self.sounds[name] = s
@@ -611,7 +780,7 @@ class Audio:
             return None
         ch = s.play()
         if ch:
-            ch.set_volume(vol * self.sfx_vol)
+            ch.set_volume(min(1.0, vol * self.sfx_vol * self.master))
         return ch
 
     def loop(self, name, vol=0.6, fade=400):
@@ -622,7 +791,8 @@ class Audio:
         if not s:
             return
         self.loop_ch.play(s, loops=-1, fade_ms=fade)
-        self.loop_ch.set_volume(vol * self.sfx_vol)
+        self.loop_vol = vol
+        self.loop_ch.set_volume(vol * self.sfx_vol * self.master)
 
     def stop_loop(self, fade=600):
         if self.ok:
@@ -642,7 +812,8 @@ class Audio:
         tr = self.tracks.get(name)
         if tr is None:
             try:
-                tr = self._to_sound(music_track(name))
+                raw = self.music_raw.pop(name, None)
+                tr = self._to_sound(raw if raw is not None else music_track(name), True)
             except Exception:
                 tr = False
             self.tracks[name] = tr
@@ -651,7 +822,16 @@ class Audio:
         self.active_ch = 1 - self.active_ch
         ch = self.music_ch[self.active_ch]
         ch.play(tr, loops=-1, fade_ms=fade)
-        ch.set_volume(self.music_vol)
+        ch.set_volume(self.music_vol * self.master)
+
+    def prepare_music(self, names):
+        """Müziği önceden üret (yükleme ekranında, iş parçacığında güvenli: yalnız numpy)."""
+        for nm in names:
+            if nm not in self.tracks and nm not in self.music_raw:
+                try:
+                    self.music_raw[nm] = music_track(nm)
+                except Exception:
+                    pass
 
     def ambient(self, name, fade=900):
         """Sahneye özgü ortam sesi döngüsü."""
@@ -664,23 +844,25 @@ class Audio:
         snd = self.amb.get(name)
         if snd is None:
             try:
-                snd = self._to_sound(ambient_track(name))
+                snd = self._to_sound(ambient_track(name), True)
             except Exception:
                 snd = False
             self.amb[name] = snd
         if snd:
             self.amb_ch.play(snd, loops=-1, fade_ms=fade)
-            self.amb_ch.set_volume(0.5 * self.sfx_vol)
+            self.amb_ch.set_volume(0.5 * self.amb_vol * self.master)
 
-    def set_volumes(self, music=None, sfx=None):
-        if music is not None:
-            self.music_vol = music
-        if sfx is not None:
-            self.sfx_vol = sfx
-        if self.ok:
+    def set_volumes(self, music=None, sfx=None, master=None, amb=None, ui=None, voice=None):
+        for k, v in (("music_vol", music), ("sfx_vol", sfx), ("master", master), ("amb_vol", amb), ("ui_vol", ui),
+                     ("voice_vol", voice)):
+            if v is not None:
+                setattr(self, k, max(0.0, min(1.0, float(v))))
+        if self.ok:                      # çalan kanallar anında güncellenir
             ch = self.music_ch[self.active_ch]
             if ch:
-                ch.set_volume(self.music_vol)
+                ch.set_volume(self.music_vol * self.master)
+            self.amb_ch.set_volume(0.5 * self.amb_vol * self.master)
+            self.loop_ch.set_volume(getattr(self, "loop_vol", 0.6) * self.sfx_vol * self.master)
 
     def set_enabled(self, on):
         self.enabled = on
@@ -721,7 +903,7 @@ class Audio:
             if i >= 0:
                 ch = self.nova_blips[i].play()
                 if ch:
-                    ch.set_volume(0.5 * self.sfx_vol)
+                    ch.set_volume(0.5 * self.voice_vol * self.master)
                 self.nova_timer = 0.085
             else:
                 self.nova_timer = 0.2

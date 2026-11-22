@@ -1002,6 +1002,9 @@ class Toasts:
 def draw_tooltip(surf):
     if not UI.tooltip:
         return
+    from . import settings
+    if not settings.get("tooltips"):
+        return
     lines = wrap_text(UI.tooltip, 15, 360)
     w = max(text_size(l, 15, raw=True)[0] for l in lines) + 28
     h = len(lines) * 20 + 18
@@ -1019,6 +1022,9 @@ def draw_tooltip(surf):
 
 
 def draw_cursor(surf, color=C["cyan"]):
+    from . import settings
+    if not settings.get("custom_cursor"):
+        return
     mx, my = UI.mouse
     t = UI.time
     draw_glow(surf, (mx, my), 18, color, 0.6)
