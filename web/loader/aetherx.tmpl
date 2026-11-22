@@ -1,4 +1,4 @@
-<html lang="tr"><script src="{{cookiecutter.cdn}}pythons.js" type=module id="site" data-python="python{{cookiecutter.PYBUILD}}" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>#<!--
+<html lang="en"><script src="{{cookiecutter.cdn}}pythons.js" type=module id="site" data-python="python{{cookiecutter.PYBUILD}}" data-LINES=42 data-COLUMNS=132 data-os="vtx,snd,gui" async defer>#<!--
 
 print("""
 Loading {{cookiecutter.title}} from {{cookiecutter.archive}}.apk
@@ -178,9 +178,9 @@ function show_infobox() {
 
 </script>
 
-    <title>AETHER-X — Uzay Ajansı Komuta Simülasyonu</title>
+    <title>AETHER-X — Space Agency Command Simulation</title>
     <meta name="theme-color" content="#05070d">
-    <meta name="description" content="AETHER-X: NASA görüntüleri ve NASA verileriyle uzay ajansı, roket, iniş ve koloni oyunu.">
+    <meta name="description" content="AETHER-X: a space agency, rocket, landing, rover and colony game built on NASA imagery and NASA data.">
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -353,20 +353,20 @@ body { background: #05070d !important; color: #e8ecf2; font-family: Inter, "Sego
   <canvas id="kzsky"></canvas>
   <div class="kz-frame"><i></i><i></i><i></i><i></i></div>
   <div class="kz-top">
-    <div class="kz-kick">UZAY AJANSI · KOLONİ · MEDENİYET</div>
+    <div class="kz-kick">SPACE AGENCY · COLONY · CIVILISATION</div>
     <h1 class="kz-title">AETHER-X</h1>
-    <div class="kz-sub">Gezegenler NASA görüntüleri ve NASA verileriyle</div>
+    <div class="kz-sub">Planets rendered with NASA imagery and NASA data</div>
   </div>
   <div class="kz-planets" id="kzplanets"></div>
-  <div class="kz-src">Görüntüler: NASA SVS Blue Marble · NASA LRO · NASA Mars Trek (Viking) · NASA/JPL Cassini — Veriler: NASA NSSDC Gezegen Bilgi Tablosu</div>
+  <div class="kz-src">Imagery: NASA SVS Blue Marble · NASA LRO · NASA Mars Trek (Viking) · NASA/JPL Cassini — Data: NASA NSSDC Planetary Fact Sheet</div>
   <div class="kz-load">
     <div class="kz-stages" id="kzstages"></div>
     <div class="kz-bar"><div id="kzfill"></div><div class="kz-shine"></div></div>
-    <div class="kz-meta"><span id="kzlabel">Başlatılıyor…</span><span id="kzpct"></span></div>
+    <div class="kz-meta"><span id="kzlabel">Starting…</span><span id="kzpct"></span></div>
   </div>
   <div class="kz-fact" id="kzfact"></div>
-  <button class="kz-start" id="kzstart">BAŞLAMAK İÇİN DOKUN</button>
-  <div class="kz-foot">İlk açılışta Python, pygame ve numpy tarayıcıya iner (~20 MB); sonraki açılışlar hızlıdır. · <a href="3d/">deneysel 3B sürüm</a></div>
+  <button class="kz-start" id="kzstart">TAP TO START</button>
+  <div class="kz-foot">The first launch downloads Python, pygame and numpy into your browser (~20 MB); later launches are faster.</div>
 </div>
 
 
@@ -517,8 +517,8 @@ frameborder="1"
 <script>
 // AETHER-X yükleme katmanı: NASA haritalı dönen gezegenler, gerçek indirme durumu, NASA bilgileri.
 (function () {
-  var FACTS = [["Ay'da yerçekimi 1,62 m/s²: Dünya'daki ağırlığının yalnızca %17'sini hissedersin.", "NASA NSSDC Ay Bilgi Tablosu"], ["Venüs'te yüzey basıncı 92 bar, ortalama sıcaklık 464 °C: Merkür'den bile sıcak.", "NASA NSSDC Gezegen Bilgi Tablosu"], ["Venüs'te bir gün (2.802 saat) bir yıldan (224,7 gün) uzundur ve gezegen ters yönde döner.", "NASA NSSDC"], ["Mars'ın yüzey basıncı Dünya'nınkinin yaklaşık %1'i; bir Mars günü 24,7 saat sürer.", "NASA NSSDC Mars Bilgi Tablosu"], ["Olympus Mons yaklaşık 22 km yüksekliğiyle Güneş Sistemi'nin en yüksek yanardağıdır.", "NASA Science · Mars"], ["Jüpiter'in kütlesi öteki bütün gezegenlerin toplamının iki katından fazladır.", "NASA Science · Jüpiter"], ["Jüpiter'de bir gün yalnızca 9,9 saat sürer: Güneş Sistemi'nin en hızlı dönen gezegeni.", "NASA NSSDC"], ["Ay, Dünya'dan ortalama 384.400 km uzaktadır; ışık bu yolu 1,3 saniyede alır.", "NASA NSSDC Ay Bilgi Tablosu"], ["Apollo 11 Ay modülü Eagle 20 Temmuz 1969'da Huzur Denizi'ne indi.", "NASA History Office"], ["Dünya'dan kaçış hızı 11,2 km/s, Ay'dan 2,4 km/s, Jüpiter'den 59,5 km/s.", "NASA NSSDC Gezegen Bilgi Tablosu"], ["Bu oyundaki Dünya NASA Blue Marble, Ay LRO, Mars Viking, Jüpiter Cassini görüntüleriyle çizilir.", "NASA SVS · NASA Mars Trek · NASA/JPL"], ["Perseverance gezgini 18 Şubat 2021'de Mars'taki Jezero Krateri'ne indi.", "NASA/JPL"], ["DART aracı 2022'de Dimorphos'a çarparak yörünge periyodunu yaklaşık 33 dakika kısalttı.", "NASA / JHU APL"], ["Uluslararası Uzay İstasyonu Dünya'nın çevresini yaklaşık 90 dakikada bir dolaşır.", "NASA ISS"]];
-  var NASA = {"moon": {"name": "Ay", "g": 1.62, "diam_km": 3475, "day_h": 708.7, "temp_c": -20, "bar": 0.0, "earth_km": 384400, "escape": 2.4, "moons": 0, "year_d": 27.3}, "mars": {"name": "Mars", "g": 3.71, "diam_km": 6792, "day_h": 24.7, "temp_c": -65, "bar": 0.01, "sun_mkm": 228.0, "escape": 5.0, "moons": 2, "year_d": 687.0}, "earth": {"name": "Dünya", "g": 9.8, "diam_km": 12756, "day_h": 24.0, "temp_c": 15, "bar": 1.0, "sun_mkm": 149.6, "escape": 11.2, "moons": 1, "year_d": 365.2}, "venus": {"name": "Venüs", "g": 8.87, "diam_km": 12104, "day_h": 2802.0, "temp_c": 464, "bar": 92.0, "sun_mkm": 108.2, "escape": 10.4, "moons": 0, "year_d": 224.7}, "jupiter": {"name": "Jüpiter", "g": 24.79, "diam_km": 142984, "day_h": 9.9, "temp_c": -110, "bar": null, "sun_mkm": 778.5, "escape": 59.5, "moons": 95, "year_d": 4331}};
+  var FACTS = [["Gravity on the Moon is 1.62 m/s²: you feel only 17% of your weight on Earth.", "NASA NSSDC Moon Fact Sheet"], ["Venus has a surface pressure of 92 bar and a mean temperature of 464 °C: hotter than Mercury.", "NASA NSSDC Planetary Fact Sheet"], ["A day on Venus (2,802 hours) is longer than its year (224.7 days), and it spins backwards.", "NASA NSSDC"], ["Mars' surface pressure is about 1% of Earth's; a Martian day lasts 24.7 hours.", "NASA NSSDC Mars Fact Sheet"], ["At about 22 km, Olympus Mons is the tallest volcano in the Solar System.", "NASA Science · Mars"], ["Jupiter has more than twice the mass of all the other planets combined.", "NASA Science · Jupiter"], ["A day on Jupiter lasts only 9.9 hours: the fastest-spinning planet in the Solar System.", "NASA NSSDC"], ["The Moon is on average 384,400 km from Earth; light covers that in 1.3 seconds.", "NASA NSSDC Moon Fact Sheet"], ["The Apollo 11 lunar module Eagle landed in the Sea of Tranquility on 20 July 1969.", "NASA History Office"], ["Escape velocity is 11.2 km/s from Earth, 2.4 km/s from the Moon and 59.5 km/s from Jupiter.", "NASA NSSDC Planetary Fact Sheet"], ["In this game Earth uses NASA Blue Marble, the Moon LRO, Mars Viking and Jupiter Cassini imagery.", "NASA SVS · NASA Mars Trek · NASA/JPL"], ["The Perseverance rover landed in Jezero Crater on Mars on 18 February 2021.", "NASA/JPL"], ["In 2022 the DART spacecraft hit Dimorphos and shortened its orbital period by about 33 minutes.", "NASA / JHU APL"], ["The International Space Station circles Earth about once every 90 minutes.", "NASA ISS"]];
+  var NASA = {"moon": {"name": "Moon", "g": 1.62, "diam_km": 3475, "day_h": 708.7, "temp_c": -20, "bar": 0.0, "earth_km": 384400, "escape": 2.4, "moons": 0, "year_d": 27.3}, "mars": {"name": "Mars", "g": 3.71, "diam_km": 6792, "day_h": 24.7, "temp_c": -65, "bar": 0.01, "sun_mkm": 228.0, "escape": 5.0, "moons": 2, "year_d": 687.0}, "earth": {"name": "Earth", "g": 9.8, "diam_km": 12756, "day_h": 24.0, "temp_c": 15, "bar": 1.0, "sun_mkm": 149.6, "escape": 11.2, "moons": 1, "year_d": 365.2}, "venus": {"name": "Venus", "g": 8.87, "diam_km": 12104, "day_h": 2802.0, "temp_c": 464, "bar": 92.0, "sun_mkm": 108.2, "escape": 10.4, "moons": 0, "year_d": 224.7}, "jupiter": {"name": "Jupiter", "g": 24.79, "diam_km": 142984, "day_h": 9.9, "temp_c": -110, "bar": null, "sun_mkm": 778.5, "escape": 59.5, "moons": 95, "year_d": 4331}};
   var kz = document.getElementById('kz');
   var t0 = performance.now();
   // --- yıldız alanı
@@ -532,15 +532,15 @@ frameborder="1"
   var GLOW = { moon: '170,180,210', mars: '255,140,90', earth: '90,170,255', venus: '255,210,140', jupiter: '255,190,140' };
   var planets = [];
   var wrap = document.getElementById('kzplanets');
-  function fmt(v) { return String(v).replace('.', ','); }
+  function fmt(v) { return String(v); }
   ORDER.forEach(function (k, idx) {
     var d = NASA[k];
     var el = document.createElement('div'); el.className = 'kz-p'; el.style.animationDelay = (0.15 * idx) + 's';
     var cv = document.createElement('canvas');
     el.appendChild(cv);
-    var b = document.createElement('b'); b.textContent = d.name.toLocaleUpperCase('tr'); el.appendChild(b);
+    var b = document.createElement('b'); b.textContent = d.name.toUpperCase(); el.appendChild(b);
     var s = document.createElement('span');
-    s.textContent = fmt(d.g) + ' m/s² · ' + d.diam_km.toLocaleString('tr-TR') + ' km · ' + d.temp_c + ' °C';
+    s.textContent = fmt(d.g) + ' m/s² · ' + d.diam_km.toLocaleString('en-US') + ' km · ' + d.temp_c + ' °C';
     el.appendChild(s);
     wrap.appendChild(el);
     var p = { k: k, cv: cv, g: cv.getContext('2d'), tex: null, tw: 0, th: 0, spin: Math.random(), speed: k === 'jupiter' ? 0.03 : 0.012 };
@@ -616,7 +616,7 @@ frameborder="1"
     g.drawImage(p.tmp, 0, 0);
   }
   // --- aşamalar ve ilerleme (pygbag'in kendi durum alanlarından okunur)
-  var STAGES = ['Sayfa ve NASA görüntüleri', 'Python çalışma ortamı', 'Oyun paketi', 'Hazır'];
+  var STAGES = ['Page and NASA imagery', 'Python runtime', 'Game package', 'Ready'];
   var st = document.getElementById('kzstages');
   st.innerHTML = STAGES.map(function (s) { return '<div>' + s + '</div>'; }).join('');
   var stEls = st.children, stage = 0, shown = 0, ready = false, hiding = false;
@@ -632,7 +632,7 @@ frameborder="1"
   var fi = Math.floor(Math.random() * FACTS.length), factEl = document.getElementById('kzfact');
   function fact() {
     var f = FACTS[fi++ % FACTS.length]; factEl.classList.remove('show');
-    setTimeout(function () { factEl.innerHTML = ''; factEl.appendChild(document.createTextNode(f[0])); var s = document.createElement('small'); s.textContent = 'Kaynak: ' + f[1]; factEl.appendChild(s); factEl.classList.add('show'); }, 400);
+    setTimeout(function () { factEl.innerHTML = ''; factEl.appendChild(document.createTextNode(f[0])); var s = document.createElement('small'); s.textContent = 'Source: ' + f[1]; factEl.appendChild(s); factEl.classList.add('show'); }, 400);
   }
   fact(); setInterval(fact, 6000);
   var umeSince = 0;
@@ -659,7 +659,7 @@ frameborder="1"
     shown = Math.max(shown, Math.min(want, 1));
     document.getElementById('kzfill').style.width = (shown * 100).toFixed(1) + '%';
     document.getElementById('kzpct').textContent = Math.round(shown * 100) + '%';
-    var lbl = starting ? 'Oyun başlatılıyor…' : ready ? 'Hazır' : (/install/i.test(it) ? it : (stxt && !/^Downloading\.\.\.$/i.test(stxt) ? stxt : (started ? 'Oyun paketi açılıyor…' : 'Python ve pygame indiriliyor…')));
+    var lbl = starting ? 'Starting game…' : ready ? 'Ready' : (/install/i.test(it) ? it : (stxt && !/^Downloading\.\.\.$/i.test(stxt) ? stxt : (started ? 'Unpacking game package…' : 'Downloading Python and pygame…')));
     document.getElementById('kzlabel').textContent = lbl;
   }
   setInterval(poll, 250);

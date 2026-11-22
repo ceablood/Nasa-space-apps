@@ -23,6 +23,14 @@ from ..life import environment as E
 from ..life.biology import fitness
 from ..life.habitability import CATEGORIES as HCAT
 from ..cae import CATEGORIES
+from ..i18n import tr
+from .. import i18n as _i18n
+
+
+def pct_s(v, d=0):
+    """Dile göre yüzde ve ondalık: tr '%95,1', en '95.1%'."""
+    t = f"{v:.{d}f}"
+    return f"%{t.replace('.', ',')}" if _i18n.LANG == "tr" else f"{t}%"
 from ..cae import sounds as SD
 from ..ui import Button, Slider, Tabs, Toggle, chip, draw_bar, draw_icon, draw_paragraph, draw_text, glass_panel, wrap_text
 
@@ -249,8 +257,8 @@ class LifeScene(Scene):
         super().draw(surf)
         w = self.world
         self.draw_title(surf, sub=f"{w.env.name} · {w.env.source}")
-        draw_text(surf, fmt_year(w.year, False), (40, 160), 13, C["gold"], bold=True, anchor="bottomleft", raw=True)
-        draw_text(surf, "* kurgusal ötegezegen", (40, H - 92), 12, C["text_dim"], raw=True)
+        draw_text(surf, fmt_year(w.year, False), (40, 160), 13, C["gold"], bold=True, anchor="bottomleft")
+        draw_text(surf, "* kurgusal ötegezegen", (40, H - 92), 12, C["text_dim"])
         getattr(self, ("draw_planet", "draw_life", "draw_timeline", "draw_events", "draw_audio")[self.tab])(surf, w)
         self.draw_widgets(surf)
 
@@ -269,10 +277,10 @@ class LifeScene(Scene):
         y = r.y + 46
         for k, v in rows:
             draw_text(surf, k, (r.x + 20, y), 14, C["text_dim"])
-            draw_text(surf, str(v), (r.right - 20, y), 14, C["text"], bold=True, anchor="topright", raw=True, max_w=300)
+            draw_text(surf, str(v), (r.right - 20, y), 14, C["text"], bold=True, anchor="topright", max_w=300)
             y += 24
-        atm = ", ".join(f"{g} %{f * 100:.2f}".replace(".", ",") for g, f in sorted(env.atmosphere.items(), key=lambda kv: -kv[1]))
-        draw_paragraph(surf, "Atmosfer (hacimce): " + (atm or "yok"), (r.x + 20, y + 6), r.w - 40, 13, C["text_dim"], max_lines=3, raw=True)
+        atm = ", ".join(f"{g} {pct_s(f * 100, 2)}" for g, f in sorted(env.atmosphere.items(), key=lambda kv: -kv[1]))
+        draw_paragraph(surf, "Atmosfer (hacimce): " + (atm or "yok"), (r.x + 20, y + 6), r.w - 40, 13, C["text_dim"], max_lines=3)
         h = w.hab
         r2 = pygame.Rect(KX + 580, KY, KW - 580, 330)
         col = (C["green"], C["lime"], C["orange"], C["red"], C["text_dim"])[HCAT.index(h.category)]
@@ -290,7 +298,7 @@ class LifeScene(Scene):
             y += 22
         y2 = r2.y + 78
         for txt in h.reasons[:6]:
-            for line in wrap_text("• " + txt, 13, r2.w - 430, raw=True)[:2]:
+            for line in wrap_text("• " + tr(txt), 13, r2.w - 430, raw=True)[:2]:
                 draw_text(surf, line, (r2.x + 410, y2), 13, C["text"], raw=True)
                 y2 += 18
             y2 += 4
@@ -302,17 +310,17 @@ class LifeScene(Scene):
             colr = C["green"] if o["uygun"] else C["text_mute"]
             if o["uygun"]:
                 draw_icon(surf, "check", (r3.x + 28, y + 9), 14, colr)
-            draw_text(surf, o["name"], (r3.x + 42, y), 14, colr, bold=o["uygun"], raw=True)
+            draw_text(surf, o["name"], (r3.x + 42, y), 14, colr, bold=o["uygun"])
             chip(surf, (r3.x + 350, y - 2), o["label"], C["gold"] if "kurgusal" in o["label"] else C["cyan"], 11)
             y += 24
         y += 6
         for k in ("amino asit", "nükleotit", "RNA", "zar kesecikleri", "protohücre"):
             draw_bar(surf, (r3.x + 160, y + 4, 260, 9), w.network.get(k, 0), C["violet"], glow=False)
-            draw_text(surf, k, (r3.x + 20, y), 12, C["text_dim"], raw=True)
+            draw_text(surf, k, (r3.x + 20, y), 12, C["text_dim"])
             y += 19
         oy = w.origin_year
         draw_text(surf, "Prebiyotik ağ (oyun modeli): " + (f"protohücre eşiği {oy / 1e6:.0f} milyon yıl" if oy else "eşiğe ulaşılmadı"),
-                  (r3.x + 20, y + 4), 12, C["text_dim"], raw=True)
+                  (r3.x + 20, y + 4), 12, C["text_dim"])
 
     # --- YAŞAM
     def rows(self):
@@ -335,7 +343,7 @@ class LifeScene(Scene):
         rows = self.rows()
         if not w.species:
             draw_paragraph(surf, f"{w.env.name}: NASA'ya göre bu cisimde yaşam bulunmamıştır. Kurgusal bir senaryo görmek "
-                                 "için soldaki \"Hipotetik yaşam\" anahtarını aç.", (r.x + 24, r.y + 30), r.w - 48, 17, C["text"], raw=True)
+                                 "için soldaki \"Hipotetik yaşam\" anahtarını aç.", (r.x + 24, r.y + 30), r.w - 48, 17, C["text"])
         heads = (("TÜR", 20), ("ALEM", 330), ("BESLENME", 420), ("YAŞAM ALANI", 530), ("BİYOKÜTLE", 640), ("UYGUNLUK", 790))
         for t, x in heads:
             draw_text(surf, t, (r.x + x, r.y + 14), 12, C["text_dim"], bold=True)
@@ -345,7 +353,7 @@ class LifeScene(Scene):
             if sel:
                 pygame.draw.rect(surf, (20, 50, 60), (r.x + 8, y - 4, r.w - 16, 30), border_radius=8)
             col = C["text"] if s.alive else C["text_mute"]
-            draw_text(surf, s.name + ("" if s.alive else " †"), (r.x + 20, y), 15, col, bold=True, raw=True, max_w=210)
+            draw_text(surf, s.name + ("" if s.alive else " †"), (r.x + 20, y), 15, col, bold=True, max_w=210)
             chip(surf, (r.x + 238, y - 1), "GERÇEK" if s.real else "KURGUSAL", C["green"] if s.real else C["gold"], 10)
             draw_text(surf, s.kingdom, (r.x + 330, y + 2), 13, col)
             draw_text(surf, s.genome.diet, (r.x + 420, y + 2), 13, col)
@@ -356,26 +364,26 @@ class LifeScene(Scene):
             y += 34
         if len(rows) > 15:
             draw_text(surf, f"{self.scroll + 1}-{min(len(rows), self.scroll + 15)} / {len(rows)} (fare tekerleği)", (r.right - 20, r.bottom - 26),
-                      12, C["text_dim"], anchor="topright", raw=True)
+                      12, C["text_dim"], anchor="topright")
         # sağ: ayrıntı, döngüler, besin ağı
         r2 = pygame.Rect(KX + 900, KY + 44, KW - 900, KH - 44)
         glass_panel(surf, r2, C["cyan"], 175, 16)
         x0, y = r2.x + 18, r2.y + 14
         if self.sel:
             s = self.sel
-            draw_text(surf, s.name, (x0, y), 18, C["text"], bold=True, raw=True, max_w=r2.w - 36)
+            draw_text(surf, s.name, (x0, y), 18, C["text"], bold=True, max_w=r2.w - 36)
             y += 28
-            draw_paragraph(surf, s.note or "", (x0, y), r2.w - 36, 13, C["text_dim"], max_lines=3, raw=True)
+            draw_paragraph(surf, s.note or "", (x0, y), r2.w - 36, 13, C["text_dim"], max_lines=3)
             y += 52
             g = s.genome
             for k, v in (("Metabolizma", g.metabolism), ("Boy", f"10^{g.size:.1f} m"), ("Sıcaklık optimumu", f"{g.temp_opt:.0f} °C"),
-                         ("Sosyallik", f"%{g.social * 100:.0f}")):
+                         ("Sosyallik", pct_s(g.social * 100))):
                 draw_text(surf, k, (x0, y), 13, C["text_dim"])
-                draw_text(surf, str(v), (r2.right - 18, y), 13, C["text"], bold=True, anchor="topright", raw=True)
+                draw_text(surf, str(v), (r2.right - 18, y), 13, C["text"], bold=True, anchor="topright")
                 y += 20
             if s.kingdom == "hayvan":
                 f0 = max(70.0, min(7000.0, 900.0 * 10 ** (-0.6 * (g.size + 1.0))))
-                draw_text(surf, f"Ses profili: ~{f0:.0f} Hz temel frekans (beden boyundan)", (x0, y + 4), 12, C["cyan"], raw=True,
+                draw_text(surf, f"Ses profili: ~{f0:.0f} Hz temel frekans (beden boyundan)", (x0, y + 4), 12, C["cyan"],
                           max_w=r2.w - 36)
                 y += 24
             y += 8
@@ -421,8 +429,8 @@ class LifeScene(Scene):
         start = max(0, len(items) - 22 - self.scroll)
         y = r.y + 46
         for yr, kind, txt, real in items[start:start + 22]:
-            draw_text(surf, fmt_year(yr, real), (r.x + 20, y), 12, C["gold"] if real else C["cyan"], bold=True, raw=True)
-            draw_text(surf, txt, (r.x + 210, y), 13, C["text"], raw=True, max_w=r.w - 330)
+            draw_text(surf, fmt_year(yr, real), (r.x + 20, y), 12, C["gold"] if real else C["cyan"], bold=True)
+            draw_text(surf, txt, (r.x + 210, y), 13, C["text"], max_w=r.w - 330)
             chip(surf, (r.right - 16, y - 2), "gerçek tarih" if real else "simülasyon", C["green"] if real else C["violet"], 10, anchor="topright")
             y += 24
         r2 = pygame.Rect(KX + 800, KY, KW - 800, KH)
@@ -436,30 +444,32 @@ class LifeScene(Scene):
             for idx, col, m in ((1, C["green"], mt), (2, C["cyan"], mb)):
                 pts = [(gr.x + i * gr.w / (len(self.hist) - 1), gr.bottom - 8 - (h[idx] / m) * (gr.h - 16)) for i, h in enumerate(self.hist)]
                 pygame.draw.lines(surf, col, False, pts, 2)
-            draw_text(surf, f"tür {self.hist[-1][1]}", (gr.x + 8, gr.y + 6), 13, C["green"], bold=True, raw=True)
-            draw_text(surf, f"biyokütle {self.hist[-1][2]:.0f}", (gr.right - 8, gr.y + 6), 13, C["cyan"], bold=True, anchor="topright", raw=True)
+            draw_text(surf, f"tür {self.hist[-1][1]}", (gr.x + 8, gr.y + 6), 13, C["green"], bold=True)
+            draw_text(surf, f"biyokütle {self.hist[-1][2]:.0f}", (gr.right - 8, gr.y + 6), 13, C["cyan"], bold=True, anchor="topright")
         st = w.stats()
         y = r2.y + 330
         for k in ("tür", "yok olan"):
             draw_text(surf, k.capitalize(), (r2.x + 20, y), 15, C["text_dim"])
-            draw_text(surf, str(st[k]), (r2.right - 20, y), 15, C["text"], bold=True, anchor="topright", raw=True)
+            draw_text(surf, str(st[k]), (r2.right - 20, y), 15, C["text"], bold=True, anchor="topright")
             y += 26
         draw_paragraph(surf, "Zamanı soldaki düğmelerle hızlandır. ×10 bin ve üstünde evrim çalışır: mutasyon, doğal seçilim, "
                              "genetik sürüklenme, darboğaz, göç (coğrafi izolasyon), türleşme ve yok oluş.", (r2.x + 20, y + 10),
-                       r2.w - 40, 13, C["text_dim"], raw=True)
+                       r2.w - 40, 13, C["text_dim"])
 
     # --- OLAYLAR
     def draw_events(self, surf, w):
         r = pygame.Rect(KX, KY, KW, KH)
         glass_panel(surf, r, C["orange"], 175, 16)
-        draw_text(surf, f"ÇEVRESEL DEĞİŞİM · hedef biyom: {self.biome or '-'}", (r.x + 20, r.y + 16), 16, C["orange"], bold=True, raw=True)
+        draw_text(surf, f"ÇEVRESEL DEĞİŞİM · hedef biyom: {self.biome or '-'}", (r.x + 20, r.y + 16), 16, C["orange"], bold=True)
         draw_text(surf, "Olaylar çevreyi ve popülasyonları değiştirir, zaman çizelgesine yazılır ve ses motorunu tetikler.",
-                  (r.x + 20, r.y + 250), 14, C["text_dim"], raw=True)
+                  (r.x + 20, r.y + 250), 14, C["text_dim"])
         y = r.y + 290
         for ev in list(self.app.bus.history)[-12:][::-1]:
-            draw_text(surf, ev["name"], (r.x + 20, y), 13, C["cyan"], bold=True, raw=True)
-            info = ", ".join(f"{k}={v}" for k, v in ev.items() if k in ("label", "biome", "species", "strength") and v is not None)
-            draw_text(surf, info, (r.x + 240, y), 13, C["text"], raw=True, max_w=r.w - 260)
+            draw_text(surf, ev["name"], (r.x + 20, y), 13, C["cyan"], bold=True)
+            parts = [tr(ev[k]) for k in ("label", "biome", "species") if ev.get(k)]
+            if ev.get("strength") is not None:
+                parts.append(pct_s(ev["strength"] * 100, 0))
+            draw_text(surf, " · ".join(parts), (r.x + 240, y), 13, C["text"], max_w=r.w - 260, raw=True)
             y += 22
 
     # --- SES GÖZLEMEVİ
@@ -470,33 +480,33 @@ class LifeScene(Scene):
         draw_text(surf, "SES AYARLARI · ERİŞİLEBİLİRLİK", (r.x + 20, r.y + 14), 15, C["cyan"], bold=True)
         r2 = pygame.Rect(KX + 500, KY, 560, KH)
         glass_panel(surf, r2, C["violet"], 175, 16)
-        draw_text(surf, f"ORTAM: {w.env.name} · {self.biome or '-'}", (r2.x + 20, r2.y + 14), 15, C["violet"], bold=True, raw=True)
-        draw_text(surf, cae.label, (r2.x + 20, r2.y + 38), 13, C["text_dim"], raw=True)
+        draw_text(surf, f"ORTAM: {w.env.name} · {self.biome or '-'}", (r2.x + 20, r2.y + 14), 15, C["violet"], bold=True)
+        draw_text(surf, cae.label, (r2.x + 20, r2.y + 38), 13, C["text_dim"])
         tg = cae.layer_targets()
         y = r2.y + 64
         for k in ("atmosfer", "okyanus", "jeoloji", "canlı", "bitki", "uzay aracı"):
             v = tg.get(k, 0)
             draw_bar(surf, (r2.x + 130, y + 4, 260, 10), v, C["violet"], glow=False)
             draw_text(surf, k, (r2.x + 20, y), 13, C["text_dim"])
-            draw_text(surf, "sessiz" if v < 0.01 else f"%{v * 100:.0f}", (r2.x + 410, y), 13, C["text"], raw=True)
+            draw_text(surf, "sessiz" if v < 0.01 else f"%{v * 100:.0f}", (r2.x + 410, y), 13, C["text"])
             y += 24
         draw_text(surf, "Akustik profil", (r2.x + 20, r2.y + 240), 13, C["text_dim"], bold=True)
         if getattr(self, "last_spatial", None):
             nm, res = self.last_spatial
             txt = "duyulmaz (vakum ya da çok uzak)" if res is None else f"sol %{res[0] * 100:.0f} · sağ %{res[1] * 100:.0f} · {res[2]:.0f} m"
-            draw_text(surf, f"{nm}: {txt}", (r2.x + 20, r2.y + 444), 13, C["text"], raw=True, max_w=r2.w - 40)
+            draw_text(surf, f"{nm}: {txt}", (r2.x + 20, r2.y + 444), 13, C["text"], max_w=r2.w - 40)
         mus = cae.music
-        draw_text(surf, f"Dinamik müzik: {mus.state or '-'} → '{DMAP(mus)}'", (r2.x + 20, r2.y + 476), 13, C["gold"], raw=True)
+        draw_text(surf, f"Dinamik müzik: {mus.state or '-'} → '{DMAP(mus)}'", (r2.x + 20, r2.y + 476), 13, C["gold"])
         draw_paragraph(surf, "Uzay boşluğunda dış ortam sesi yoktur; araç ve giysi içi sesler duyulur. Uzaydaki motor/patlama "
                              "sesleri sinematik temsildir. Mikrobiyal sesler görsel-işitsel temsildir, ölçüm değildir.",
-                       (r2.x + 20, r2.y + 504), r2.w - 40, 12, C["text_dim"], raw=True)
+                       (r2.x + 20, r2.y + 504), r2.w - 40, 12, C["text_dim"])
         r3 = pygame.Rect(KX + 1070, KY, KW - 1070, KH)
         glass_panel(surf, r3, C["gold"], 175, 16)
         draw_text(surf, "OLAY → SES (geliştirici)", (r3.x + 16, r3.y + 14), 13, C["gold"], bold=True)
         y = r3.y + 38
         for t, name, key, res in list(cae.events.log)[-9:][::-1]:
-            draw_text(surf, f"{name} → {key or '-'}", (r3.x + 16, y), 11, C["cyan"], bold=True, raw=True, max_w=r3.w - 32)
-            draw_text(surf, res, (r3.x + 16, y + 14), 11, C["text_dim"], raw=True, max_w=r3.w - 32)
+            draw_text(surf, f"{name} → {tr(key) if key else '-'}", (r3.x + 16, y), 11, C["cyan"], bold=True, max_w=r3.w - 32, raw=True)
+            draw_text(surf, res, (r3.x + 16, y + 14), 11, C["text_dim"], max_w=r3.w - 32)
             y += 34
         p = cae.perf
         y = r3.bottom - 170
@@ -506,8 +516,8 @@ class LifeScene(Scene):
                      ("varlık künyesi", f"{len(cae.assets.meta)} kayıt")):
             y += 20
             draw_text(surf, k, (r3.x + 16, y), 12, C["text_dim"])
-            draw_text(surf, str(v), (r3.right - 16, y), 12, C["text"], bold=True, anchor="topright", raw=True)
-        draw_text(surf, "Lisans: özgün prosedürel sentez", (r3.x + 16, r3.bottom - 24), 11, C["green"], raw=True)
+            draw_text(surf, str(v), (r3.right - 16, y), 12, C["text"], bold=True, anchor="topright")
+        draw_text(surf, "Lisans: özgün prosedürel sentez", (r3.x + 16, r3.bottom - 24), 11, C["green"])
 
 
 def DMAP(m):

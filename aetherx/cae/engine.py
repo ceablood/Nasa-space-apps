@@ -190,7 +190,7 @@ class EventManager:
         "PlanetLanding": ("iniş takımı", "uzay aracı", 8, 3.0, "Gezegene iniş"),
         "EngineStart": ("motor", "uzay aracı", 6, 0.5, "Motor ateşlendi"),
         "RadiationSpike": ("rapor", "arayüz", 6, 5.0, "Radyasyon artışı uyarısı"),
-        "StellarFlare": ("rapor", "arayüz", 6, 5.0, "Yıldız patlaması (flare)"),
+        "StellarFlare": ("rapor", "arayüz", 6, 5.0, "Yıldız patlaması"),
         "Drought": (None, "ortam", 3, 6.0, "Kuraklık"), "HeatWave": (None, "ortam", 3, 6.0, "Aşırı sıcaklık"),
         "AtmosphereChanged": (None, "atmosfer", 3, 6.0, "Atmosfer değişti"),
         "SeaLevelChanged": (None, "okyanus", 3, 6.0, "Deniz seviyesi değişti"),

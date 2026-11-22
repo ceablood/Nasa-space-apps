@@ -22,6 +22,11 @@ from . import Scene
 from .. import art
 from .. import data as D
 from ..config import C, H, W
+from .. import i18n
+
+
+def FX():
+    return i18n.quality().get("fx", 1.0)
 from ..fx import ParticleSystem, Shake, clamp, draw_glow, lerp, overlay, scale_color
 from ..ui import UI, Button, chip, draw_bar, draw_icon, draw_text, glass_panel
 
@@ -42,6 +47,16 @@ START_ALT = 1800.0
 START_DX = -1500.0
 SAFE_VY, SAFE_VX, SAFE_TILT = 2.6, 2.0, 10.0      # yumuşak temas sınırları
 HARD_VY = 5.5
+
+
+RCS_ACC = 90.0      # derece/sn²: tepki kontrol iticilerinin açısal ivmesi (oyun değeri)
+
+
+def rcs_toward(L, target, dt):
+    """RCS ile hedef açıya PD yaklaşımı: açısal hız ivme sınırıyla değişir (anlık dönüş yok)."""
+    want = clamp((target - L.ang) * 2.5, -45, 45)
+    L.omega += clamp(want - L.omega, -RCS_ACC * dt, RCS_ACC * dt)
+    L.ang += L.omega * dt
 
 
 class Terrain:
@@ -100,6 +115,7 @@ class Lander:
         self.x, self.y = START_DX, START_ALT
         self.vx, self.vy = 58.0, -32.0
         self.ang = -8.0           # derece; + sağa eğik (itki +x)
+        self.omega = 0.0          # derece/sn: açısal hız (RCS torkuyla değişir; momentum korunur)
         self.g = g
         self.tmax = thrust        # m/s² en çok itki ivmesi
         self.dv = budget          # kalan Δv (m/s) = yakıt
@@ -253,14 +269,19 @@ class LandingScene(Scene):
             self.app.toast("Kumanda sende", "cyan", "nova")
         if self.assist:
             thr, ang = self.guidance()
-            L.ang += clamp(ang - L.ang, -60 * dt, 60 * dt)
+            rcs_toward(L, ang, dt)
             L.throttle = thr
         else:
             if mouse[0] and not over_ui and not rot_in:       # dokunmatik: basılan yana eğ
                 sx, _ = self.to_screen(L.x, L.y)
-                target = clamp((UI.mouse[0] - sx) / 260 * 40, -40, 40)
-                L.ang += clamp(target - L.ang, -55 * dt, 55 * dt)
-            L.ang = clamp(L.ang + rot_in * 55 * dt, -60, 60)
+                rcs_toward(L, clamp((UI.mouse[0] - sx) / 260 * 40, -40, 40), dt)
+            elif rot_in:                                       # RCS iticisi: açısal ivme, hız birikir
+                L.omega = clamp(L.omega + rot_in * RCS_ACC * dt, -60, 60)
+                L.ang += L.omega * dt
+            else:                                              # SAS: RCS dönüşü durdurur (momentum anında yok olmaz)
+                L.omega -= clamp(L.omega, -RCS_ACC * dt, RCS_ACC * dt)
+                L.ang += L.omega * dt
+            L.ang = clamp(L.ang, -75, 75)
             L.throttle = 1.0 if thr_in else 0.0
         if L.dv <= 0:
             L.throttle = 0.0
@@ -290,7 +311,7 @@ class LandingScene(Scene):
                 k = 1 - alt / 45
                 gx, gy = self.to_screen(L.x, ground)
                 for side in (-1, 1):
-                    self.ps.smoke(gx + side * 10, gy - 2, n=1 + int(2 * k), angle=math.pi if side < 0 else 0.0,
+                    self.ps.smoke(gx + side * 10, gy - 2, n=max(1, int((1 + 2 * k) * FX())), angle=math.pi if side < 0 else 0.0,
                                   spread=0.25, speed=(80 * k + 40, 260 * k + 60), size=(8, 18), life=(0.8, 1.8),
                                   color=self.b["dust"], alpha=int(120 * k + 40), grow=30,
                                   grav=0 if self.key == "moon" else -6)
@@ -347,10 +368,11 @@ class LandingScene(Scene):
         if self.b["drag"]:
             ax += self.b["drag"] * v * L.vx
             ay += self.b["drag"] * v * L.vy
-        ay = max(ay, 0.05)
+        # dikey talep sıfıra yaklaşınca atan2 tekilleşir (açı ±45° arası çırpınır): açıyı en az 0,3g dikey referansla
+        # hesapla; itki yalnız gerçekten gereken kadar
+        thr = clamp(math.hypot(ax, max(ay, 0.0)) / L.tmax, 0.0, 1.0)
         lim = 6 if alt < 12 else 45
-        ang = clamp(math.degrees(math.atan2(ax, ay)), -lim, lim)
-        thr = clamp(math.hypot(ax, ay) / L.tmax, 0.0, 1.0)
+        ang = clamp(math.degrees(math.atan2(ax, max(ay, 0.3 * L.g))), -lim, lim)
         return thr, ang
 
     def plan_budget(self, thrust):
@@ -360,7 +382,7 @@ class LandingScene(Scene):
         used, dt = 0.0, 1 / 30
         for _ in range(30 * 400):
             thr, ang = self.guidance(L)
-            L.ang += clamp(ang - L.ang, -60 * dt, 60 * dt)
+            rcs_toward(L, ang, dt)
             a = thr * L.tmax
             rad = math.radians(L.ang)
             ax, ay = math.sin(rad) * a, math.cos(rad) * a - L.g
@@ -622,7 +644,7 @@ class LandingScene(Scene):
         y = r.y + 16
         for k, v, col in rows:
             draw_text(surf, k, (r.x + 18, y + 4), 13, C["text_dim"], bold=True)
-            draw_text(surf, v, (r.right - 18, y), 22, col, bold=True, anchor="topright", raw=True)
+            draw_text(surf, v, (r.right - 18, y), 22, col, bold=True, anchor="topright")
             y += 38
         draw_bar(surf, (r.x + 40, y + 14, r.w - 60, 12), L.dv / max(1, L.dv0), C["orange"], label="YAKIT (Δv)",
                  value=f"{L.dv:.0f} m/s", icon="fuel", warn_below=0.2)
@@ -640,7 +662,7 @@ class LandingScene(Scene):
         for v in (0, 10, 20, 30, 40):
             yy = vy_y(-v)
             pygame.draw.line(surf, (90, 100, 120), (tr.x + 62, yy), (tr.x + 70, yy), 1)
-            draw_text(surf, str(v), (tr.x + 74, yy - 8), 12, C["text_dim"], raw=True)
+            draw_text(surf, str(v), (tr.x + 74, yy - 8), 12, C["text_dim"])
         yy = vy_y(L.vy)
         col = C["green"] if -L.vy <= SAFE_VY else C["orange"] if -L.vy <= HARD_VY else C["red"]
         pygame.draw.polygon(surf, col, [(tr.x + 24, yy), (tr.x + 12, yy - 8), (tr.x + 12, yy + 8)])

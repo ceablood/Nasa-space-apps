@@ -44,12 +44,13 @@ SCENES = {
     "agency": ("agency", "AgencyScene"),
     "solar": ("solar", "SolarScene"),
     "life": ("life", "LifeScene"),
+    "rover": ("rover", "RoverScene"),
 }
 
 NAV = [
     ("base", "ÜS", "home"), ("hangar", "HANGAR", "wrench"), ("research", "AR-GE", "flask"),
     ("crew", "EKİP", "astro"), ("colony", "KOLONİ", "flag"), ("quests", "GÖREV", "chart"),
-    ("solar", "ATLAS", "planet"), ("life", "YAŞAM", "flask"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
+    ("solar", "ATLAS", "planet"), ("life", "YAŞAM", "flask"), ("rover", "ROVER", "rocket"), ("nova", "NOVA", "nova"), ("agency", "AJANS", "settings"),
 ]
 
 COLOR_KEYS = {"cyan": C["cyan"], "gold": C["gold"], "green": C["green"], "red": C["red"], "orange": C["orange"],
@@ -193,10 +194,9 @@ class App:
             surf.set_at((x, y), (b, b, min(255, b + 30)))
         draw_glow(surf, (W // 2, 150), 360, C["cyan"], 0.16)
         draw_glow(surf, (W - 200, H - 120), 300, (150, 90, 255), 0.12)
-        draw_text(surf, "UZAY AJANSI · KOLONİ · MEDENİYET", (W // 2, 70), 15, C["cyan"], bold=True, anchor="midtop", raw=True)
+        draw_text(surf, "UZAY AJANSI · KOLONİ · MEDENİYET", (W // 2, 70), 15, C["cyan"], bold=True, anchor="midtop")
         draw_text(surf, "AETHER-X", (W // 2, 150), 96, C["white"], bold=True, anchor="center", glow=C["cyan"], raw=True)
-        draw_text(surf, "Gezegenler NASA görüntüleri ve NASA verileriyle", (W // 2, 210), 18, C["text_dim"], anchor="midtop",
-                  raw=True)
+        draw_text(surf, "Gezegenler NASA görüntüleri ve NASA verileriyle", (W // 2, 210), 18, C["text_dim"], anchor="midtop")
         # gezegen sırası: dokusu hazır olan NASA görüntüsüyle belirir, olmayan dönen halka
         keys = ["moon", "mars", "earth", "venus", "jupiter"]
         sizes = {"moon": 52, "mars": 62, "earth": 84, "venus": 76, "jupiter": 104}
@@ -216,28 +216,28 @@ class App:
                 pygame.draw.circle(surf, (30, 40, 70), (int(x), cy), R, 1)
                 pygame.draw.arc(surf, C["cyan"], (x - R, cy - R, R * 2, R * 2), a, a + 1.4, 2)
                 col = C["text_dim"]
-            draw_text(surf, nd["name"].upper(), (x, cy + 118), 17, col, bold=True, anchor="midtop", raw=True)
-            g = f"{nd['g']:.2f}".replace(".", ",")
-            dk = f"{nd['diam_km']:,}".replace(",", ".")
+            draw_text(surf, nd["name"].upper(), (x, cy + 118), 17, col, bold=True, anchor="midtop")
+            g = i18n.num(nd['g'], 2)
+            dk = i18n.num(nd['diam_km'])
             draw_text(surf, f"{g} m/s² · {dk} km", (x, cy + 142), 13, C["text_dim"],
-                      anchor="midtop", raw=True)
-            draw_text(surf, f"ort. {nd['temp_c']} °C", (x, cy + 160), 13, C["text_dim"], anchor="midtop", raw=True)
+                      anchor="midtop")
+            draw_text(surf, f"ort. {nd['temp_c']} °C", (x, cy + 160), 13, C["text_dim"], anchor="midtop")
         draw_text(surf, f"Kaynak: {D.NASA_SOURCE}", (W // 2, cy + 190), 12, scale_color(C["text_dim"], 0.8),
-                  anchor="midtop", raw=True)
+                  anchor="midtop")
         # ilerleme
         n = max(1, len(self.load_steps))
         frac = min(1.0, (self.load_done + 0.5) / n)
         draw_bar(surf, (W // 2 - 320, 650, 640, 12), frac, C["cyan"])
         cur = self.load_steps[min(self.load_done, n - 1)][0] if self.load_steps else "menu"
         draw_text(surf, self.LOAD_LABEL.get(cur, "Hazırlanıyor") + " hazırlanıyor…", (W // 2, 676), 17, C["text"],
-                  bold=True, anchor="midtop", raw=True)
-        draw_text(surf, f"{int(frac * 100)}%", (W // 2 + 320, 630), 14, C["cyan"], anchor="bottomright", raw=True)
+                  bold=True, anchor="midtop")
+        draw_text(surf, f"{int(frac * 100)}%", (W // 2 + 320, 630), 14, C["cyan"], anchor="bottomright")
         # dönen NASA bilgisi
         fact, src = D.NASA_FACTS[int(t / 5) % len(D.NASA_FACTS)]
         r = pygame.Rect(W // 2 - 420, 730, 840, 86)
         glass_panel(surf, r, C["gold"], 150, 14, glow=False)
-        draw_text(surf, fact, (r.centerx, r.y + 16), 17, C["text"], anchor="midtop", raw=True, max_w=r.w - 40)
-        draw_text(surf, "Kaynak: " + src, (r.centerx, r.y + 52), 13, C["gold"], anchor="midtop", raw=True)
+        draw_text(surf, fact, (r.centerx, r.y + 16), 17, C["text"], anchor="midtop", max_w=r.w - 40)
+        draw_text(surf, "Kaynak: " + src, (r.centerx, r.y + 52), 13, C["gold"], anchor="midtop")
         pygame.display.flip()
 
     def draw_captions(self, surf):
@@ -245,6 +245,7 @@ class App:
         caps = list(self.cae.events.captions)[-2:] if self.cae.settings["captions"] else []
         y = H - 34
         for _, txt in reversed(caps):
+            txt = i18n.tr(txt)
             w, h = text_size(txt, 15, raw=True)
             r = pygame.Rect(W // 2 - w // 2 - 12, y - 4, w + 24, h + 8)
             pygame.draw.rect(surf, (4, 8, 18), r, border_radius=8)
@@ -538,7 +539,7 @@ class App:
         surf = self.screen
         if self.scene:
             self.scene.draw(surf)
-            cinema.bloom(surf, (0.9 if i18n.PREFS.get("quality") in ("ultra", "max") else 0.6) * self.scene.bloom_k)
+            cinema.bloom(surf, i18n.quality().get("bloom", 0.6) * self.scene.bloom_k)
             if self.scene.show_topbar and self.game.s:
                 self.draw_topbar(surf)
         self.bubble.draw(surf)
