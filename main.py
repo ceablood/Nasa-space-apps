@@ -44,7 +44,7 @@ def pause():
     """Çift tıklamayla açılan konsol penceresi hemen kapanmasın."""
     try:
         if sys.stdin and sys.stdin.isatty():
-            input("\nKapatmak için Enter'a bas...")
+            input("\nPress Enter to close...")
     except Exception:
         pass
 
@@ -63,7 +63,7 @@ def popup(title, text):
 
 def pip_install(*pkgs):
     cmd = [sys.executable, "-m", "pip", "install", "--upgrade", *pkgs]
-    say("Kuruluyor: " + " ".join(pkgs) + "  (internet bağlantısı gerekir, bir dakika sürebilir)")
+    say("Installing: " + " ".join(pkgs) + "  (needs an internet connection, may take a minute)")
     try:
         r = subprocess.call(cmd)
         if r != 0:
@@ -71,14 +71,14 @@ def pip_install(*pkgs):
             r = subprocess.call(cmd + ["--user"])
         return r == 0
     except Exception as ex:
-        say(f"pip çalıştırılamadı: {ex}")
+        say(f"Could not run pip: {ex}")
         return False
 
 
 def ensure_deps():
     if sys.version_info < (3, 8):
-        msg = (f"Python {sys.version.split()[0]} çok eski. AETHER-X için Python 3.8 veya üstü gerekir.\n"
-               "https://www.python.org/downloads/ adresinden güncel sürümü kur.")
+        msg = (f"Python {sys.version.split()[0]} is too old. AETHER-X needs Python 3.8 or newer.\n"
+               "Install a current version from https://www.python.org/downloads/")
         say(msg)
         popup("AETHER-X", msg)
         pause()
@@ -94,10 +94,10 @@ def ensure_deps():
     except Exception:
         need.append("numpy")
     if need:
-        say("Eksik kütüphaneler bulundu: " + ", ".join(need))
+        say("Missing libraries found: " + ", ".join(need))
         if not pip_install(*need):
-            msg = ("Gerekli kütüphaneler kurulamadı.\nKomut satırında şunu çalıştır:\n\n"
-                   f'  "{sys.executable}" -m pip install pygame-ce numpy\n\nsonra oyunu yeniden aç.')
+            msg = ("The required libraries could not be installed.\nRun this in a terminal:\n\n"
+                   f'  "{sys.executable}" -m pip install pygame-ce numpy\n\nthen start the game again.')
             say(msg)
             popup("AETHER-X", msg)
             pause()
@@ -108,8 +108,8 @@ def ensure_deps():
             import pygame  # noqa: F401,F811
             import numpy  # noqa: F401,F811
         except Exception:
-            msg = ("Kütüphaneler kuruldu ama yüklenemedi. Oyunu kapatıp yeniden aç.\n"
-                   "Sorun sürerse:  python -m pip uninstall -y pygame  ve ardından  python -m pip install pygame-ce numpy")
+            msg = ("The libraries were installed but could not be loaded. Close the game and start it again.\n"
+                   "If the problem persists:  python -m pip uninstall -y pygame  then  python -m pip install pygame-ce numpy")
             say(msg)
             popup("AETHER-X", msg)
             pause()
@@ -140,10 +140,10 @@ def main():
                 f.write(info + tb)
         except Exception:
             pass
-        say("\nAETHER-X bir hatayla kapandı:\n" + tb)
-        say(f"Ayrıntılar şu dosyaya yazıldı: {LOG}")
-        popup("AETHER-X hata", "Oyun bir hatayla kapandı.\n\n" + tb.strip().splitlines()[-1] +
-              f"\n\nAyrıntılar: {LOG}\nBu dosyayı geliştiriciyle paylaşabilirsin.")
+        say("\nAETHER-X closed because of an error:\n" + tb)
+        say(f"Details were written to: {LOG}")
+        popup("AETHER-X error", "The game closed because of an error.\n\n" + tb.strip().splitlines()[-1] +
+              f"\n\nDetails: {LOG}\nYou can share this file with the developer.")
         try:
             import pygame
             pygame.quit()
