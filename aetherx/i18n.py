@@ -78,7 +78,7 @@ def load_prefs():
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
         if isinstance(d, dict):
-            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic", "cae", "keys", "prefs_version") if k in d})
+            PREFS.update({k: d[k] for k in ("lang", "quality", "lang_chosen", "cinematic", "cae", "prefs_version") if k in d})
             if d.get("prefs_version", 1) < 2:          # eski kayıt: bir kez İngilizceye geç, kalite adlarını taşı
                 PREFS["lang"] = "en"
                 PREFS["lang_chosen"] = True

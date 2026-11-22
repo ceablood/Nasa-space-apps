@@ -11,9 +11,8 @@
 ## Ne korundu / ana oyuna taşındı
 - **C++ çekirdek (KozmoCore) ve Unreal istemcisi** yerinde duruyor (`kozmogenis/core`, `kozmogenis/unreal`): 3D sürüm bu
   çekirdeğin yalnız bir tarayıcı kabuğuydu; çekirdek UE5 sürümünün temeli olarak kalır.
-- **Rover modeli:** `core/rover.hpp` / `rover.cpp` içindeki gerçek araç değerleri (Apollo LRV, Curiosity, VIPER sınıfı),
-  patinaj eğrisi ve sürüş gücü formülü Python'a taşındı ve tam bir sürüş fiziğine genişletildi:
-  `aetherx/vehicles/` (ana oyunun yeni ROVER ekranı).
+- **Rover modeli:** `core/rover.hpp` / `rover.cpp` C++ çekirdekte duruyor. Bir süre Python'a taşınıp ana oyunda ROVER
+  ekranı olarak yer aldı; oyuncu isteğiyle ROVER ekranı oyundan çıkarıldı (bkz. `docs/ROVER_KALDIRILDI.md`).
 - **İniş, kokpit göstergeleri, NOVA, yaşayan NPC/koloni, gezegen verileri** ana oyunda zaten kendi biçimiyle var
   (motorlu iniş, YAŞAM ekranı, koloni 3B). JavaScript/Three.js kodu Python'a satır satır taşınamayacağı için silindi;
   davranışlar ana oyunun motoruyla yeniden yazıldı.
