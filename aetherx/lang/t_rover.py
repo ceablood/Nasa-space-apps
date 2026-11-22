@@ -4,6 +4,9 @@
 
 ROWS = [
     # ------------------------------------------------------------ ekran / kurulum
+    # ------------------------------------------------------------ giriş ekranı
+    ("Dil", "Language"), ("Orion Space", "Orion Space"), ("Horizon Space Agency", "Horizon Space Agency"),
+    ("Nova Space", "Nova Space"), ("Stellar Frontier", "Stellar Frontier"),
     ("ROVER", "ROVER"), ("ROVER · GEZEGEN ARACI SÜRÜŞÜ", "ROVER · PLANETARY VEHICLE DRIVING"),
     ("GEZEGEN ARACI SÜRÜŞÜ", "PLANETARY VEHICLE DRIVING"),
     ("Gezegen", "Planet"), ("Araç", "Vehicle"), ("Görev", "Mission"), ("Ay", "Moon"), ("Mars", "Mars"), ("Titan", "Titan"),

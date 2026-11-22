@@ -24,9 +24,9 @@ from ..i18n import tr
 from ..nova import draw_nova_face
 from ..ui import Button, TextInput, UI, chip, draw_bar, draw_icon, draw_paragraph, draw_text, glass_panel, render_text, text_size
 
-EXAMPLES = ["Selim Uzay", "Anadolu Uzay Ajansı", "Nova Space", "Türk Uzay Gücü"]
+EXAMPLES = ["Orion Space", "Horizon Space Agency", "Nova Space", "Stellar Frontier"]
 QUESTIONS = {"name": "Uzay Ajansının adı ne olsun?", "suit": "Astronotların hangi kıyafeti giysin?",
-             "focus": "Ajansın neye odaklansın?", "lang": "Dil  ·  Language  ·  Sprache"}
+             "focus": "Ajansın neye odaklansın?", "lang": "Dil"}
 
 
 # Ana menüdeki canlı gezegenler: NASA haritaları (Ay LRO, Mars Viking, Jüpiter Cassini; Venüs bulut örtüsü)
