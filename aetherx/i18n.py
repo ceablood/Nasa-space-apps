@@ -24,7 +24,7 @@ LANGS = [("tr", "Türkçe"), ("en", "English"), ("de", "Deutsch"), ("fr", "Fran�
          ("ru", "Русский")]
 LANG = "en"
 PREFS_VERSION = 2       # 2: varsayılan dil İngilizce, 4 kademeli grafik (low/medium/high/ultra)
-PREFS = {"lang": "en", "quality": "high", "lang_chosen": True, "cinematic": True, "prefs_version": PREFS_VERSION}
+PREFS = {"lang": "en", "quality": "ultra", "lang_chosen": True, "cinematic": True, "prefs_version": PREFS_VERSION}
 if sys.platform == "emscripten":         # tarayıcıda (WebAssembly) hız için bir kademe düşük başla
     PREFS["quality"] = "medium"
 # Grafik kademeleri. tex: gezegen dokusu yüksekliği (NASA haritaları en çok 1024 = 2048x1024 piksel),
@@ -74,6 +74,8 @@ def quality():
         q["motes"] = 0
     q["stars"] = int(q["stars"] * float(st.get("stars_k", 1.0)))
     q["fx"] = q["fx"] * float(st.get("fx_k", 1.0))
+    if float(st.get("ss", 0) or 0) > 0:
+        q["ss"] = float(st["ss"])
     return q
 
 

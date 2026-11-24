@@ -19,6 +19,7 @@ from . import i18n
 from .audio import Audio
 from .config import C, FPS, H, TITLE, TOPBAR_H, W  # noqa: F401
 from . import settings as SET
+from .i18n import tr
 from .fx import overlay, Transition, draw_glow, scale_color, Spring, ease_out_back, clamp
 from .game import Game
 from .nova import NovaBrain, NovaBubble, draw_nova_face
@@ -87,6 +88,7 @@ class App:
             pass
         self.clock = pygame.time.Clock()
         i18n.load_prefs()
+        SET.boot()                            # açılışta Ultra + sınırsız FPS (AYARLAR > PERFORMANS)
         self.game = Game()
         self.audio = Audio()
         self.audio.preload()
@@ -108,6 +110,10 @@ class App:
         self.frame = 0
         self.fps_show = bool(SET.get("show_fps"))
         self.save_t = 0.0
+        from collections import deque
+        self.frame_ms = deque(maxlen=180)     # ayrıntılı performans grafiği
+        self.slow_t = 0.0                     # dinamik kalite: FPS'in düşük kaldığı süre
+        self._bright = None
         self.modal = None
         self.modal_buttons = []
         self.modal_k = Spring(0.0, 170, 18)
@@ -511,7 +517,23 @@ class App:
         if self.scene:
             self.scene.handle(e)
 
+    def perf_update(self, dt):
+        """Kare süresi geçmişi + dinamik kalite (FPS 6 sn boyunca 30'un altındaysa kaliteyi bir kademe düşür)."""
+        self.frame_ms.append(dt * 1000.0)
+        if not SET.get("dyn_quality") or getattr(self, "loading", False) or self.trans.active:
+            self.slow_t = 0.0
+            return
+        fps = self.clock.get_fps()
+        self.slow_t = self.slow_t + dt if 0 < fps < 30 else 0.0
+        lv = i18n.quality_level()
+        if self.slow_t > 6.0 and lv > 0:
+            self.slow_t = -10.0                  # yeni kademe ölçülsün diye bekleme
+            i18n.PREFS["quality"] = i18n.QUALITY_ORDER[lv - 1]
+            i18n.save_prefs()
+            self.toast(tr("Dinamik kalite: {0}").format(tr(i18n.QUALITY_LABEL[i18n.PREFS["quality"]][0])), "orange", "settings")
+
     def update(self, dt):
+        self.perf_update(dt)
         UI.time += dt
         UI.mouse = pygame.mouse.get_pos()
         UI.tooltip = None
@@ -563,8 +585,18 @@ class App:
         self.draw_captions(surf)
         draw_tooltip(surf)
         self.trans.draw(surf)
+        b = float(SET.get("brightness"))
+        if abs(b - 1.0) > 0.01:                    # AYARLAR > GÖRÜNTÜ: parlaklık
+            if self._bright is None or self._bright[0] != round(b, 2):
+                ov = pygame.Surface((W, H))
+                v = int(abs(b - 1.0) * 255)
+                ov.fill((v, v, v))
+                self._bright = (round(b, 2), ov)
+            surf.blit(self._bright[1], (0, 0), special_flags=pygame.BLEND_RGB_ADD if b > 1 else pygame.BLEND_RGB_SUB)
         if self.fps_show:
-            draw_text(surf, f"{self.clock.get_fps():.0f} FPS", (W - 10, H - 24), 14, C["lime"], anchor="topright")
+            draw_text(surf, f"{self.clock.get_fps():.0f} FPS", (W - 10, H - 24), 14, C["lime"], anchor="topright", raw=True)
+        if SET.get("perf_graph") and len(self.frame_ms) > 2:
+            self.draw_perf(surf)
         acc = self.game.color if self.game.s else C["cyan"]
         want_sys = not SET.get("custom_cursor")
         if want_sys != getattr(self, "_sys_cursor", False):
@@ -575,6 +607,23 @@ class App:
                 pass
         draw_cursor(surf, acc)
         pygame.display.flip()
+
+    def draw_perf(self, surf):
+        """Kare süresi grafiği (ms): yeşil çizgi 16,7 ms (60 FPS), sarı 33 ms (30 FPS)."""
+        gw, gh = 300, 90
+        x0, y0 = W - gw - 14, H - gh - 48
+        pygame.draw.rect(surf, (6, 10, 22), (x0, y0, gw, gh), border_radius=6)
+        mx = 50.0
+        for ms, col in ((16.7, (60, 160, 90)), (33.3, (190, 160, 60))):
+            yy = y0 + gh - ms / mx * gh
+            pygame.draw.line(surf, col, (x0, yy), (x0 + gw, yy), 1)
+        data = list(self.frame_ms)
+        pts = [(x0 + i * gw / (len(data) - 1), y0 + gh - min(mx, v) / mx * gh) for i, v in enumerate(data)]
+        pygame.draw.lines(surf, C["cyan"], False, pts, 1)
+        avg = sum(data) / len(data)
+        worst = max(data)
+        draw_text(surf, tr("kare") + f" {avg:.1f} ms · " + tr("en kötü") + f" {worst:.0f} ms · " + tr(i18n.QUALITY_LABEL[i18n.PREFS.get('quality', 'high')][0]),
+                  (x0 + 6, y0 + 4), 11, C["text"], raw=True)
 
     async def run_async(self):
         """Tarayıcı sürümü (pygbag): her karede kontrolü tarayıcıya geri ver."""

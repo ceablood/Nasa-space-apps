@@ -6,6 +6,21 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.7 — Açılışta Ultra + sınırsız FPS, genişletilmiş ayarlar
+
+* Oyun her açılışta **Ultra** kalite ve **sınırsız FPS** ile başlar.
+  * Kapatmak için: AYARLAR > PERFORMANS > "Açılışta en yüksek ayar".
+* **Yeni PERFORMANS kategorisi:**
+  * Hazır ayarlar: Performans, Dengeli, Yüksek, Ultra.
+  * FPS sınırı: 30, 60, 120, 144 ya da sınırsız.
+  * Dinamik kalite: FPS 6 saniye 30'un altında kalırsa kalite bir kademe düşer; varsayılan olarak kapalı.
+  * 3B süper örnekleme, FPS göstergesi, kare süresi grafiği.
+* **Diğer kategorilere eklenenler:**
+  * Görüntü: parlaklık.
+  * Oyun: oyun hızı (×0,5 – ×4), bildirim süresi.
+  * Erişilebilirlik: yüksek kontrastlı paneller.
+* Her kategoride "Bu kategoriyi sıfırla" düğmesi var.
+
 ## Sürüm 3.6 — Görsel YAŞAM ekranı, temiz ses, ayrıntılı ayarlar
 
 * **YAŞAM görselleri** ([`aetherx/life_art.py`](aetherx/life_art.py)), hepsi Yaşam Motoru verisinden prosedürel çizilir:

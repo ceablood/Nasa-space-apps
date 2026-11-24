@@ -15,7 +15,7 @@ from ..fx import scale_color
 from ..i18n import tr
 from ..ui import Button, Slider, Toggle, draw_paragraph, draw_text, glass_panel
 
-CATS = [("gfx", "GÖRÜNTÜ", "eye"), ("audio", "SES", "nova"), ("game", "OYUN", "rocket"), ("access", "ERİŞİLEBİLİRLİK", "astro"),
+CATS = [("gfx", "GÖRÜNTÜ", "eye"), ("perf", "PERFORMANS", "chart"), ("audio", "SES", "nova"), ("game", "OYUN", "rocket"), ("access", "ERİŞİLEBİLİRLİK", "astro"),
         ("lang", "DİL", "planet"), ("keys", "KONTROLLER", "wrench"), ("data", "VERİ", "save")]
 PX, PY = 340, 168                       # sağ panel
 PW, PH = W - PX - 40, H - PY - 96
@@ -94,6 +94,10 @@ class SettingsScene(Scene):
         self.add(Button((24, H - 70, 170, 48), "GERİ", lambda: self.app.go(self.back), icon="arrow_left", accent=C["text_dim"],
                         size=17, hotkey=pygame.K_ESCAPE))
         getattr(self, "build_" + self.cat)()
+        if self.cat in SET.GROUPS:
+            self.add(Button((PX + PW - 330, PY + PH - 58, 300, 40),
+                            "EMİN MİSİN? TEKRAR TIKLA" if self.confirm == "cat" else "BU KATEGORİYİ SIFIRLA", self.reset_cat,
+                            accent=C["orange"], size=13))
 
     def set_cat(self, k):
         self.cat = k
@@ -124,12 +128,47 @@ class SettingsScene(Scene):
                     lambda v: self.sset("fx_k", round(v, 2)), 0.25, 1.5, lambda v: f"×{v:.2f}")
         self.toggle("Sinematik efektler", "Işık huzmeleri, pus, kenar ışığı, fırça dokusu. Yavaş cihazlarda kapat.",
                     i18n.PREFS.get("cinematic", True), self.set_cinema)
-        self.choice("Kare hızı sınırı", "Daha düşük sınır pil ve işlemci tasarrufu sağlar.",
-                    [(f, f"{f} FPS" if f else "SINIRSIZ") for f in SET.FPS_CHOICES], SET.get("fps_cap"),
-                    lambda v: (SET.set("fps_cap", v), self.changed()))
-        self.toggle("FPS göstergesi", "Sağ altta kare hızı (kısayol: F3).", self.app.fps_show, self.set_fps_show)
+        self.slider("Parlaklık", "Bütün ekranın parlaklığı (karanlık ortam / parlak ekran).", SET.get("brightness"),
+                    lambda v: self.sset("brightness", round(v, 2)), 0.6, 1.4, lambda v: f"×{v:.2f}", C["gold"])
         y = self.row("Tam ekran", "Kısayol: F11. Tarayıcıda sayfanın tam ekran düğmesini de kullanabilirsin.")
         self.add(Button((CX, y + 6, 440, 38), "TAM EKRANA GEÇ / ÇIK", self.app.toggle_fullscreen, accent=C["violet"], size=14))
+
+    # --- PERFORMANS
+    def build_perf(self):
+        y = self.row("Hazır ayarlar", "Kalite, FPS ve efektleri tek tıkla birlikte ayarlar.")
+        for i, (k, lab) in enumerate((("perf", "PERFORMANS"), ("balanced", "DENGELİ"), ("high", "YÜKSEK"), ("ultra", "ULTRA"))):
+            self.add(Button((CX + i * 112, y + 6, 104, 38), lab, (lambda k=k: self.preset(k)), accent=C["gold"], size=12))
+        self.toggle("Açılışta en yüksek ayar", "Oyun her açılışta Ultra kalite ve sınırsız FPS ile başlar.", SET.get("boot_max"),
+                    lambda v: (SET.set("boot_max", v), self.changed()))
+        self.choice("Kare hızı sınırı", "SINIRSIZ: cihazın verebildiği en yüksek FPS. Düşük sınır pil ve işlemci tasarrufu sağlar.",
+                    [(f, f"{f}" if f else "SINIRSIZ") for f in SET.FPS_CHOICES], SET.get("fps_cap"),
+                    lambda v: (SET.set("fps_cap", v), self.changed()), 82)
+        self.toggle("Dinamik kalite", "FPS 6 saniye boyunca 30'un altında kalırsa kalite bir kademe otomatik düşer.",
+                    SET.get("dyn_quality"), lambda v: (SET.set("dyn_quality", v), self.changed()))
+        self.choice("3B süper örnekleme", "Koloni 3B görünümünde kenar yumuşatma. OTO: kalite kademesine göre.",
+                    [(v, f"×{v:g}" if v else "OTO") for v in SET.SS_CHOICES], float(SET.get("ss") or 0),
+                    lambda v: (SET.set("ss", v), self.changed()), 104)
+        self.toggle("FPS göstergesi", "Sağ altta kare hızı (kısayol: F3).", self.app.fps_show, self.set_fps_show)
+        self.toggle("Performans grafiği", "Son 180 karenin süresi (ms), 60 ve 30 FPS çizgileriyle.", SET.get("perf_graph"),
+                    lambda v: (SET.set("perf_graph", v), self.changed()))
+
+    def preset(self, k):
+        SET.apply_preset(k)
+        self.app.toast(tr("Hazır ayar uygulandı") + ": " + tr({"perf": "PERFORMANS", "balanced": "DENGELİ", "high": "YÜKSEK",
+                                                                 "ultra": "ULTRA"}[k]), "gold", "settings")
+        self.changed()
+
+    def reset_cat(self):
+        if self.confirm != "cat":
+            self.confirm = "cat"
+            self.rebuild()
+            return
+        SET.reset_group(self.cat)
+        if self.cat == "perf":
+            self.app.fps_show = False
+        self.confirm = None
+        self.app.toast("Kategori varsayılana döndü", "orange", "settings")
+        self.rebuild()
 
     def set_quality(self, q):
         i18n.PREFS["quality"] = q
@@ -183,6 +222,11 @@ class SettingsScene(Scene):
                     lambda v: (SET.set("autosave_min", v), self.changed()), 82)
         self.toggle("Açıklama balonları", "Fare bir düğmenin üstünde durunca çıkan açıklamalar.", SET.get("tooltips"),
                     lambda v: (SET.set("tooltips", v), self.changed()))
+        self.choice("Oyun hızı", "Oyun saatinin akışı: gelir, günlük olaylar ve koloni üretimi buna göre hızlanır.",
+                    [(v, f"×{v:g}") for v in SET.SPEED_CHOICES], float(SET.get("game_speed")),
+                    lambda v: (SET.set("game_speed", v), self.changed()), 104)
+        self.slider("Bildirim süresi", "Sağ üstteki bildirimlerin ekranda kalma süresi.", SET.get("toast_k"),
+                    lambda v: self.sset("toast_k", round(v, 2)), 0.5, 2.5, lambda v: f"{4 * v:.0f} s")
         if self.game.s:
             y = self.row("Ajans adı", "Adı AJANS > AYARLAR'dan değiştirebilirsin (Para gerektirir).")
             self.add(Button((CX, y + 6, 440, 38), "AJANS EKRANINA GİT", lambda: self.app.go("agency", tab=3), accent=C["gold"], size=14))
@@ -201,6 +245,8 @@ class SettingsScene(Scene):
                     lambda v: self.set_cae("reduce_high", v, True))
         self.toggle("Ani yüksek sesleri sınırla", "Patlama gibi sesler tavanı aşmaz (bozulmasız sınırlayıcı).", cs["limit_loud"],
                     lambda v: self.set_cae("limit_loud", v, True))
+        self.toggle("Yüksek kontrast", "Paneller daha opak olur, yazılar arka plandan daha kolay ayrılır.", SET.get("high_contrast"),
+                    lambda v: (SET.set("high_contrast", v), self.changed()))
         self.toggle("Oyun imleci", "Kapalıyken işletim sisteminin standart imleci kullanılır.", SET.get("custom_cursor"),
                     lambda v: (SET.set("custom_cursor", v), self.changed()))
 
@@ -296,7 +342,7 @@ class SettingsScene(Scene):
 
     def draw(self, surf):
         self.bg.draw(surf)
-        self.draw_title(surf, sub="Görüntü · ses · oyun · erişilebilirlik · dil · kontroller · veri")
+        self.draw_title(surf, sub="Görüntü · performans · ses · oyun · erişilebilirlik · dil · kontroller · veri")
         r = pygame.Rect(PX, PY, PW, PH)
         glass_panel(surf, r, C["violet"], 180, 18)
         lab = dict((k, l) for k, l, _ in CATS)[self.cat]
