@@ -8,7 +8,12 @@ from . import i18n
 
 DEFAULTS = {
     # görüntü
-    "fps_cap": 60,            # app.App.run / run_async: clock.tick(fps_cap); 0 = sınırsız
+    "fps_cap": 0,             # app.App.run / run_async: clock.tick(fps_cap); 0 = sınırsız (varsayılan)
+    "boot_max": True,         # app.App: her açılışta Ultra kalite + sınırsız FPS
+    "dyn_quality": False,     # app.App.update: FPS uzun süre 30'un altındaysa kaliteyi bir kademe düşür
+    "perf_graph": False,      # app.App.draw: kare süresi grafiği
+    "ss": 0.0,                # i18n.quality(): 3B koloni süper örnekleme (0 = kademeye göre)
+    "brightness": 1.0,        # app.App.draw: ekran parlaklığı (0,6..1,4)
     "show_fps": False,        # app.App.draw: FPS göstergesi (F3 ile de)
     "bloom_k": 1.0,           # i18n.quality(): parlama şiddeti çarpanı
     "motes": True,            # i18n.quality(): süzülen toz zerreleri
@@ -20,14 +25,58 @@ DEFAULTS = {
     "tooltips": True,         # ui.draw_tooltip
     "custom_cursor": True,    # ui.draw_cursor; kapalıyken sistem imleci
     "nova_hints": True,       # app.App.say: öncelikli olmayan NOVA ipuçları
+    "high_contrast": False,   # ui.glass_surface: paneller daha opak (okunabilirlik)
+    "toast_k": 1.0,           # ui.Toasts.push: bildirimlerin ekranda kalma süresi çarpanı
     # oyun
     "autosave_min": 3,        # app.App: dakikada bir otomatik kayıt (0 = yalnız olaylarda)
+    "game_speed": 1.0,        # game.Game.update: oyun saatinin hızı (ekonomi, günlük olaylar)
     # ses
     "audio": {"enabled": True, "master": 1.0, "music": 0.55, "sfx": 0.8, "amb": 0.8, "ui": 0.8, "voice": 0.8,
               "mute_unfocused": True},
 }
 
-FPS_CHOICES = (30, 60, 120, 0)
+FPS_CHOICES = (30, 60, 120, 144, 0)
+SPEED_CHOICES = (0.5, 1.0, 2.0, 4.0)
+SS_CHOICES = (0.0, 1.0, 1.5, 2.0)
+
+# kategori -> sıfırlanacak anahtarlar (AYARLAR ekranındaki "kategoriyi sıfırla")
+GROUPS = {"gfx": ("bloom_k", "motes", "stars_k", "fx_k", "brightness"),
+          "perf": ("fps_cap", "boot_max", "dyn_quality", "show_fps", "perf_graph", "ss"),
+          "game": ("nova_hints", "autosave_min", "tooltips", "game_speed", "toast_k"),
+          "access": ("reduce_motion", "shake", "custom_cursor", "high_contrast")}
+
+# hazır profiller: (kalite, ayarlar)
+PRESETS = {
+    "perf": ("low", {"fps_cap": 60, "bloom_k": 0.0, "motes": False, "stars_k": 0.5, "fx_k": 0.5, "ss": 1.0}, False),
+    "balanced": ("medium", {"fps_cap": 60, "bloom_k": 1.0, "motes": True, "stars_k": 1.0, "fx_k": 1.0, "ss": 0.0}, True),
+    "high": ("high", {"fps_cap": 120, "bloom_k": 1.0, "motes": True, "stars_k": 1.0, "fx_k": 1.0, "ss": 0.0}, True),
+    "ultra": ("ultra", {"fps_cap": 0, "bloom_k": 1.2, "motes": True, "stars_k": 1.5, "fx_k": 1.5, "ss": 2.0}, True),
+}
+
+
+def apply_preset(name):
+    q, vals, cine = PRESETS[name]
+    i18n.PREFS["quality"] = q
+    i18n.PREFS["cinematic"] = cine
+    st = _store()
+    st.update(vals)
+    i18n.save_prefs()
+
+
+def reset_group(cat):
+    st = _store()
+    for k in GROUPS.get(cat, ()):
+        st.pop(k, None)
+    if cat == "gfx":
+        i18n.PREFS["cinematic"] = True
+    i18n.save_prefs()
+
+
+def boot():
+    """Açılış: 'Açılışta en yüksek ayar' açıksa Ultra kalite + sınırsız FPS (oturum içinde değiştirilebilir)."""
+    if get("boot_max"):
+        i18n.PREFS["quality"] = "ultra"
+        set("fps_cap", 0, save=False)
 AUTOSAVE_CHOICES = (0, 1, 3, 5, 10)
 
 

@@ -183,6 +183,9 @@ def _rounded(surf, color, rect, radius, width=0):
 
 
 def glass_surface(w, h, accent=C["cyan"], alpha=180, radius=18, glow=True, strong=False):
+    from . import settings as _SET
+    if _SET.get("high_contrast"):                 # AYARLAR > ERİŞİLEBİLİRLİK: yüksek kontrast (opak panel)
+        alpha = max(alpha, 240)
     key = (w, h, accent, alpha, radius, glow, strong)
     s = _PANEL_CACHE.get(key)
     if s is not None:
@@ -968,6 +971,8 @@ class Toasts:
         self.items = []
 
     def push(self, text, color=None, icon="check", dur=4.0):
+        from . import settings as _SET
+        dur *= float(_SET.get("toast_k"))                   # AYARLAR > OYUN: bildirim süresi
         text = tr(str(text))
         self.items.append({"text": text, "color": color or C["cyan"], "icon": icon, "t": 0.0, "dur": dur,
                            "y": Spring(0.0, 160, 20)})

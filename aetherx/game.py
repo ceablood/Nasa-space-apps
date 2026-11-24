@@ -277,7 +277,8 @@ class Game:
         """Gerçek saniye ile ilerler."""
         if not self.s:
             return
-        dm = dt * GAME_MIN_PER_SEC
+        from . import settings as _SET
+        dm = dt * GAME_MIN_PER_SEC * float(_SET.get("game_speed"))        # AYARLAR > OYUN: oyun hızı
         old_min = self.minutes
         self.s["clock"]["minutes"] += dm
         new_min = self.minutes
