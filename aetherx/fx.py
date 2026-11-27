@@ -374,59 +374,86 @@ STAR_COLORS = [(255, 255, 255), (200, 220, 255), (255, 240, 220), (170, 200, 255
 
 
 class Starfield:
-    """Paralaks katmanlı, yanıp sönen yıldızlar. vx ile yatay kayar."""
+    """Paralaks katmanlı, yanıp sönen yıldızlar. vx ile yatay kayar.
+    Optimizasyon (görüntü aynı): konum/renk/parıltı numpy dizilerinde toplu hesaplanır; en kalabalık katman (tek piksellik
+    yıldızlar) tek seferde piksel dizisine yazılır."""
 
     def __init__(self, w=W, h=H, count=420, seed=3):
         r = random.Random(seed)
         self.w, self.h = w, h
-        self.stars = []
+        rows = []
         for _ in range(count):
             layer = r.choice((0, 0, 0, 1, 1, 2))
-            self.stars.append([
-                r.uniform(0, w), r.uniform(0, h), layer,
-                r.uniform(0, math.tau), r.uniform(0.6, 3.2),
-                r.choice(STAR_COLORS), r.uniform(0.35, 1.0)
-            ])
+            rows.append([r.uniform(0, w), r.uniform(0, h), layer, r.uniform(0, math.tau), r.uniform(0.6, 3.2),
+                         r.choice(STAR_COLORS), r.uniform(0.35, 1.0)])
+        import numpy as _np
+        self._np = _np
+        self.x = _np.array([q[0] for q in rows], _np.float64)
+        self.y = _np.array([q[1] for q in rows], _np.float64)
+        self.layer = _np.array([q[2] for q in rows], _np.int32)
+        self.ph = _np.array([q[3] for q in rows], _np.float64)
+        self.sp = _np.array([q[4] for q in rows], _np.float64)
+        self.col = _np.array([q[5] for q in rows], _np.float64)
+        self.base = _np.array([q[6] for q in rows], _np.float64)
+        self.kpar = _np.array((0.15, 0.45, 1.0))[self.layer]
         self.t = 0.0
+
+    @property
+    def stars(self):
+        """Eski biçim (liste) — yalnız okuma/uyumluluk için."""
+        return [[float(self.x[i]), float(self.y[i]), int(self.layer[i]), float(self.ph[i]), float(self.sp[i]),
+                 tuple(int(c) for c in self.col[i]), float(self.base[i])] for i in range(len(self.x))]
 
     def update(self, dt, vx=0.0, vy=0.0):
         self.t += dt
         if vx or vy:
-            for s in self.stars:
-                k = (0.15, 0.45, 1.0)[s[2]]
-                s[0] -= vx * k * dt
-                s[1] -= vy * k * dt
-                if s[0] < -4:
-                    s[0] += self.w + 8
-                    s[1] = random.uniform(0, self.h)
-                elif s[0] > self.w + 4:
-                    s[0] -= self.w + 8
-                if s[1] < -4:
-                    s[1] += self.h + 8
-                elif s[1] > self.h + 4:
-                    s[1] -= self.h + 8
+            np_ = self._np
+            self.x -= vx * self.kpar * dt
+            self.y -= vy * self.kpar * dt
+            lo = self.x < -4
+            if lo.any():
+                self.x[lo] += self.w + 8
+                self.y[lo] = np_.random.uniform(0, self.h, int(lo.sum()))
+            hi = self.x > self.w + 4
+            self.x[hi] -= self.w + 8
+            self.y[self.y < -4] += self.h + 8
+            self.y[self.y > self.h + 4] -= self.h + 8
 
     def draw(self, surf, alpha=1.0, streak=0.0):
-        t = self.t
-        for x, y, layer, ph, sp, col, base in self.stars:
-            tw = 0.55 + 0.45 * math.sin(t * sp + ph)
-            k = base * tw * alpha
-            if layer == 0:
-                surf.set_at((int(x), int(y)), scale_color(col, k * 0.8))
-            elif layer == 1:
-                c = scale_color(col, k)
+        np_ = self._np
+        tw = 0.55 + 0.45 * np_.sin(self.t * self.sp + self.ph)
+        k = self.base * tw * alpha
+        L0 = self.layer == 0
+        # katman 0: tek piksel (eskiden set_at döngüsü) — renk = scale_color(col, k*0.8)
+        xi, yi = self.x[L0].astype(np_.int32), self.y[L0].astype(np_.int32)
+        sw, sh = surf.get_size()
+        ok = (xi >= 0) & (xi < sw) & (yi >= 0) & (yi < sh)
+        if ok.any():
+            c0 = np_.clip(self.col[L0][ok] * np_.clip(k[L0][ok] * 0.8, 0, None)[:, None], 0, 255).astype(np_.uint8)
+            try:
+                px = pygame.surfarray.pixels3d(surf)
+                px[xi[ok], yi[ok]] = c0
+                del px
+            except Exception:
+                for (xx, yy), cc in zip(zip(xi[ok].tolist(), yi[ok].tolist()), c0.tolist()):
+                    surf.set_at((xx, yy), cc)
+        cols = np_.clip(self.col * np_.clip(k, 0, None)[:, None], 0, 255).astype(np_.int32).tolist()
+        X, Y, LY, TW, K = self.x.tolist(), self.y.tolist(), self.layer.tolist(), tw.tolist(), k.tolist()
+        circle, line = pygame.draw.circle, pygame.draw.line
+        for i in np_.flatnonzero(~L0).tolist():
+            x, y, c = X[i], Y[i], cols[i]
+            if LY[i] == 1:
                 if streak > 0:
-                    pygame.draw.line(surf, c, (x, y), (x + streak * 0.4, y))
+                    line(surf, c, (x, y), (x + streak * 0.4, y))
                 else:
-                    pygame.draw.circle(surf, c, (int(x), int(y)), 1)
+                    circle(surf, c, (int(x), int(y)), 1)
             else:
-                c = scale_color(col, k)
                 if streak > 0:
-                    pygame.draw.line(surf, c, (x, y), (x + streak, y), 2)
+                    line(surf, c, (x, y), (x + streak, y), 2)
                 else:
-                    pygame.draw.circle(surf, c, (int(x), int(y)), 2)
-                    if tw > 0.8:
-                        draw_glow(surf, (x, y), 7, col, 0.55 * k)
+                    circle(surf, c, (int(x), int(y)), 2)
+                    if TW[i] > 0.8:
+                        draw_glow(surf, (x, y), 7, tuple(int(v) for v in self.col[i]), 0.55 * K[i])
 
 
 class ShootingStars:

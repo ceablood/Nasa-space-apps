@@ -6,6 +6,30 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.9 — Gerçekçi 3B hayvanlar, gerçekçi iniş, daha fazla para, optimizasyon
+
+* **Başlangıç parası:** 1.000 yerine 10.000.
+* **Görülen hayvanların 3B çizimleri** ([`aetherx/creature3d.py`](aetherx/creature3d.py)):
+  * Keşfedilen her hayvan genomundan 3B olarak kurulur.
+  * Gövde planları: dört ayaklı, ayı, kertenkele, kuş, balık, köpekbalığı, fok, böcek, kril/plankton.
+  * Çizim: piksel başına ışık, parlama, kenar ışığı, ortam gölgesi, desen (çizgi, benek, pul, kürk), zemin gölgesi, 2x süper örnekleme.
+  * YAŞAM'daki yeni **GÖRÜLEN HAYVANLAR** sekmesinde bütün keşfedilenler 3B kartlarda; seçilen tür dönen büyük
+    görünümde, evrimle çıkanların atası da yazılı.
+  * Biyom kesitinde ve tür ayrıntısında da 3B hayvanlar kullanılır.
+* **Daha gerçekçi YAŞAM görselleri:** hava perspektifli katmanlı dağlar, bulutlar, ufuk pusu, dokulu zemin ve çakıllar,
+  gölgeli ağaçlar.
+* **Daha gerçekçi iniş modülü:**
+  * Fizik: yakıt yandıkça araç hafifler (Tsiolkovsky, Isp ≈ 311 s); motor ~0,25 s gecikmeyle tepki verir.
+  * Apollo'daki gibi 1,7 m'de "temas ışığı"; iniş bacakları amortisörlü, ayak tabanlı ve temas sondalı.
+  * Güneş yönüne düşen gölge; vakumda geniş ve soluk, atmosferde görünür egzoz.
+  * Toz: Ay'da havasız ortamda düz uçan toz, Mars ve Venüs'te kabaran toz.
+  * Zemin: aydınlatılmış yüzey, gölgeli kayalar.
+* **AJANS > DAHA FAZLA:** kaynaklar ve eklenemeyenler; Türkçe, İngilizce, Almanca, Fransızca, İspanyolca ve Rusça.
+* **Optimizasyon (görüntü kısılmadan):**
+  * Yıldız alanı ve Atlas kaya kuşağı numpy ile toplu çiziliyor; yörünge renkleri toplu hesaplanıyor.
+  * Koloni 3B'de ekran dışı ve görünmeyen (piksel altı) yüzler atlanıyor.
+  * Atlas ekranı: kare süresi 28,5 → 21,5 ms.
+
 ## Sürüm 3.8 — Yaşayan NPC'ler
 
 * **Kimlik:** her NPC'nin kalıcı adı, kişilik özelliği, boyu, ten ve saç rengi, aksesuarı var ([`aetherx/npc.py`](aetherx/npc.py)).

@@ -50,7 +50,7 @@ SPEEDS = [(0, "DURAKLAT"), (1, "×1 yıl/sn"), (100, "×100"), (1e4, "×10 bin")
 EVENTS = [("volkan", "Volkan"), ("meteor", "Meteor"), ("kuraklik", "Kuraklık"), ("buzul", "Buzul dönemi"),
           ("sicak", "Aşırı sıcak"), ("atmosfer", "Atmosfer değişimi"), ("deniz", "Deniz seviyesi"),
           ("radyasyon", "Radyasyon"), ("yildiz", "Yıldız patlaması"), ("firtina", "Fırtına")]
-TABS = ["GEZEGEN", "YAŞAM", "ZAMAN ÇİZELGESİ", "OLAYLAR", "SES GÖZLEMEVİ"]
+TABS = ["GEZEGEN", "YAŞAM", "ZAMAN ÇİZELGESİ", "OLAYLAR", "SES GÖZLEMEVİ", "GÖRÜLEN HAYVANLAR"]
 KX, KY, KW, KH = 320, 236, W - 360, H - 236 - 30
 
 
@@ -246,6 +246,18 @@ class LifeScene(Scene):
         if e.type == pygame.MOUSEWHEEL and self.tab in (1, 2):
             self.scroll = max(0, self.scroll - e.y)
             return True
+        if e.type == pygame.MOUSEWHEEL and self.tab == 5:
+            self.best_scroll = max(0, getattr(self, "best_scroll", 0) - e.y)
+            return True
+        if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1 and self.tab == 5:
+            for rect, sp in getattr(self, "best_cards", []):
+                if rect.collidepoint(e.pos):
+                    self.best_sel = sp
+                    self.app.audio.play("tick")
+                    if sp.alive:
+                        self.app.cae.spatial.listener = (0.0, 0.0)
+                        self.app.cae.call_of(sp, "çağrı", (8.0, 0.0))
+                    return True
         if e.type == pygame.MOUSEBUTTONDOWN and e.button == 1 and self.tab == 1:
             row = self.row_at(e.pos)
             if row is not None:
@@ -279,7 +291,8 @@ class LifeScene(Scene):
         self.draw_title(surf, sub=f"{w.env.name} · {w.env.source}")
         draw_text(surf, fmt_year(w.year, False), (40, 160), 13, C["gold"], bold=True, anchor="bottomleft")
         draw_text(surf, "* kurgusal ötegezegen", (40, H - 92), 12, C["text_dim"])
-        getattr(self, ("draw_planet", "draw_life", "draw_timeline", "draw_events", "draw_audio")[self.tab])(surf, w)
+        LA.new_frame()
+        getattr(self, ("draw_planet", "draw_life", "draw_timeline", "draw_events", "draw_audio", "draw_bestiary")[self.tab])(surf, w)
         self.draw_widgets(surf)
         if self.tab == 3:
             self.draw_event_icons(surf)
@@ -505,7 +518,10 @@ class LifeScene(Scene):
         x0, y = r2.x + 18, r2.y + 14
         if self.sel:
             s = self.sel
-            LA.species_portrait(surf, s, (x0, y, r2.w - 36, 120), self.t)
+            LA.species_portrait(surf, s, (x0, y, r2.w - 36, 120), self.t, s.kingdom != "hayvan")
+            if s.kingdom == "hayvan":                                   # gerçekçi 3B (dönen)
+                img = LA.portrait3d(s, 120, self.t)
+                surf.blit(img, (x0 + (r2.w - 36) // 2 - 60, y))
             y += 128
             draw_text(surf, s.name, (x0, y), 17, C["text"], bold=True, max_w=r2.w - 36)
             y += 24
@@ -737,6 +753,82 @@ class LifeScene(Scene):
             draw_text(surf, k, (r3.x + 16, y), 12, C["text_dim"])
             draw_text(surf, str(v), (r3.right - 16, y), 12, C["text"], bold=True, anchor="topright")
         draw_text(surf, "Lisans: özgün prosedürel sentez", (r3.x + 16, r3.bottom - 24), 11, C["green"])
+
+    # --- GÖRÜLEN HAYVANLAR (keşfedilen hayvanların gerçekçi 3B çizimleri)
+    def seen_animals(self):
+        out = []
+        for (key, scen), w in self.worlds.items():
+            for sp in w.species:
+                if sp.kingdom == "hayvan" and sp.discovered:
+                    out.append((w, sp))
+        out.sort(key=lambda ws: (ws[0].env.name, not ws[1].alive, ws[1].name))
+        return out
+
+    def draw_bestiary(self, surf, w):
+        seen = self.seen_animals()
+        r = pygame.Rect(KX, KY, 470, KH)
+        glass_panel(surf, r, C["gold"], 180, 16)
+        draw_text(surf, "GÖRÜLEN HAYVANLAR", (r.x + 20, r.y + 14), 16, C["gold"], bold=True)
+        if not seen:
+            draw_paragraph(surf, "Henüz hayvan görmedin. YAŞAM sekmesinde bir biyomu ARAŞTIR: keşfedilen hayvanlar burada gerçekçi 3B "
+                                 "çizimleriyle toplanır.", (r.x + 20, r.y + 50), r.w - 40, 15, C["text"])
+            return
+        sel = getattr(self, "best_sel", None)
+        if sel is None or all(sel is not sp for _, sp in seen):
+            sel = self.best_sel = seen[0][1]
+        wsel = next(wd for wd, sp in seen if sp is sel)
+        view = pygame.Rect(r.x + 15, r.y + 44, r.w - 30, KH - 44 - 230)
+        bg = pygame.Surface(view.size)
+        for yy in range(view.h):
+            k = yy / view.h
+            pygame.draw.line(bg, (int(18 + 26 * k), int(26 + 30 * k), int(44 + 26 * k)), (0, yy), (view.w, yy))
+        surf.blit(bg, view.topleft)
+        draw_glow(surf, (view.centerx, view.bottom - 40), 160, (120, 160, 210), 0.25)
+        img = LA.portrait3d(sel, min(view.w, view.h) - 20, self.t * 0.8, ss=1)
+        surf.blit(img, (view.centerx - img.get_width() // 2, view.y + (view.h - img.get_height()) // 2 + 10))
+        pygame.draw.rect(surf, (90, 110, 150), view, 1, border_radius=6)
+        chip(surf, (view.x + 10, view.y + 10), "GERÇEK" if sel.real else "KURGUSAL", C["green"] if sel.real else C["gold"], 11)
+        y = view.bottom + 10
+        draw_text(surf, sel.name + ("" if sel.alive else " †"), (r.x + 20, y), 20, C["text"], bold=True, max_w=r.w - 40)
+        y += 30
+        g = sel.genome
+        par = next((p_ for p_ in wsel.species if p_.sid == sel.parent), None) if sel.parent is not None else None
+        rows = [("Gezegen", wsel.env.name), ("Biyom", tr(sel.biome)), ("Yaşam alanı", tr(g.habitat)), ("Beslenme", tr(g.diet)),
+                ("Boy", f"10^{g.size:.1f} m"), ("Sıcaklık optimumu", f"{g.temp_opt:.0f} °C"),
+                ("Köken", (tr("evrimleşti, atası") + ": " + par.name) if par else tr("başlangıç türü"))]
+        for k, v in rows:
+            draw_text(surf, k, (r.x + 20, y), 13, C["text_dim"])
+            draw_text(surf, str(v), (r.right - 20, y), 13, C["text"], bold=True, anchor="topright", max_w=260, raw=True)
+            y += 20
+        draw_text(surf, "3B çizim genomdan üretilir; temsilîdir.", (r.x + 20, r.bottom - 26), 11, C["text_mute"])
+        # sağ: kart ızgarası
+        r2 = pygame.Rect(KX + 490, KY, KW - 490, KH)
+        glass_panel(surf, r2, C["cyan"], 175, 16)
+        draw_text(surf, tr("{0} tür görüldü").format(len(seen)), (r2.x + 20, r2.y + 14), 15, C["cyan"], bold=True, raw=True)
+        cw, chh = 150, 172
+        cols = max(1, (r2.w - 30) // (cw + 10))
+        rows_vis = max(1, (r2.h - 60) // (chh + 10))
+        sc = getattr(self, "best_scroll", 0)
+        sc = self.best_scroll = min(sc, max(0, (len(seen) + cols - 1) // cols - rows_vis))
+        self.best_cards = []
+        for i, (wd, sp) in enumerate(seen[sc * cols:(sc + rows_vis) * cols]):
+            cx = r2.x + 20 + (i % cols) * (cw + 10)
+            cy = r2.y + 46 + (i // cols) * (chh + 10)
+            card = pygame.Rect(cx, cy, cw, chh)
+            on = sp is sel
+            pygame.draw.rect(surf, (24, 40, 60) if on else (16, 24, 40), card, border_radius=10)
+            pygame.draw.rect(surf, C["gold"] if on else (50, 70, 100), card, 2 if on else 1, border_radius=10)
+            im = LA.card3d(sp, cw - 10)
+            if im is not None:
+                surf.blit(im, (cx + 5, cy + 4))
+            else:
+                LA.species_art(surf, sp, cx + cw / 2, cy + 110, 60, self.t, sp.alive)
+            draw_text(surf, sp.name + ("" if sp.alive else " †"), (cx + 8, cy + chh - 40), 12, C["text"] if sp.alive else C["text_mute"],
+                      bold=True, max_w=cw - 16, raw=True)
+            draw_text(surf, wd.env.name.split(" (")[0], (cx + 8, cy + chh - 22), 11, C["text_dim"], max_w=cw - 16)
+            self.best_cards.append((card, sp))
+        if len(seen) > cols * rows_vis:
+            draw_text(surf, "fare tekerleği: kaydır", (r2.right - 20, r2.y + 16), 11, C["text_dim"], anchor="topright")
 
 
 def DMAP(m):

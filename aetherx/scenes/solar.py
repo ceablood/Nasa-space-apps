@@ -350,12 +350,14 @@ class SolarScene(Scene):
         # yörüngeler
         for b in self.planets:
             sx, sy, vz, pr, _ = self.project(self.paths[b["key"]], cam)
-            sx, sy, vz = sx.tolist(), sy.tolist(), vz.tolist()
             hov = self.hover == b["key"]
+            kk = (0.34 + 0.3 * np.clip(np.asarray(vz[:128], np.float64) / 500 + 0.5, 0, 1)) * alpha * (1.5 if hov else 1)
+            base = np.array((120, 170, 255) if not hov else C["gold"], np.float64)
+            cols = np.clip(base[None, :] * kk[:, None], 0, 255).astype(np.int32).tolist()     # renkler toplu (eskiden tek tek)
+            sx, sy = sx.tolist(), sy.tolist()
+            line, wdt = pygame.draw.line, 2 if hov else 1
             for i in range(128):
-                kk = 0.34 + 0.3 * clamp(float(vz[i]) / 500 + 0.5, 0, 1)
-                col = scale_color((120, 170, 255) if not hov else C["gold"], kk * alpha * (1.5 if hov else 1))
-                pygame.draw.line(surf, col, (sx[i], sy[i]), (sx[i + 1], sy[i + 1]), 2 if hov else 1)
+                line(surf, cols[i], (sx[i], sy[i]), (sx[i + 1], sy[i + 1]), wdt)
         # asteroit kümeleri
         self.draw_rocks_sys(surf, cam, alpha)
         # cisimler (derinlik sıralı)
@@ -450,13 +452,18 @@ class SolarScene(Scene):
             bright = np.clip(0.55 + vz / 900, 0.3, 1.0) * alpha
             ok = (sx > VIEW.x - 300) & (sx < W) & (sy > TOPBAR_H) & (sy < H - 1) & (sx >= 0)
             xi, yi = sx.astype(int), sy.astype(int)
-            for i in np.flatnonzero(ok):
-                g = int(c[i] * bright[i])
-                col = (g, int(g * 0.92), int(g * 0.84))
-                if big is not None and big[i]:
-                    pygame.draw.circle(surf, col, (int(xi[i]), int(yi[i])), 2)
-                else:
-                    surf.set_at((int(xi[i]), int(yi[i])), col)
+            gg = (c * bright).astype(np.int32)
+            cols = np.stack([gg, (gg * 0.92).astype(np.int32), (gg * 0.84).astype(np.int32)], 1)
+            bigm = np.zeros(len(xi), bool) if big is None else np.asarray(big, bool)
+            small = ok & ~bigm
+            sw_, sh_ = surf.get_size()
+            small &= (xi >= 0) & (xi < sw_) & (yi >= 0) & (yi < sh_)
+            if small.any():                                    # tek seferde piksel yazımı (eskiden nokta nokta set_at)
+                px = pygame.surfarray.pixels3d(surf)
+                px[xi[small], yi[small]] = np.clip(cols[small], 0, 255)
+                del px
+            for i in np.flatnonzero(ok & bigm):
+                pygame.draw.circle(surf, tuple(int(v) for v in cols[i]), (int(xi[i]), int(yi[i])), 2)
 
     def draw_sys_labels(self, surf, cam):
         rb = orbit_r(2.7)

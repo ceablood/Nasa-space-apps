@@ -1088,6 +1088,11 @@ class Colony3D:
         z = z.reshape(-1, nv)
         keep &= (z.min(1) > 0.25)
         sx, sy = sx.reshape(-1, nv), sy.reshape(-1, nv)
+        # kayıpsız ayıklama: ekran dışındaki ve piksel altı (görünmeyen) yüzler çizilmez
+        sw_, sh_ = surf.get_size()
+        keep &= (sx.max(1) >= -2) & (sx.min(1) <= sw_ + 2) & (sy.max(1) >= -2) & (sy.min(1) <= sh_ + 2)
+        area = 0.5 * np.abs((sx[:, 0] - sx[:, 2]) * (sy[:, 1] - sy[:, 3]) - (sx[:, 1] - sx[:, 3]) * (sy[:, 0] - sy[:, 2]))
+        keep &= area > 0.15
         if two.any():
             n[two & ~facing] *= -1
         # ışık: yarımküre ortamı + güneş + ışıma + sis + ACES
