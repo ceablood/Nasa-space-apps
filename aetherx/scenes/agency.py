@@ -81,6 +81,8 @@ class AgencyScene(Scene):
                 self.add(Button((x + (i % 2) * 284, TOPBAR_H + 410 + (i // 2) * 58, 276, 50), lab,
                                 (lambda c=cat: self.app.go("settings", cat=c, back="agency")), accent=C["violet"], icon=ic,
                                 size=14, style="tab"))
+            self.add(Button((x + 640, TOPBAR_H + 510, 360, 50), "SIRALAMA", lambda: self.app.go("leaderboard", back="agency"),
+                            accent=C["gold"], icon="trophy", size=15, style="gold"))
             self.add(Button((x + 640, TOPBAR_H + 330, 360, 50), "ŞİMDİ KAYDET", self.save_now, accent=C["green"],
                             icon="save", size=15))
             self.add(Button((x + 640, TOPBAR_H + 390, 360, 50), "ANA MENÜYE DÖN", self.to_menu, accent=C["cyan"],

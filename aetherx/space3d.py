@@ -768,9 +768,28 @@ def render_body(key, R, M, L, spin=0.0, t=0.0, th=256, ring=None, obl=1.0, emiss
                 cc = ((uu + t * 0.004 * tex["cloud_speed"]) % 1.0 * tw).astype(np.int32) % tw
                 ca = tex["cloud"][rows, cc] * op
                 rgb = rgb + (np.asarray(tex["cloud_rgb"], dtype=F32) - rgb) * ca[:, None]
-        # stüdyo ışığı: yumuşak gün/gece geçişi + çok hafif mavi ortam dolgusu (gece tarafı simsiyah olmaz)
         lam = np.clip(ndl, 0, 1)
-        lit = 0.05 + day * (0.22 + 0.78 * lam ** 0.85)
+        if key in ATMO:
+            # atmosferli: yumuşak gün/gece geçişi (saçılma alacakaranlığı) + çok hafif mavi ortam dolgusu
+            lit = 0.05 + day * (0.22 + 0.78 * lam ** 0.85)
+        else:
+            # havasız yüzey (Ay, Merkür, Phobos…): Ay-Lambert modeli (McEwen 1991) = Lommel-Seeliger + Lambert karışımı.
+            # Gerçek Ay'da olduğu gibi dolunayda kenar kararması neredeyse yok; terminatör keskin (atmosfer saçılması yok).
+            mu = np.clip(vz, 0.02, 1)
+            ls = 2 * lam / (lam + mu)
+            lit = 0.03 + smoothstep(-0.015, 0.05, ndl) * (0.6 * np.minimum(ls, 1.3) + 0.4 * lam)
+        if ca is not None and key == "earth" and R >= 24:
+            # bulut gölgeleri: yüzey noktasından Güneş'e doğru kaydırılmış noktadaki bulut, yeri gölgeler
+            Mt = M.T
+            nb = Mt @ np.stack((vx, vy, vz))
+            Lb = Mt @ np.asarray(L, dtype=F32)
+            tl = Lb[:, None] - (Lb @ nb)[None, :] * nb
+            pb = nb + tl * 0.018
+            pb /= np.linalg.norm(pb, axis=0)[None, :]
+            us = (np.arctan2(pb[0], pb[2]) / TAU + 0.5 - spin / TAU + t * 0.004 * tex["cloud_speed"]) % 1.0
+            vs = 0.5 - np.arcsin(np.clip(pb[1], -1, 1)) / math.pi
+            cs = tex["cloud"][np.clip((vs * th).astype(np.int32), 0, th - 1), (us * tw).astype(np.int32) % tw]
+            lit = lit * (1 - 0.42 * cs * (1 - ca))
         if "limb" in tex:
             lit = lit * (1 - tex["limb"] + tex["limb"] * vz ** 0.5)
         if ring is not None:
@@ -807,6 +826,55 @@ def render_body(key, R, M, L, spin=0.0, t=0.0, th=256, ring=None, obl=1.0, emiss
     img[idx, :3] = np.clip(out, 0, 255).astype(np.uint8)
     img[idx, 3] = aa
     return img.reshape(R * 2, R * 2, 4)
+
+
+# ===========================================================================
+# ATMOSFER HALESİ (gerçekçi parlama)
+# ===========================================================================
+# ölçek yüksekliği (gezegen yarıçapı biriminde, görsel olarak abartılmış ama oranlar gerçeğe yakın sıralı):
+# Venüs kalın, Dünya ince ve mavi, Mars çok ince, gaz devleri yumuşak pus; havasız cisimlerde (Ay, Merkür) hale yok.
+HALO = {"earth": (0.045, 1.0), "venus": (0.07, 1.1), "mars": (0.025, 0.55), "titan": (0.09, 1.0), "jupiter": (0.035, 0.5),
+        "saturn": (0.035, 0.45), "uranus": (0.04, 0.6), "neptune": (0.045, 0.7)}
+_HALO_CACHE = {}
+
+
+def atmo_halo(key, R, L, quality=1):
+    """Disk dışındaki atmosfer parlaması (RGBA, boyut 2*(R+pad)). Fiziksel yaklaşım: yoğunluk yükseklikle üstel azalır
+    (exp(-h/H)); yalnız Güneş'e bakan yarıda parlar, gece tarafında söner; gün-gece sınırında Rayleigh benzeri kızıllık.
+    L: görüş uzayında Güneş yönü (x sağ, y yukarı, z bize). Havasız cisimde None döner."""
+    if key not in HALO or R < 6:
+        return None
+    Hs, gain = HALO[key]
+    lx, ly = float(L[0]), float(L[1])
+    ll = math.hypot(lx, ly)
+    key_ = (key, int(R), round(lx, 2), round(ly, 2), round(float(L[2]), 1))
+    hit = _HALO_CACHE.get(key_)
+    if hit is not None:
+        return hit
+    pad = int(max(4, R * (Hs * 6 + 0.04)))
+    n = 2 * (R + pad)
+    yy, xx = np.mgrid[0:n, 0:n].astype(F32)
+    dx, dy = xx - n / 2 + 0.5, (n / 2 - 0.5) - yy
+    d = np.sqrt(dx * dx + dy * dy)
+    h = (d - R) / (R * Hs)                                        # disk kenarından yükseklik (ölçek yüksekliği birimi)
+    dens = np.exp(-np.clip(h, 0, None)) * (h > -0.6)
+    dens *= np.clip(1 + h / 0.6, 0, 1)                            # diskin hemen içinde yumuşak birleşme
+    cosang = (dx * lx + dy * ly) / np.maximum(d, 1e-3) / max(ll, 1e-3) if ll > 0.05 else np.zeros_like(d)
+    lit = np.clip(0.5 + 0.5 * (cosang * min(1.0, ll * 1.4) + float(L[2]) * 0.6), 0, 1)   # Güneş'e bakan yay parlak
+    lit = lit ** 1.6
+    base = np.asarray(ATMO.get(key, ((200, 210, 230), 0.5))[0], dtype=F32)
+    sunset = np.array((255, 150, 90), dtype=F32)
+    term = np.clip(1 - np.abs(lit - 0.35) / 0.3, 0, 1) * (1 if key in ("earth", "titan", "venus") else 0.4)
+    col = base[None, None, :] * (1 - term[..., None] * 0.6) + sunset[None, None, :] * term[..., None] * 0.6
+    a = np.clip(dens * lit * gain * 255, 0, 255)
+    out = np.zeros((n, n, 4), np.uint8)
+    out[..., :3] = np.clip(col, 0, 255).astype(np.uint8)
+    out[..., 3] = a.astype(np.uint8)
+    surf = to_surface(out)
+    if len(_HALO_CACHE) > 120:
+        _HALO_CACHE.clear()
+    _HALO_CACHE[key_] = surf
+    return surf
 
 
 # ===========================================================================

@@ -6,6 +6,48 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.10 — Sakin sesler, NOVA sohbet motoru, canlı sıralama, gerçekçi ışık ve gölge
+
+**Sesler**
+- Baş ağrıtan sesler kaldırıldı: üzerine gelme sesi yok; tık, yazı ve uyarı sesleri yumuşak, alçak frekanslı tonlar;
+  hangarın tekrar eden alarmı ve ortam bip/parıltıları kapalı; NOVA'nın konuşma sesi seyrek ve kısık.
+
+**Arayüz**
+- Tıklanabilir eylem düğmeleri altın sarısı: ARAŞTIR, GELİŞTİR, YÜKSELT, EĞİT, İŞE AL, NOVA yükseltmesi, SIRALAMA, SOR.
+- Ajans kurma ekranında **KAYITTAN DEVAM ET** (kayıt varsa; ajans adı ve seviyesi görünür).
+
+**Canlı sıralama (SIRALAMA ekranı)**
+- Skor, para ve seviyeye göre sıralama; ilk üçe madalya, kendi satırın altın renkli.
+- Skor = seviye×1000 + para/10 + koloni×2000 + başarım×300 + başarılı görev×150 + koloni seviyesi×500.
+- **Bu cihaz:** kampanyalar otomatik olarak yerel listeye yazılır.
+- **Çevrimiçi:** `server/leaderboard_server.py` (anahtarsız, CORS açık, doğrulama + hız sınırı) bir sunucuda çalıştırılıp
+  adresi AYARLAR > OYUN'a girilir; tablo 20 sn'de bir yenilenir ve skor açılışta gönderilir. Oyun dosyasında API anahtarı yoktur.
+  Tarayıcı sürümü (GitHub Pages, HTTPS) yalnız **HTTPS** sunucuya bağlanabilir; düz HTTP adresi tarayıcı tarafından engellenir.
+  Varsayılan olarak hiçbir sunucu ayarlı değildir; ayarlanana kadar sıralama yalnız bu cihazdadır.
+
+**NOVA yapay zekâ (AI KONTROL MERKEZİ'nde yazılı soru kutusu)** — `aetherx/nova_ai/`
+- Serbest metinli Türkçe/İngilizce sorular (diğer dillerde yanıtlar İngilizce). İnternete ya da dil modeline bağlı değildir;
+  kurallar, sözlükler ve gerçek verilerle çalışır, bilmediğini uydurmaz.
+- Bilgi tabanı: Güneş, 8 gezegen, Ay, Phobos, Deimos, Ceres, Galileo uyduları, Titan, Enceladus, Triton, Plüton —
+  NASA Planetary Fact Sheet değerleri, öne çıkan bilgiler, gerçek görevler (Apollo 11'den Europa Clipper'a), koloni tehlikeleri.
+- Hesaplar: Hohmann transfer süresi ve Δv, fırlatma pencereleri (sinodik dönem), sinyal gecikmesi, kaçış ve yörünge hızı,
+  roket denklemi (Isp + kütleler), başka gezegende ağırlık ve zıplama, güneş ışınımı, birim çevirme.
+- Oyun durumu: depo, yakıt, ekip sağlığı, sıradaki araştırma önerisi, son roket tasarımının kontrolü, bir hedefe gitmek için
+  gerekenler, koloni ayrıntıları, skor ve yerel sıra.
+- Sözlük (30+ kavram: delta-v, Isp, TWR, Max-Q, Lagrange, ISRU…), oyun rehberi, bilgi yarışması, bağlam belleği
+  ("peki ya Venüs?"), Türkçe ek uyumu (Mars'ta, Venüs'e, Dünya'nın).
+
+**Grafik**
+- Gezegen parlaması fiziksel atmosfer halesi: üstel yoğunluk, aydınlık tarafa ağırlık, terminatörde gün batımı tonu;
+  havasız cisimlerde hale yok.
+- Havasız cisimler (Ay, Merkür…) için Ay-Lambert yansıma modeli: gerçek fotoğraflardaki gibi keskin terminatör, dolunayda
+  kenar kararması yok. Dünya'da bulutlar yüzeye gölge düşürür.
+- Kolonide gerçek gölgeler: binalar ve kolonistler güneşe göre zemine izdüşülür, yumuşak kenarlı.
+
+**Optimizasyon**
+- Gölge yumuşatma yalnız gölgelerin kapladığı bölgede; kararmış manzara önbellekte; toz zerreleri numpy ile toplu
+  hesaplanıp tek `blits` çağrısıyla çiziliyor (zerre çizimi ~4 kat hızlı). Koloni ekranı ~%5 daha hızlı.
+
 ## Sürüm 3.9 — Gerçekçi 3B hayvanlar, gerçekçi iniş, daha fazla para, optimizasyon
 
 * **Başlangıç parası:** 1.000 yerine 10.000.

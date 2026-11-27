@@ -675,7 +675,15 @@ class Button(Widget):
         base_alpha = 120 if self.style == "ghost" else 175
         gq = round(g * 6) / 6
         pq = round(pulse * 4) / 4
-        if self.style == "big":
+        if self.style == "gold":                    # işlem düğmesi: altın sarısı dolgu (tıklanabilir olduğu belli)
+            if self.enabled:
+                top = lerp_color((255, 214, 96), (255, 236, 150), gq * 0.6 + pq * 0.3)
+                bot = lerp_color((198, 138, 28), (226, 170, 50), gq * 0.5)
+                base_alpha = 245
+            else:
+                top, bot, base_alpha = (92, 78, 42), (52, 42, 22), 200
+            acc = (255, 222, 120) if self.enabled else (120, 104, 60)
+        elif self.style == "big":
             top = lerp_color((20, 40, 70), scale_color(acc, 0.55), 0.35 + gq * 0.3 + pq * 0.2)
             bot = lerp_color((8, 14, 30), scale_color(acc, 0.25), 0.3 + gq * 0.2)
         elif self.selected:
@@ -698,6 +706,8 @@ class Button(Widget):
             pygame.draw.rect(surf, (*scale_color(acc, 0.3),), r.inflate(-8, -8), 1, border_radius=max(2, radius - 4))
         # içerik
         col = C["text"] if self.enabled else C["text_mute"]
+        if self.style == "gold":
+            col = (40, 26, 4) if self.enabled else (170, 150, 100)
         lab = tr(self.label) if self.label else ""
         has_icon = bool(self.icon or not self.enabled)
         fkey = (lab, self.rect.w, has_icon)
@@ -710,7 +720,7 @@ class Button(Widget):
             tw = text_size(lab, fs, True, raw=True)[0] if lab else 0
             total = tw + (fs + 10 if lab else 0)
             ix = r.centerx - total // 2 + fs // 2 if lab else r.centerx
-            draw_icon(surf, ic, (ix, r.centery), fs + 2, acc if self.enabled else C["text_mute"])
+            draw_icon(surf, ic, (ix, r.centery), fs + 2, ((40, 26, 4) if self.style == "gold" else acc) if self.enabled else C["text_mute"])
             if lab:
                 draw_text(surf, lab, (ix + fs // 2 + 10, r.centery - (6 if self.sublabel else 0)), fs, col, bold=True,
                           anchor="midleft", raw=True)
@@ -719,8 +729,8 @@ class Button(Widget):
                       anchor="center", raw=True)
         if self.sublabel:
             draw_text(surf, self.sublabel, (r.centerx, r.centery + 13), max(11, fs - 5),
-                      scale_color(acc, 0.95) if self.enabled else C["text_mute"], anchor="center",
-                      max_w=self.rect.w - 12)
+                      ((70, 46, 6) if self.style == "gold" else scale_color(acc, 0.95)) if self.enabled else C["text_mute"],
+                      anchor="center", max_w=self.rect.w - 12)
         if self.badge:
             bx, by = r.right - 6, r.y + 6
             pygame.draw.circle(surf, C["red"], (bx, by), 10)

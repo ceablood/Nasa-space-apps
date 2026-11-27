@@ -178,6 +178,8 @@ class IntroScene(Scene):
         y += 72
         self.add(Button((x, y, 136, 48), "AYARLAR", lambda: self.app.go("settings", back="intro"), accent=C["violet"], size=14,
                         icon="settings"))
+        self.add(Button((x + 430, y, 150, 48), "SIRALAMA", lambda: self.app.go("leaderboard", back="intro"), accent=C["gold"],
+                        size=14, icon="trophy", style="gold"))
         self.add(Button((x + 142, y, 136, 48), "TAM EKRAN", self.app.toggle_fullscreen, accent=C["violet"], size=14))
         self.add(Button((x + 284, y, 136, 48), "ÇIKIŞ", self.quit, accent=C["red"], size=14))
         y += 84
@@ -223,6 +225,11 @@ class IntroScene(Scene):
             b.data = "color"
         self.next_btn = self.add(Button((W // 2 - 190, 706, 380, 64), "DEVAM", self.name_done, accent=C["green"],
                                         icon="play", size=21, style="big"))
+        if self.game.has_save():                     # ajans kurarken de kayıtlı kampanyaya dönülebilir
+            sm = self.game.save_summary() or {}
+            cb = self.add(Button((W - 460, H - 86, 420, 62), "KAYITTAN DEVAM ET", self.continue_game, accent=C["gold"],
+                                 icon="save", size=18, style="gold"))
+            cb.sublabel = f"{sm.get('name', '?')} · {sm.get('level', 1)}. seviye"
         self.back("menu")
 
     def back(self, st):
@@ -376,8 +383,9 @@ class IntroScene(Scene):
         for key, x, y, R in LIVE:
             img = self.live.get(key)
             sel = self.pick == key
-            glow = {"mars": (255, 140, 90), "venus": (255, 214, 150), "jupiter": (255, 196, 150)}.get(key, (190, 200, 230))
-            draw_glow(surf, (x, y), R * (1.7 if sel else 1.45), glow, 0.32 if sel else 0.2)
+            halo = S3.atmo_halo(key, img.get_width() // 2 if img else R, (-0.8, -0.18, 0.56))   # gerçekçi atmosfer parlaması
+            if halo:
+                surf.blit(halo, (x - halo.get_width() // 2, y - halo.get_height() // 2))
             if img:
                 surf.blit(img, (x - img.get_width() // 2, y - img.get_height() // 2))
             else:

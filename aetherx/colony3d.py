@@ -1175,9 +1175,13 @@ class Colony3D:
         pal = PALETTE[self.planet]
         # arka plan: boyalı manzara, geceye göre karartılmış
         if bg is not None:
-            v.blit(bg, (0, 0))
             k = int(255 * (0.35 + 0.65 * day))
-            v.fill((k, k, min(255, k + 20)), special_flags=pygame.BLEND_MULT)
+            dkey = (id(bg), bg.get_size(), k)             # karartılmış manzara önbelleği (gün ışığı değişince yenilenir)
+            if getattr(self, "_bgdark_key", None) != dkey:
+                self._bgdark = bg.copy()
+                self._bgdark.fill((k, k, min(255, k + 20)), special_flags=pygame.BLEND_MULT)
+                self._bgdark_key = dkey
+            v.blit(self._bgdark, (0, 0))
         else:
             v.fill(pal[2])
         ty = self.height(self.cam.tx, self.cam.tz)
@@ -1189,38 +1193,53 @@ class Colony3D:
         # 1) arazi
         self.shade_and_draw(v, terrain.faces, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, cull=False,
                             cached=True)
-        # 2) gölgeler (güneş yönünde izdüşüm)
-        lay = self._layer
-        sh_a = int(110 * day)
-        if sh_a > 8 and sun[1] > 0.1:
-            lay.fill((0, 0, 0, 0))
-            for e in self.layout():
-                if e.get("prog", 1.0) < 0.45:
-                    continue
-                fw, fd = self.foot(e["key"], e["rot"])
-                x0, z0 = e["gx"] - HALF + 0.1, e["gz"] - HALF + 0.1
-                x1, z1 = x0 + fw - 0.2, z0 + fd - 0.2
-                hh = {"mine": 2.3, "park": 0.6, "house": 0.8}.get(e["key"], 1.2)
-                base = [(x0, z0), (x1, z0), (x1, z1), (x0, z1)]
-                pts3 = [_v(x, e["pad"], z) for x, z in base]
-                pts3 += [_v(x - sun[0] * hh / sun[1], e["pad"], z - sun[2] * hh / sun[1]) for x, z in base]
-                X = np.array(pts3)
-                _, _, zz, sx, sy = self.project(X, eye, f, r, u, fpx, cx, cy)
-                if (zz > 0.3).all():
-                    hull = _hull([(float(a), float(b)) for a, b in zip(sx, sy)])
-                    if len(hull) >= 3:
-                        pygame.draw.polygon(lay, (0, 0, 0, sh_a), hull)
+        # 2) gerçek gölgeler: Güneş'e bakan nesne yüzleri zemine izdüşürülür (binalar + kolonistler), yarım çözünürlükte
+        #    çizilip büyütülerek yumuşak kenar (yarı gölge) elde edilir; çarpma karışımıyla üst üste binen gölge koyulaşmaz
+        sh_k = (0.72 if self.planet in ("moon", "jupiter") else 0.55) * day      # havasızda gölge koyu (saçılan ışık yok)
+        if sh_k > 0.04 and sun[1] > 0.08:
+            hw, hh2 = max(2, w // 2), max(2, h // 2)
+            if getattr(self, "_shmask", None) is None or self._shmask.get_size() != (hw, hh2):
+                self._shmask = pygame.Surface((hw, hh2))
+            mask = self._shmask
+            mask.fill((255, 255, 255))
+            packs_sh = [pack_cached(objects.faces)]
             for a in self.agents:
-                if a.hidden:
-                    continue
-                gy = self.height(a.x, a.z)
-                c3 = np.array([_v(a.x - sun[0] * 0.25, gy, a.z - sun[2] * 0.25)])
-                _, _, zz, sx, sy = self.project(c3, eye, f, r, u, fpx, cx, cy)
-                if zz[0] > 0.3:
-                    s = fpx * 0.22 / zz[0]
-                    pygame.draw.ellipse(lay, (0, 0, 0, sh_a), (int(sx[0] - s), int(sy[0] - s * 0.45), int(s * 2) + 1,
-                                                               int(s * 0.9) + 1))
-            v.blit(lay, (0, 0))
+                if not a.hidden:
+                    packs_sh.append(colonist_packed(a.x, self.height(a.x, a.z), a.z, a.heading, a.col, a.phase, a.state,
+                                                    a.carry, self.planet, a.job, a.p.skin))
+            pk = concat_packs(packs_sh)
+            if pk is not None:
+                Pf, nf, cnt = pk["P"], pk["n"], pk["cnt"]
+                lit = (nf @ sun) > 0.02
+                Pf, cnt = Pf[lit], cnt[lit]
+                flat = Pf.reshape(-1, 3)
+                gyv = self.heights_at(flat[:, 0], flat[:, 2])
+                hgt = np.maximum(flat[:, 1] - gyv, 0.0)
+                proj = flat - np.outer(hgt / sun[1], sun)
+                proj[:, 1] = gyv + 0.02
+                _, _, zz, sx, sy = self.project(proj, eye, f, r, u, fpx, cx, cy)
+                zz, sx, sy = zz.reshape(-1, 4), sx.reshape(-1, 4) * 0.5, sy.reshape(-1, 4) * 0.5
+                ok = (zz.min(1) > 0.3) & (sx.max(1) >= 0) & (sx.min(1) <= hw) & (sy.max(1) >= 0) & (sy.min(1) <= hh2)
+                cval = int(255 * (1 - sh_k))
+                scol = (cval, cval, min(255, cval + 22))                 # gölgede gökyüzü ışığı: hafif mavi
+                SX, SY, CN = sx[ok].tolist(), sy[ok].tolist(), cnt[ok].tolist()
+                poly = pygame.draw.polygon
+                bb = None
+                for j in range(len(SX)):
+                    k = CN[j]
+                    rr = poly(mask, scol, list(zip(SX[j][:k], SY[j][:k])))
+                    bb = rr if bb is None else bb.union(rr)
+                # yalnız gölgelerin sınır kutusu yumuşatılıp karıştırılır (tam ekran çarpma karışımından ~4 kat ucuz)
+                if bb is not None:
+                    bb = bb.inflate(16, 16).clip(mask.get_rect())
+                    bb.w -= bb.w % 2
+                    bb.h -= bb.h % 2
+                    if bb.w >= 4 and bb.h >= 4:
+                        sub = mask.subsurface(bb)
+                        soft = pygame.transform.smoothscale(pygame.transform.smoothscale(sub, (bb.w // 2, bb.h // 2)),
+                                                            (bb.w * 2, bb.h * 2))
+                        v.blit(soft, (bb.x * 2, bb.y * 2), special_flags=pygame.BLEND_MULT)
+        lay = self._layer
         # 3) seçim halkası
         if self.selected and not self.selected.hidden:
             a = self.selected

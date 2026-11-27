@@ -949,9 +949,9 @@ class FlightScene(Scene):
         if not img:
             art.draw_planet(surf, key, center, R)
             return
-        glow = {"earth": (110, 170, 255), "mars": (255, 150, 100), "venus": (255, 220, 160)}.get(key)
-        if glow:
-            draw_glow(surf, center, R * 1.25, glow, 0.22)
+        halo = S3.atmo_halo(key, R, (-0.62, 0.32, 0.72))          # gerçekçi atmosfer parlaması (Güneş tarafında)
+        if halo:
+            surf.blit(halo, (center[0] - halo.get_width() // 2, center[1] - halo.get_height() // 2))
         if rb != R:
             img = pygame.transform.smoothscale(img, (int(img.get_width() * R / rb), int(img.get_height() * R / rb)))
         surf.blit(img, (center[0] - img.get_width() // 2, center[1] - img.get_height() // 2))

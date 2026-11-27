@@ -131,6 +131,11 @@ class Game:
                 json.dump(self.s, f, ensure_ascii=False, indent=1)
             tmp.replace(SAVE_FILE)
             self.save_error = None
+            try:                                      # bu cihazın sıralamasını güncelle
+                from . import online
+                online.local_update(self)
+            except Exception:
+                pass
             return True
         except Exception as e:  # pragma: no cover
             self.save_error = str(e)
