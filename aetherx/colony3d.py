@@ -297,10 +297,42 @@ def colonist_mesh(x, y, z, heading, col, phase, state, carry):
     return m
 
 
-def _colonist_local(swing, arm, col, carry):
-    """Kolonist modeli yerel uzayda (orijinde, yönsüz)."""
+# gezegene göre kıyafet (npc.OUTFIT ile aynı aile): gövde/uzuv rengi, şerit, vizör, kask tipi
+SUITS = {"moon": ((240, 242, 246), (200, 60, 60), (150, 110, 30), "dome"),
+         "mars": ((214, 150, 104), (90, 60, 44), (60, 40, 30), "dome"),
+         "venus": ((200, 206, 214), (255, 190, 90), (120, 90, 30), "dome"),
+         "jupiter": ((34, 46, 96), (236, 190, 80), (196, 228, 252), "bubble")}
+# iş -> (kol pozu üreteci, alet)
+JOBS = {"dig": "pickaxe", "scan": "tablet", "build": "hammer", "water": "can", "lift": "dumbbell", "repair": "wrench",
+        "talk": None, "carry": None}
+
+
+def _job_arms(job, phase):
+    """(sol kol, sağ kol) açıları; negatif = öne kalkık."""
+    if job == "dig":
+        k = (math.sin(phase * 4.5) + 1) / 2
+        return -2.6 + 2.2 * k, -2.6 + 2.2 * k
+    if job == "build" or job == "repair":
+        return -0.7, -1.9 + 1.1 * (math.sin(phase * 8) + 1) / 2
+    if job == "scan":
+        return -1.25, -1.25 + math.sin(phase * 2) * 0.08
+    if job == "water":
+        return -0.2, -1.35
+    if job == "lift":
+        k = (math.sin(phase * 3) + 1) / 2
+        return -3.0 * k, -3.0 * k
+    if job == "talk":
+        return 0.1, -0.7 + math.sin(phase * 3) * 0.45
+    return -1.1 + math.sin(phase * 7) * 0.9, 1.1 - math.sin(phase * 7) * 0.9
+
+
+def _colonist_local(swing, arm, col, carry, planet=None, job=None, arm_r=None, skin=(228, 184, 150)):
+    """Kolonist modeli yerel uzayda (orijinde, yönsüz). planet: kıyafet ailesi; job: elindeki alet."""
     s = 0.34
-    suit = (236, 238, 244)
+    suit, trim, visor, helmet = SUITS.get(planet, ((236, 238, 244), col, (40, 70, 140), "dome"))
+    torso = col if planet != "jupiter" else suit
+    if arm_r is None:
+        arm_r = arm if carry else -arm
 
     def limb(ox, oy, oz, w, h, d, ang, c):
         # pivot (ox, oy+h, oz) etrafında x ekseninde dönen uzuv
@@ -314,18 +346,54 @@ def _colonist_local(swing, arm, col, carry):
                 return _v(p[0], py + yy * ca - zz * sa, pz + yy * sa + zz * ca)
             out.faces.append(([rt(p) for p in pts], cc, rt(inner), two, emit))
         return out
+    S3_ = s * 3
     parts = Mesh()
-    parts.extend(limb(-0.07 * s * 3, 0, 0, 0.1 * s * 3, 0.32 * s * 3, 0.1 * s * 3, swing, suit))
-    parts.extend(limb(0.07 * s * 3, 0, 0, 0.1 * s * 3, 0.32 * s * 3, 0.1 * s * 3, -swing, suit))
-    parts.box(0, 0, 0.32 * s * 3, 0.3 * s * 3, 0.18 * s * 3, 0.34 * s * 3, col)                     # gövde (rol rengi)
-    parts.box(0, -0.13 * s * 3, 0.36 * s * 3, 0.22 * s * 3, 0.1 * s * 3, 0.26 * s * 3, (180, 184, 196))   # sırt çantası
-    parts.box(0, 0, 0.68 * s * 3, 0.24 * s * 3, 0.24 * s * 3, 0.22 * s * 3, suit)                    # kask
-    parts.panel([_v(-0.09 * s * 3, 0.72 * s * 3, 0.125 * s * 3), _v(0.09 * s * 3, 0.72 * s * 3, 0.125 * s * 3),
-                 _v(0.09 * s * 3, 0.85 * s * 3, 0.125 * s * 3), _v(-0.09 * s * 3, 0.85 * s * 3, 0.125 * s * 3)], (40, 70, 140))
-    parts.extend(limb(-0.2 * s * 3, 0.36 * s * 3, 0, 0.08 * s * 3, 0.3 * s * 3, 0.08 * s * 3, arm, suit))
-    parts.extend(limb(0.2 * s * 3, 0.36 * s * 3, 0, 0.08 * s * 3, 0.3 * s * 3, 0.08 * s * 3, arm if carry else -arm, suit))
+    boot = tuple(int(c * 0.45) for c in suit)
+    parts.extend(limb(-0.07 * S3_, 0, 0, 0.1 * S3_, 0.32 * S3_, 0.1 * S3_, swing, suit))
+    parts.extend(limb(0.07 * S3_, 0, 0, 0.1 * S3_, 0.32 * S3_, 0.1 * S3_, -swing, suit))
+    parts.box(-0.07 * S3_, 0.02 * S3_, 0, 0.11 * S3_, 0.14 * S3_, 0.06 * S3_, boot)                          # çizmeler
+    parts.box(0.07 * S3_, 0.02 * S3_, 0, 0.11 * S3_, 0.14 * S3_, 0.06 * S3_, boot)
+    parts.box(0, 0, 0.32 * S3_, 0.3 * S3_, 0.18 * S3_, 0.34 * S3_, torso)                                   # gövde
+    parts.box(0, 0.092 * S3_, 0.5 * S3_, 0.31 * S3_, 0.005 * S3_, 0.035 * S3_, trim)                        # göğüs şeridi
+    if planet == "jupiter":                                                                                  # istasyon: ışıklı rozet
+        parts.box(0.07 * S3_, 0.093 * S3_, 0.42 * S3_, 0.05 * S3_, 0.005 * S3_, 0.05 * S3_, (140, 230, 255))
+    else:
+        parts.box(0, -0.13 * S3_, 0.36 * S3_, 0.22 * S3_, 0.1 * S3_, 0.26 * S3_, (180, 184, 196))        # sırt çantası
+    if helmet == "bubble":                                                                                   # şeffaf kask: yüz + saç görünür
+        parts.box(0, 0, 0.66 * S3_, 0.17 * S3_, 0.17 * S3_, 0.18 * S3_, skin)
+        parts.box(0, -0.01 * S3_, 0.79 * S3_, 0.18 * S3_, 0.18 * S3_, 0.05 * S3_, (60, 40, 30))
+        parts.box(0, 0, 0.64 * S3_, 0.27 * S3_, 0.27 * S3_, 0.025 * S3_, trim)                             # yaka halkası
+        parts.box(0, 0, 0.72 * S3_, 0.25 * S3_, 0.25 * S3_, 0.24 * S3_, visor)                             # cam fanus (açık renk)
+    else:
+        parts.box(0, 0, 0.68 * S3_, 0.24 * S3_, 0.24 * S3_, 0.22 * S3_, (244, 246, 250))                    # kask
+        parts.box(0, 0, 0.58 * S3_, 0.25 * S3_, 0.25 * S3_, 0.03 * S3_, trim)                              # boyun halkası
+        parts.panel([_v(-0.09 * S3_, 0.72 * S3_, 0.125 * S3_), _v(0.09 * S3_, 0.72 * S3_, 0.125 * S3_),
+                     _v(0.09 * S3_, 0.85 * S3_, 0.125 * S3_), _v(-0.09 * S3_, 0.85 * S3_, 0.125 * S3_)], visor)
+    parts.extend(limb(-0.2 * S3_, 0.36 * S3_, 0, 0.08 * S3_, 0.3 * S3_, 0.08 * S3_, arm, suit))
+    parts.extend(limb(0.2 * S3_, 0.36 * S3_, 0, 0.08 * S3_, 0.3 * S3_, 0.08 * S3_, arm_r, suit))
+    tool = JOBS.get(job) if not carry else None
+    if tool:                                                                                                 # alet: sağ elin ucunda
+        L = 0.3 * S3_
+        hy = 0.66 * S3_ - math.cos(arm_r) * L
+        hz = -math.sin(arm_r) * L
+        tm = Mesh()
+        if tool == "pickaxe":
+            tm.box(0.2 * S3_, hz + 0.06 * S3_, hy, 0.03 * S3_, 0.22 * S3_, 0.03 * S3_, (130, 90, 50))
+            tm.box(0.2 * S3_, hz + 0.17 * S3_, hy, 0.04 * S3_, 0.04 * S3_, 0.16 * S3_, (170, 176, 186))
+        elif tool == "hammer":
+            tm.box(0.2 * S3_, hz + 0.05 * S3_, hy, 0.03 * S3_, 0.14 * S3_, 0.03 * S3_, (130, 90, 50))
+            tm.box(0.2 * S3_, hz + 0.12 * S3_, hy, 0.06 * S3_, 0.05 * S3_, 0.06 * S3_, (120, 124, 136))
+        elif tool == "tablet":
+            tm.box(0.12 * S3_, hz + 0.04 * S3_, hy, 0.14 * S3_, 0.02 * S3_, 0.1 * S3_, (90, 220, 255))
+        elif tool == "can":
+            tm.box(0.2 * S3_, hz + 0.05 * S3_, hy - 0.03 * S3_, 0.08 * S3_, 0.08 * S3_, 0.08 * S3_, (90, 170, 120))
+        elif tool == "dumbbell":
+            tm.box(0, hz, hy, 0.5 * S3_, 0.03 * S3_, 0.03 * S3_, (150, 150, 160))
+        elif tool == "wrench":
+            tm.box(0.2 * S3_, hz + 0.06 * S3_, hy, 0.03 * S3_, 0.16 * S3_, 0.03 * S3_, (190, 196, 206))
+        parts.extend(tm)
     if carry:
-        parts.box(0, 0.26 * s * 3, 0.62 * s * 3, 0.3 * s * 3, 0.22 * s * 3, 0.22 * s * 3, (160, 112, 66), side_col=(140, 96, 56))
+        parts.box(0, 0.26 * S3_, 0.62 * S3_, 0.3 * S3_, 0.22 * S3_, 0.22 * S3_, (160, 112, 66), side_col=(140, 96, 56))
     return parts
 
 
@@ -390,22 +458,27 @@ def concat_packs(packs):
 _COLONIST = {}
 
 
-def colonist_packed(x, y, z, heading, col, phase, state, carry):
+def colonist_packed(x, y, z, heading, col, phase, state, carry, planet=None, job=None, skin=(228, 184, 150)):
     """colonist_mesh ile aynı model; poz (uzuv açıları ~0,04 rad adımla) başına bir kez kurulur,
-    sonra yalnızca vektörel döndürme + öteleme yapılır."""
+    sonra yalnızca vektörel döndürme + öteleme yapılır. job: çalışırken elindeki alet ve kol hareketi."""
     swing = arm = 0.0
-    if state in ("walk", "carry"):
+    arm_r = None
+    if state in ("walk", "carry", "walk_home"):
         swing = math.sin(phase * 9) * 0.5
         arm = -swing
     elif state == "work":
-        arm = -1.1 + math.sin(phase * 7) * 0.9
+        arm, arm_r = _job_arms(job, phase)
     if carry:
         arm = -1.3
-    q = 0.04
-    key = (tuple(col), round(swing / q), round(arm / q), bool(carry))
+        arm_r = None
+    q = 0.08
+    ar = None if arm_r is None else round(arm_r / q)
+    wjob = job if state == "work" else None
+    key = (tuple(col), round(swing / q), round(arm / q), ar, bool(carry), planet, wjob, skin)
     loc = _COLONIST.get(key)
     if loc is None:
-        loc = pack_faces(_colonist_local(round(swing / q) * q, round(arm / q) * q, col, carry).faces)
+        loc = pack_faces(_colonist_local(round(swing / q) * q, round(arm / q) * q, col, carry, planet, wjob,
+                                         None if arm_r is None else ar * q, skin).faces)
         if len(_COLONIST) > 800:
             _COLONIST.clear()
         _COLONIST[key] = loc
@@ -484,11 +557,24 @@ class CameraRig:
 class ColonistAgent:
     """Görsel ajan (simülasyondan bağımsız): görev döngüsü, A* yol, kaçınma, yumuşak dönüş."""
 
+    # rol -> tercih ettiği iş yeri (bina, iş)
+    PREF = {"miner": [("mine", "dig"), ("mine", "dig"), ("house", "repair")],
+            "scientist": [("hut", "scan"), ("hut", "scan"), ("park", "water")],
+            "doctor": [("hospital", "scan"), ("school", "talk"), ("hut", "scan")],
+            "engineer": [("@build", "build"), ("house", "repair"), ("mine", "repair")],
+            "pilot": [("park", "water"), ("gym", "lift"), ("school", "talk")]}
+    JOB_NAME = {"dig": "Kazı yapıyor", "scan": "Araştırma yapıyor", "build": "İnşaat yapıyor", "water": "Bitki yetiştiriyor",
+                "lift": "Spor yapıyor", "repair": "Bakım yapıyor", "talk": "Ders veriyor"}
+
     def __init__(self, world, idx, role):
+        from .npc import Persona
         self.w = world
         self.idx = idx
         self.role = role
         self.col = CREW_COLORS.get(role, (200, 200, 210))
+        self.p = Persona(sum(map(ord, world.planet or "x")) * 131 + idx * 7919, role)
+        self.job = None
+        self.site = None
         cell = world.random_free_cell()
         self.x, self.z = world.cell_center(*cell)
         self.heading = random.uniform(0, math.tau)
@@ -521,7 +607,7 @@ class ColonistAgent:
                 if self.state == "walk_home":
                     self.state, self.hidden = "sleep", True
                 elif self.state == "walk":
-                    self.state, self.timer = "work", random.uniform(3.0, 5.0)
+                    self.state, self.timer = "work", random.uniform(4.0, 8.0) * self.p.work_k
                 else:
                     self.state, self.carry, self.timer = "idle", False, random.uniform(1.0, 2.5)
                 return
@@ -542,35 +628,59 @@ class ColonistAgent:
                     vx += ox / d2 * 0.04
                     vz += oz / d2 * 0.04
             n = math.hypot(vx, vz) or 1.0
-            spd = 1.25 if self.state != "carry" else 0.95
+            spd = (1.25 if self.state != "carry" else 0.95) * self.p.speed_k
             self.x += vx / n * spd * dt
             self.z += vz / n * spd * dt
             want = math.atan2(vx, vz)
             diff = (want - self.heading + math.pi) % math.tau - math.pi
             self.heading += max(-6.0 * dt, min(6.0 * dt, diff))           # RotateTowards
         elif self.state in ("idle", "work"):
+            if self.state == "work" and self.site:                         # iş yerine dön (yüzü işe dönük)
+                want = math.atan2(self.site[0] - self.x, self.site[1] - self.z)
+                diff = (want - self.heading + math.pi) % math.tau - math.pi
+                self.heading += max(-4.0 * dt, min(4.0 * dt, diff))
             self.timer -= dt
             if self.timer <= 0:
                 if self.state == "work":
-                    dest = self.w.door_of(random.choice(("house", "hut")))
-                    if dest and self.plan(dest):
-                        self.state, self.carry = "carry", True
-                    else:
-                        self.state, self.timer = "idle", 1.0
+                    if self.job == "dig":                                   # kazılan madeni depoya/eve taşı
+                        dest = self.w.door_of(random.choice(("house", "hut")))
+                        if dest and self.plan(dest):
+                            self.state, self.carry = "carry", True
+                            return
+                    self.state, self.timer = "idle", random.uniform(0.6, 1.8) * (1.0 + self.p.break_p * 3)
                 else:
-                    dest = self.w.door_of(random.choice(("mine", "mine", "hut", "park", "gym")))
-                    if dest and self.plan(dest):
-                        self.state = "walk"
-                    else:
-                        cell = self.w.random_free_cell()
-                        if self.plan(cell):
-                            self.state = "walk"
-                        else:
-                            self.timer = 1.0
+                    self.pick_job()
+
+    def pick_job(self):
+        """Role ve kişiliğe göre iş seç: hedef binanın kapısına git, sonra orada çalış."""
+        rng = random
+        opts = list(self.PREF.get(self.role, [("mine", "dig")]))
+        if rng.random() < self.p.break_p:                                   # mola: parka ya da spor salonuna
+            opts = [("park", "talk"), ("gym", "lift")]
+        rng.shuffle(opts)
+        for key, job in opts:
+            if key == "@build":
+                site = self.w.construction_site()
+                if site is None:
+                    continue
+                dest, center = site
+            else:
+                dest = self.w.door_of(key)
+                center = self.w.building_center(key, dest) if dest else None
+            if dest and self.plan(dest):
+                self.state, self.job, self.site = "walk", job, center
+                return
+        cell = self.w.random_free_cell()
+        if self.plan(cell):
+            self.state, self.job, self.site = "walk", "talk", None
+        else:
+            self.timer = 1.0
 
     def label(self):
-        return {"idle": "Boşta", "walk": "Yürüyor", "walk_home": "Yürüyor", "work": "Çalışıyor", "carry": "Taşıyor",
-                "sleep": "Uyuyor"}[self.state]
+        from .i18n import tr
+        st = self.JOB_NAME.get(self.job, "Çalışıyor") if self.state == "work" else \
+            {"idle": "Boşta", "walk": "İşe gidiyor", "walk_home": "Eve dönüyor", "carry": "Maden taşıyor", "sleep": "Uyuyor"}[self.state]
+        return f"{self.p.name} · {tr(self.p.trait)} — {tr(st)}"
 
 
 # =========================================================================== dünya
@@ -722,6 +832,28 @@ class Colony3D:
             if c not in self.blocked:
                 return c
         return (1, 1)
+
+    def building_center(self, key, door):
+        """Kapı hücresine en yakın binanın merkezi (çalışırken yüz dönülen nokta)."""
+        best, bd = None, 1e9
+        for e in self.layout():
+            if e["key"] != key:
+                continue
+            w, d = self.foot(e["key"], e["rot"])
+            cx, cz = e["gx"] - HALF + w / 2, e["gz"] - HALF + d / 2
+            dd = abs(e["gx"] + w // 2 - door[0]) + abs(e["gz"] + d - door[1])
+            if dd < bd:
+                best, bd = (cx, cz), dd
+        return best
+
+    def construction_site(self):
+        """Yapımı süren bir bina varsa önündeki hücre ve merkezi (mühendisler oraya gider)."""
+        for e in self.layout():
+            if e.get("prog", 1.0) < 1.0:
+                w, d = self.foot(e["key"], e["rot"])
+                door = (min(N - 1, e["gx"] + w // 2), min(N - 1, e["gz"] + d))
+                return door, (e["gx"] - HALF + w / 2, e["gz"] - HALF + d / 2)
+        return None
 
     def door_of(self, key):
         ds = self.doors.get(key)
@@ -1114,7 +1246,7 @@ class Colony3D:
             if a.hidden:
                 continue
             gy = self.height(a.x, a.z)
-            packs.append(colonist_packed(a.x, gy, a.z, a.heading, a.col, a.phase, a.state, a.carry))
+            packs.append(colonist_packed(a.x, gy, a.z, a.heading, a.col, a.phase, a.state, a.carry, self.planet, a.job, a.p.skin))
         allp = concat_packs(packs)
         if allp is not None:
             self.shade_and_draw(v, allp, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, objects=True)

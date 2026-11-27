@@ -642,6 +642,12 @@ def draw_astronaut(surf, x, y, ctype, scale=1.0, t=0.0, tired=False, sick=False,
     y = y + math.sin(t * {"armored": 2.2, "agile": 3.8}.get(st, 3.0) + x * 0.1) * 2 * s
     bw = 11 * s * w
     lw = max(1, int(2 * s))
+    # gölge + sırt çantası (yaşam destek ünitesi)
+    shd = pygame.Surface((int(bw * 2.4) + 2, int(9 * s) + 2), pygame.SRCALPHA)
+    pygame.draw.ellipse(shd, (0, 0, 0, 60), shd.get_rect())
+    surf.blit(shd, (x - bw * 1.2, y + 33 * s))
+    pygame.draw.rect(surf, (176, 182, 196), (x - bw - 7 * s, y - 2 * s, bw * 2 + 14 * s, 22 * s), border_radius=int(5 * s))
+    pygame.draw.circle(surf, (120, 230, 140) if int(t * 2 + x) % 2 else (40, 90, 60), (int(x - bw - 3 * s), int(y + 2 * s)), max(1, int(1.6 * s)))
     pygame.draw.rect(surf, scale_color(col, 0.55), (x - bw - 2 * s, y - 6 * s, bw * 2 + 4 * s, 30 * s), border_radius=int(6 * s))
     pygame.draw.rect(surf, col, (x - bw, y - 4 * s, bw * 2, 30 * s), border_radius=int(8 * s))
     pygame.draw.rect(surf, scale_color(col, 0.6), (x - bw, y - 4 * s, bw * 2, 30 * s), lw, border_radius=int(8 * s))
@@ -655,18 +661,26 @@ def draw_astronaut(surf, x, y, ctype, scale=1.0, t=0.0, tired=False, sick=False,
         pygame.draw.line(surf, (255, 255, 255), (x - bw + 2 * s, y + 17 * s), (x + bw - 2 * s, y + 17 * s), lw)
     pygame.draw.rect(surf, scale_color(col, 0.85), (x - bw + s, y + 24 * s, 8 * s * w, 12 * s), border_radius=3)
     pygame.draw.rect(surf, scale_color(col, 0.85), (x + bw - s - 8 * s * w, y + 24 * s, 8 * s * w, 12 * s), border_radius=3)
+    for bx in (x - bw + s, x + bw - s - 8 * s * w):                              # çizmeler
+        pygame.draw.rect(surf, (70, 74, 86), (bx - s, y + 32 * s, 8 * s * w + 2 * s, 5 * s), border_radius=int(2 * s) + 1)
     arm = math.sin(t * 6) * 8 * s if wave else 0
     aw = max(2, int(6 * s * w))
     pygame.draw.line(surf, col, (x - bw, y + 2 * s), (x - bw - 6 * s, y + 16 * s), aw)
     pygame.draw.line(surf, col, (x + bw, y + 2 * s), (x + bw + 7 * s, y + 14 * s - arm), aw)
+    pygame.draw.circle(surf, (88, 92, 104), (int(x - bw - 6 * s), int(y + 16 * s)), max(2, int(3 * s)))      # eldivenler
+    pygame.draw.circle(surf, (88, 92, 104), (int(x + bw + 7 * s), int(y + 14 * s - arm)), max(2, int(3 * s)))
     hr = 13 * s * {"armored": 1.08, "agile": 0.95}.get(st, 1.0)
+    pygame.draw.circle(surf, scale_color(col, 0.7), (int(x), int(y - 14 * s)), int(hr + 1.6 * s))           # kask kenarı
     pygame.draw.circle(surf, (240, 244, 255), (int(x), int(y - 14 * s)), int(hr))
+    pygame.draw.rect(surf, scale_color(col, 0.75), (x - hr * 0.8, y - 14 * s + hr * 0.72, hr * 1.6, 3 * s), border_radius=2)  # boyun halkası
     if st == "armored":
         pygame.draw.circle(surf, scale_color(col, 0.5), (int(x), int(y - 14 * s)), int(hr), lw)
     visor = pygame.Rect(0, 0, int(18 * s), int(12 * s))
     visor.center = (int(x + 2 * s), int(y - 14 * s))
     pygame.draw.ellipse(surf, (40, 80, 160) if not sick else (120, 160, 80), visor)
+    pygame.draw.ellipse(surf, (90, 140, 220) if not sick else (160, 200, 120), visor.inflate(-int(4 * s), -int(4 * s)).move(int(s), int(s)), max(1, int(s)))
     pygame.draw.ellipse(surf, (180, 220, 255), (visor.x + 3 * s, visor.y + 2 * s, 6 * s, 4 * s))
+    pygame.draw.line(surf, (230, 245, 255), (visor.right - 5 * s, visor.y + 3 * s), (visor.right - 3 * s, visor.y + 6 * s), max(1, int(s)))
     if tired:
         draw_text(surf, "z", (x + 14 * s, y - 34 * s - (t * 10) % 8), int(14 * s), C["text_dim"], True, shadow=False, raw=True)
     if sick:
