@@ -30,6 +30,7 @@ DEFAULTS = {
     # oyun
     "autosave_min": 3,        # app.App: dakikada bir otomatik kayıt (0 = yalnız olaylarda)
     "game_speed": 1.0,        # game.Game.update: oyun saatinin hızı (ekonomi, günlük olaylar)
+    "lb_url": "",             # online.py: çevrimiçi sıralama sunucusu (anahtarsız); boş = yalnız yerel
     # ses
     "audio": {"enabled": True, "master": 1.0, "music": 0.55, "sfx": 0.8, "amb": 0.8, "ui": 0.8, "voice": 0.8,
               "mute_unfocused": True},

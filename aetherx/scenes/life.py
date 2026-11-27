@@ -326,9 +326,9 @@ class LifeScene(Scene):
         cx, cy = center
         top, bot = LA.sky_colors(env, w.key)
         p = env.pressure_bar or 0.0
-        if p > 0.005:                                                  # atmosfer halesi: kalınlık basınçla (log)
-            k = min(1.0, 0.35 + 0.22 * math.log10(1 + p * 10))
-            draw_glow(surf, (cx, cy), int(R * (1.18 + 0.25 * k)), bot, 0.35 + 0.35 * k)
+        halo = S3.atmo_halo(GLOBE_TEX.get(w.key, "mars"), R, (-0.75, -0.2, 0.6)) if p > 0.005 else None
+        if halo:                                                       # gerçekçi atmosfer halesi (Güneş tarafında)
+            surf.blit(halo, (cx - halo.get_width() // 2, cy - halo.get_height() // 2))
         img = self.globe_surface(w, R)
         if img:
             surf.blit(img, (cx - img.get_width() // 2, cy - img.get_height() // 2))

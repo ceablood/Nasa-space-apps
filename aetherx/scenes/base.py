@@ -253,7 +253,7 @@ class BaseScene(Scene):
             if g.lvl(key) == 0:
                 lab = f"İNŞA ET · {fmt_num(cost)} P"
             ub = Button((pr.x + 24, y, pr.w - 48, 54), lab, lambda: self.upgrade(key), accent=C["gold"], icon="star",
-                        size=17, style="big")
+                        size=17, style="gold")
             ok, why = g.can_upgrade(key)
             ub.set_enabled(ok, why)
             ub.pulse = ok

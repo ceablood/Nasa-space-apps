@@ -59,7 +59,7 @@ class CrewScene(Scene):
             if c["status"] == "ready":
                 cost = D.TRAIN_COST * c["rank"]
                 tb = self.add(Button((r.x + 110, by, 120, 34), f"EĞİT {cost}", (lambda cid=c["id"]: self.act(g.train, cid)),
-                                     accent=C["gold"], size=12, icon="star",
+                                     accent=C["gold"], size=12, icon="star", style="gold",
                                      tooltip=f"Rütbe {c['rank'] + 1}: etkisi %12 artar"))
                 if c["rank"] >= D.MAX_RANK:
                     tb.set_enabled(False, "Maksimum rütbe")
@@ -77,8 +77,8 @@ class CrewScene(Scene):
             r = pygame.Rect(40 + i * 306, TOPBAR_H + 180, 294, 470)
             self.cards.append((t, r))
             b = self.add(Button((r.x + 24, r.bottom - 70, r.w - 48, 52), f"İŞE AL · {t['hire']} P",
-                                (lambda k=t["key"]: self.hire(k)), accent=CREW_COLORS[t["key"]], size=16, icon="money",
-                                style="big"))
+                                (lambda k=t["key"]: self.hire(k)), accent=C["gold"], size=16, icon="money",
+                                style="gold"))
             if len(g.s["crew"]) >= g.crew_cap():
                 b.set_enabled(False, "Kadro dolu: Astronot Merkezi'ni yükselt")
             elif g.money < t["hire"]:
@@ -88,7 +88,7 @@ class CrewScene(Scene):
             ub = self.add(Button((W - 460, TOPBAR_H + 100, 420, 46),
                                  f"MERKEZ SV{g.lvl('astro') + 1} · KADRO {D.ASTRO_CAP[g.lvl('astro') + 1]} · {fmt_num(cost)} P",
                                  lambda: self.act(g.upgrade, "astro", ok_sound="levelup"), accent=C["gold"], size=14,
-                                 icon="star"))
+                                 icon="star", style="gold"))
             ok, why = g.can_upgrade("astro")
             ub.set_enabled(ok, why)
 
@@ -104,7 +104,7 @@ class CrewScene(Scene):
             ub = self.add(Button((W - 460, TOPBAR_H + 100, 420, 46),
                                  f"SAĞLIK MERKEZİ SV{g.lvl('medical') + 1} · {fmt_num(cost)} P",
                                  lambda: self.act(g.upgrade, "medical", ok_sound="levelup"), accent=C["gold"], size=14,
-                                 icon="star"))
+                                 icon="star", style="gold"))
             ok, why = g.can_upgrade("medical")
             ub.set_enabled(ok, why)
 
@@ -115,7 +115,7 @@ class CrewScene(Scene):
             ub = self.add(Button((W - 460, TOPBAR_H + 100, 420, 46),
                                  f"DİNLENME ALANI SV{g.lvl('rec') + 1} · {fmt_num(cost)} P",
                                  lambda: self.act(g.upgrade, "rec", ok_sound="levelup"), accent=C["gold"], size=14,
-                                 icon="star"))
+                                 icon="star", style="gold"))
             ok, why = g.can_upgrade("rec")
             ub.set_enabled(ok, why)
         tired = [c for c in g.s["crew"] if c["status"] == "ready" and (c["tired"] or c["streak"] > 0)]
@@ -142,8 +142,8 @@ class CrewScene(Scene):
         g = self.game
         self.bg.draw(surf)
         self.draw_title(surf, sub=f"Kadro {len(g.s['crew'])}/{g.crew_cap()} · Her yolculuğa en fazla 3 astronot")
-        self.draw_widgets(surf)
         getattr(self, f"draw_{self.tab}")(surf)
+        self.draw_widgets(surf)                  # düğmeler kartların üstünde (eskiden kartlar düğmeleri soluk gösteriyordu)
 
     def draw_0(self, surf):
         g = self.game

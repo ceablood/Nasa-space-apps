@@ -81,7 +81,7 @@ class ResearchScene(Scene):
         lab = {"done": "TAMAMLANDI", "active": "ARAŞTIRILIYOR...", "available": "ARAŞTIRMAYI BAŞLAT",
                "locked": "KİLİTLİ"}[st]
         sb = self.add(Button((pr.x + 24, pr.y + 300, pr.w - 48, 58), lab, lambda: self.start(self.sel),
-                             accent=C["cyan"], icon="play", size=18, style="big"))
+                             accent=C["gold"], icon="play", size=18, style="gold"))
         if st != "available":
             sb.set_enabled(False, g.req_text(D.RESEARCH_BY_KEY[self.sel]["req"]) if st == "locked" else lab)
         else:
@@ -104,7 +104,7 @@ class ResearchScene(Scene):
             ub = self.add(Button((pr.x + 24, pr.bottom - 134, pr.w - 48, 50),
                                  f"MERKEZİ SEVİYE {g.lvl('research') + 1}'E YÜKSELT · {fmt_num(cost)} P",
                                  lambda: self.act(g.upgrade, "research", ok_sound="levelup"), accent=C["gold"],
-                                 icon="star", size=14))
+                                 icon="star", size=14, style="gold"))
             ok, why = g.can_upgrade("research")
             ub.set_enabled(ok, why)
 
@@ -126,7 +126,7 @@ class ResearchScene(Scene):
                 continue
             rp, money = cost
             b = self.add(Button((r.right - 300, r.bottom - 70, 276, 52), "GELİŞTİR", (lambda k=trk["key"]: self.suit_up(k)),
-                                accent=C["gold"], icon="star", size=16, style="big"))
+                                accent=C["gold"], icon="star", size=16, style="gold"))
             b.sublabel = f"{rp} Puan + {money} Para"
             ok, why = True, ""
             if g.lvl("research") < 1:
@@ -234,6 +234,10 @@ class ResearchScene(Scene):
         for k, b in self.cards.items():
             self.draw_card(surf, k, b)
         self.draw_panel(surf)
+        pr = self.panel_rect() if hasattr(self, "panel_rect") else None
+        for w_ in self.widgets:                  # panel düğmeleri panelin üstünde (araştır / yükselt net görünsün)
+            if pr is not None and pr.contains(w_.rect):
+                w_.draw(surf)
         self.ps.draw(surf)
 
     def draw_card(self, surf, k, b):

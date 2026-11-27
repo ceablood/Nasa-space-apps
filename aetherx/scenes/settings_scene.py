@@ -13,7 +13,7 @@ from .. import settings as SET
 from ..config import C, H, SAVE_FILE, W
 from ..fx import scale_color
 from ..i18n import tr
-from ..ui import Button, Slider, Toggle, draw_paragraph, draw_text, glass_panel
+from ..ui import Button, Slider, TextInput, Toggle, draw_paragraph, draw_text, glass_panel
 
 CATS = [("gfx", "GÖRÜNTÜ", "eye"), ("perf", "PERFORMANS", "chart"), ("audio", "SES", "nova"), ("game", "OYUN", "rocket"), ("access", "ERİŞİLEBİLİRLİK", "astro"),
         ("lang", "DİL", "planet"), ("keys", "KONTROLLER", "wrench"), ("data", "VERİ", "save")]
@@ -225,11 +225,21 @@ class SettingsScene(Scene):
         self.choice("Oyun hızı", "Oyun saatinin akışı: gelir, günlük olaylar ve koloni üretimi buna göre hızlanır.",
                     [(v, f"×{v:g}") for v in SET.SPEED_CHOICES], float(SET.get("game_speed")),
                     lambda v: (SET.set("game_speed", v), self.changed()), 104)
+        y = self.row("Çevrimiçi sıralama sunucusu", "Boşsa sıralama yalnız bu cihazda tutulur. Anahtar gerekmez (server/leaderboard_server.py).")
+        self.lb_input = self.add(TextInput((CX, y + 4, 330, 42), str(SET.get("lb_url") or ""), "https://...", 120,
+                                           on_submit=lambda t: self.set_lb(t), accent=C["gold"], size=15))
+        self.add(Button((CX + 340, y + 6, 100, 38), "KAYDET", lambda: self.set_lb(self.lb_input.text), accent=C["gold"], size=13,
+                        style="gold"))
         self.slider("Bildirim süresi", "Sağ üstteki bildirimlerin ekranda kalma süresi.", SET.get("toast_k"),
                     lambda v: self.sset("toast_k", round(v, 2)), 0.5, 2.5, lambda v: f"{4 * v:.0f} s")
         if self.game.s:
             y = self.row("Ajans adı", "Adı AJANS > AYARLAR'dan değiştirebilirsin (Para gerektirir).")
             self.add(Button((CX, y + 6, 440, 38), "AJANS EKRANINA GİT", lambda: self.app.go("agency", tab=3), accent=C["gold"], size=14))
+
+    def set_lb(self, t):
+        SET.set("lb_url", t.strip())
+        self.app.toast("Sıralama sunucusu kaydedildi" if t.strip() else "Çevrimiçi sıralama kapalı", "gold", "trophy")
+        self.changed()
 
     # --- ERİŞİLEBİLİRLİK
     def build_access(self):

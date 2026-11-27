@@ -372,9 +372,8 @@ class HangarScene(Scene):
         self.tint.update(dt)
         if lvl > 0.45:
             self.alarm_t += dt
-            if self.alarm_t > 3.5:
+            if self.alarm_t > 3.5:                 # tekrar eden alarm sesi kaldırıldı (görsel uyarı yeterli)
                 self.alarm_t = 0
-                self.app.audio.play("alarm", 0.18)
 
     def draw(self, surf):
         self.bg.draw(surf)

@@ -291,28 +291,28 @@ def note_freq(n):
 # EFEKTLER
 # ===========================================================================
 def sfx_click():
-    n = _n(0.045)
-    x = _sine(1750, 0.045) * _exp_decay(n, 0.008) * 0.6
-    x += _sine(3300, 0.045) * _exp_decay(n, 0.004) * 0.25
-    x += _bnoise(0.045, 1500, 7000, 1) * _exp_decay(n, 0.002) * 0.2
-    return _norm(x, 0.5)
+    """Yumuşak tıklama: alçak frekans, kısa (eskiden 1,75 + 3,3 kHz)."""
+    n = _n(0.05)
+    x = _sine(620, 0.05) * _exp_decay(n, 0.01) * 0.7 + _sine(930, 0.05) * _exp_decay(n, 0.006) * 0.2
+    return _norm(x, 0.28)
 
 
 def sfx_hover():
-    n = _n(0.03)
-    x = _sine(2600, 0.03) * _exp_decay(n, 0.006)
-    return _norm(x, 0.14)
+    """Kaldırıldı: her düğme üzerinde çalan tiz ses baş ağrısı yapıyordu (sessiz)."""
+    return np.zeros(_n(0.01), dtype=np.float32)
 
 
 def sfx_tick():
-    n = _n(0.02)
-    return _norm(_sine(3800, 0.02) * _exp_decay(n, 0.003), 0.2)
+    """Yumuşak, alçak 'tık' (eskiden 3,8 kHz tiz)."""
+    n = _n(0.04)
+    return _norm(_sine(700, 0.04) * np.hanning(n).astype(np.float32), 0.08)
 
 
 def sfx_type():
-    n = _n(0.03)
-    x = _bnoise(0.03, 1800, 6000, 3) * _exp_decay(n, 0.004) * 0.6 + _sine(1200, 0.03) * _exp_decay(n, 0.005) * 0.4
-    return _norm(x, 0.3)
+    n = _n(0.04)
+    win = np.hanning(n).astype(np.float32)
+    x = (_bnoise(0.04, 900, 3000, 3) * 0.4 + _sine(500, 0.04) * 0.4) * win
+    return _norm(x, 0.12)
 
 
 def sfx_deny():
@@ -373,12 +373,10 @@ def sfx_hit():
 
 
 def sfx_laser():
-    d = 0.22
+    d = 0.2
     n = _n(d)
-    x = _sine(lambda t: 1900 * np.exp(-t * 14) + 300, d)
-    x = x * _exp_decay(n, 0.07)
-    x += _sine(lambda t: 3800 * np.exp(-t * 18) + 500, d) * _exp_decay(n, 0.04) * 0.3
-    return _norm(x, 0.4)
+    x = _sine(lambda t: 900 * np.exp(-t * 10) + 220, d) * _exp_decay(n, 0.06)
+    return _norm(x, 0.3)
 
 
 def sfx_pickup():
@@ -400,19 +398,21 @@ def sfx_coin():
 
 
 def sfx_alarm():
+    """Uyarı: yumuşak iki tonlu alçak çan (eskiden 880/660 Hz sert dalgalanan siren)."""
     d = 0.9
-    n = _n(d)
-    t = np.arange(n, dtype=np.float32) / SR
-    f = np.where((t * 4) % 1 < 0.5, 880, 660)
-    x = np.sin(2 * np.pi * np.cumsum(f) / SR) * 0.6 + _bl_square(110, d, 15) * 0.06
-    x *= _env(n, 0.01, 0.1, 0.9, 0.1)
-    return _norm(x, 0.5)
+    buf = np.zeros(_n(d), dtype=np.float32)
+    for i, f in enumerate((523.25, 392.0)):
+        tone = (_sine(f, 0.45) + _sine(f * 2, 0.45) * 0.15) * _env(_n(0.45), 0.02, 0.1, 0.5, 0.25)
+        _place(buf, tone, SR * 0.38 * i)
+    return _norm(buf, 0.32)
 
 
 def sfx_beep(freq=880, d=0.22):
+    """Yumuşak bip: frekans en çok 700 Hz, saf ton, yumuşak zarf."""
+    freq = min(freq, 700)
     n = _n(d)
-    x = (_sine(freq, d) + _sine(freq * 2, d) * 0.2) * _env(n, 0.003, 0.04, 0.7, 0.08)
-    return _norm(x, 0.5)
+    x = _sine(freq, d) * _env(n, 0.012, 0.05, 0.6, 0.1)
+    return _norm(x, 0.3)
 
 
 def sfx_success():
@@ -471,19 +471,20 @@ def sfx_levelup():
 
 
 def sfx_nova_blip(pitch):
-    d = 0.075
+    """NOVA konuşma sesi: alçak, yumuşak, kısa (eskiden kare dalgalı ve tiz)."""
+    d = 0.07
     n = _n(d)
-    f = 280 * pitch
-    x = _bl_square(f, d, 9) * 0.3 + _sine(f * 2, d) * 0.4 + _sine(f * 3.02, d) * 0.12
-    x = x * _env(n, 0.008, 0.02, 0.6, 0.035)
-    return _norm(x, 0.28)
+    f = 190 * pitch
+    x = _sine(f, d) * 0.7 + _sine(f * 2, d) * 0.2
+    x = x * _env(n, 0.012, 0.02, 0.6, 0.035)
+    return _norm(x, 0.16)
 
 
 def sfx_ping():
     d = 0.9
     n = _n(d)
-    x = (_sine(1320, d) + _sine(1980, d) * 0.3) * _exp_decay(n, 0.22)
-    return _norm(_reverb_soft(x, 1.0, 0.2), 0.4)
+    x = (_sine(660, d) + _sine(990, d) * 0.2) * _exp_decay(n, 0.2) * np.minimum(1, np.arange(n) / _n(0.01))
+    return _norm(_reverb_soft(x, 1.0, 0.18), 0.26)
 
 
 def sfx_radio():
@@ -538,16 +539,11 @@ def ambient_track(name):
             _place(buf, c, rng.uniform(0.3, d - 1.0) * SR)
     elif name == "amb_control":                  # kontrol odası: havalandırma uğultusu + bip sesleri (cızırtı yok)
         buf += bed(50, 500, 1.6, 203) * 0.3 + _sine(60, d) * 0.03
-        for _ in range(14):
-            b = sfx_beep(rng.choice((660, 880, 990, 1320)), rng.uniform(0.05, 0.12)) * rng.uniform(0.08, 0.22)
-            _place(buf, b, rng.uniform(0.1, d - 0.6) * SR)
+        pass                                     # rastgele bipler kaldırıldı (baş ağrısı)
     elif name == "amb_space":                    # derin uzay (kabin içi): vuru yapan alçak uğultu + ince parıltılar
         buf += (_sine(41, d) + _sine(373 / 9, d)) * 0.16 + _sine(82, d) * 0.04   # tam sayı periyot: döngüde tık yok
         buf += bed(30, 260, 1.8, 204) * 0.3
-        for _ in range(6):
-            f0 = rng.choice((1760, 2093, 2637, 3136))
-            s_ = _sine(f0, 2.2) * np.sin(np.linspace(0, np.pi, _n(2.2))) ** 2 * 0.015
-            _place(buf, s_, rng.uniform(0, d - 2.4) * SR)
+        pass                                     # tiz parıltılar (1,7–3,1 kHz) kaldırıldı
     elif name == "amb_colony":                   # ince atmosfer rüzgârı + yaşam destek uğultusu
         buf += bed(150, 1200, 1.2, 205) * (0.5 + 0.5 * lfo) * 0.35
         buf += _sine(72, d) * 0.04
@@ -891,7 +887,7 @@ class Audio:
                 seq.append(random.randrange(len(self.nova_blips)))
             elif ch in ".,!?":
                 seq.append(-1)
-        self.nova_queue = seq[:60]
+        self.nova_queue = [q for i, q in enumerate(seq) if q < 0 or i % 3 == 0][:14]   # seyrek ve kısa
         self.nova_timer = 0.0
 
     def update(self, dt):

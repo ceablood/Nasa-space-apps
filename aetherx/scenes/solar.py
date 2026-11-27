@@ -393,6 +393,11 @@ class SolarScene(Scene):
                 rl = S3.render_ring(ring, R, m, L, b["obl"]) if ring else None
                 if rl:
                     self.blit_arr(surf, rl[0], sx, sy, alpha)
+                halo = S3.atmo_halo(key, R, L) if R >= 10 else None
+                if halo:
+                    halo.set_alpha(int(255 * alpha))
+                    surf.blit(halo, (sx - halo.get_width() // 2, sy - halo.get_height() // 2))
+                    halo.set_alpha(255)                                 # önbellekteki yüzey paylaşılıyor
                 img = S3.render_body(key, R, m, L, spin, t, 128, ring=ring, obl=b["obl"])
                 self.blit_arr(surf, img, sx, sy, alpha)
                 if rl:
@@ -557,6 +562,9 @@ class SolarScene(Scene):
         img = self.cached("planet", pk, interval,
                           lambda: S3.to_surface(S3.render_body(key, R, M, L, spin, t, q["tex"], ring=ring if ring in ("saturn", "uranus") else None, obl=obl)),
                           refresh=True)
+        halo = S3.atmo_halo(key, R, L)                                # gerçekçi atmosfer halesi
+        if halo:
+            surf.blit(halo, (cx - halo.get_width() // 2, cy - halo.get_height() // 2))
         surf.blit(img, (cx - R, cy - R))
         # ---- ön: halka, kayalar, yörüngeler, uydular ----------------------
         if front is not None:

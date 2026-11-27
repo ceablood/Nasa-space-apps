@@ -34,6 +34,8 @@ class TestOneShots(unittest.TestCase):
     def check(self, name, x):
         y = A.finish(x, False).astype(np.float64)
         pk = float(np.max(np.abs(y)))
+        if pk < 1e-6:                      # bilerek sessizleştirilmiş ses (ör. düğme üzeri sesi kaldırıldı)
+            return
         self.assertLessEqual(pk, 0.951, f"{name}: tepe {pk}")
         z = y / (pk or 1)
         self.assertLess(abs(float(np.mean(z))), 0.005, f"{name}: DC kayması")

@@ -47,6 +47,7 @@ SCENES = {
     "solar": ("solar", "SolarScene"),
     "life": ("life", "LifeScene"),
     "settings": ("settings_scene", "SettingsScene"),
+    "leaderboard": ("leaderboard", "LeaderboardScene"),
 }
 
 NAV = [
@@ -218,8 +219,10 @@ class App:
             img = self._load_planet(key, R)
             nd = D.NASA[key]
             if img:
-                draw_glow(surf, (int(x), cy), R * 1.5, {"earth": (110, 170, 255), "mars": (255, 150, 100),
-                                                        "venus": (255, 220, 160), "jupiter": (255, 200, 150)}.get(key, (180, 190, 220)), 0.22)
+                from . import space3d as S3
+                halo = S3.atmo_halo(key, R, (-0.7, 0.35, 0.62))        # gerçekçi atmosfer halesi (havasız Ay'da yok)
+                if halo:
+                    surf.blit(halo, (int(x) - halo.get_width() // 2, cy - halo.get_height() // 2))
                 surf.blit(img, (x - img.get_width() / 2, cy - img.get_height() / 2))
                 col = C["text"]
             else:
@@ -266,6 +269,8 @@ class App:
 
     # ----------------------------------------------------------------- yardımcı
     def _ui_sound(self, name):
+        if name == "hover":                       # düğme üzeri sesi kaldırıldı
+            return
         vol = {"hover": 0.35, "tick": 0.4, "type": 0.5}.get(name, 0.8)
         self.audio.play(name, vol * self.audio.ui_vol / 0.8)
 

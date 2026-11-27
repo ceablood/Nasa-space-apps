@@ -16,7 +16,22 @@ from ..config import C, H, MIN_PER_DAY, TOPBAR_H, W
 from ..fx import ParticleSystem, draw_glow, scale_color, clamp
 from ..i18n import tr
 from ..nova import draw_nova_face
-from ..ui import UI, Button, draw_icon, draw_paragraph, draw_text, glass_panel, fmt_num, wrap_text
+from ..nova_ai import NovaAI
+from ..ui import UI, Button, TextInput, draw_icon, draw_paragraph, draw_text, font, glass_panel, fmt_num, wrap_text
+
+
+class ChatInput(TextInput):
+    """Uzun soruda imleç görünür kalsın: yalnız sığan son kısım çizilir."""
+
+    def draw(self, surf):
+        full = self.text
+        f = font(self.size, True)
+        while self.text and f.size(self.text)[0] > self.rect.w - 60:
+            self.text = self.text[1:]
+        try:
+            super().draw(surf)
+        finally:
+            self.text = full
 
 
 class NovaRoomScene(Scene):
@@ -31,6 +46,9 @@ class NovaRoomScene(Scene):
         self.ps = ParticleSystem(600)
         self.chat = []
         self.talk_t = 0.0
+        self.ai = None
+        self.history = []          # yazılan sorular (↑ / ↓ ile geri çağrılır)
+        self.hist_i = 0
 
     def enter(self, **kw):
         g = self.game
@@ -38,6 +56,7 @@ class NovaRoomScene(Scene):
         self.chat = [("nova", tr(greet))]
         self.talk_t = 2.5
         self.app.audio.speak(greet)
+        self.ai = NovaAI(g, self.app.nova)
         self.rebuild()
 
     def rebuild(self):
@@ -54,11 +73,38 @@ class NovaRoomScene(Scene):
         if cost is not None:
             nxt = g.lvl("nova") + 1
             ub = self.add(Button((x, H - 150, 480, 60), f"NOVA SEVİYE {nxt} · {fmt_num(cost)} P",
-                                 lambda: self.upgrade(), accent=C["gold"], icon="star", size=17, style="big",
+                                 lambda: self.upgrade(), accent=C["gold"], icon="star", size=17, style="gold",
                                  tooltip=D.BUILDING["nova"]["levels"][nxt]))
             ok, why = g.can_upgrade("nova")
             ub.set_enabled(ok, why)
             ub.pulse = ok
+        cr = self.chat_rect()
+        self.inp = self.add(ChatInput((cr.x, cr.bottom + 12, cr.w - 150, 50), "", "NOVA'ya bir soru yaz… (ör. Mars'ta yerçekimi?)",
+                                      max_len=160, on_submit=self.ask_text, accent=C["cyan"], size=17))
+        self.add(Button((cr.right - 140, cr.bottom + 12, 140, 50), "SOR", lambda: self.ask_text(self.inp.text), accent=C["gold"],
+                        icon="nova", size=17, style="gold"))
+
+    def chat_rect(self):
+        return pygame.Rect(620, TOPBAR_H + 110, W - 520 - 640, H - TOPBAR_H - 322)
+
+    def ask_text(self, text):
+        text = (text or "").strip()
+        if not text:
+            self.inp.shake = 0.3
+            return
+        self.history.append(text)
+        del self.history[:-30]
+        self.hist_i = len(self.history)
+        self.inp.text = ""
+        self.push("you", text, raw=True)
+        self.push("nova", self.ai.reply(text), raw=True)
+
+    def handle(self, e):
+        if e.type == pygame.KEYDOWN and e.key in (pygame.K_UP, pygame.K_DOWN) and self.history:
+            self.hist_i = max(0, min(len(self.history), self.hist_i + (-1 if e.key == pygame.K_UP else 1)))
+            self.inp.text = self.history[self.hist_i] if self.hist_i < len(self.history) else ""
+            return True
+        return super().handle(e)
 
     def upgrade(self):
         if self.act(self.game.upgrade, "nova", ok_sound="levelup"):
@@ -74,10 +120,11 @@ class NovaRoomScene(Scene):
         self.push("you", label)
         self.push("nova", self.app.nova.answer(key))
 
-    def push(self, who, text):
-        text = tr(text)
+    def push(self, who, text, raw=False):
+        if not raw:
+            text = tr(text)
         self.chat.append((who, text))
-        del self.chat[:-8]
+        del self.chat[:-12]
         if who == "nova":
             self.talk_t = 1.5 + len(text) * 0.04
             self.app.audio.speak(text)
@@ -110,14 +157,16 @@ class NovaRoomScene(Scene):
                        "happy" if self.talk_t > 0 and "Tebrik" in self.chat[-1][1] else "calm", lv)
         draw_text(surf, "N O V A", (cx, cy + 250), 30, C["cyan"], bold=True, anchor="midtop", glow=C["cyan"])
         # sohbet
-        r = pygame.Rect(620, TOPBAR_H + 110, W - 520 - 640, H - TOPBAR_H - 260)
+        r = self.chat_rect()
         glass_panel(surf, r, C["cyan"], 160, 18)
         y = r.bottom - 20
+        clip = surf.get_clip()
+        surf.set_clip(r.inflate(-4, -4))
         for who, text in reversed(self.chat):
-            lines = wrap_text(text, 15, r.w - 60, raw=True)
+            lines = [ln for para in text.split("\n") for ln in (wrap_text(para, 15, r.w - 60, raw=True) or [""])]
             h = len(lines) * 20 + 18
             y -= h
-            if y < r.y + 10:
+            if y + h < r.y:
                 break
             bx = r.x + 16 if who == "nova" else r.x + 44
             br = pygame.Rect(bx, y, r.w - 60, h - 6)
@@ -129,6 +178,7 @@ class NovaRoomScene(Scene):
             for i, ln in enumerate(lines):
                 draw_text(surf, ln, (br.x + 12, br.y + 6 + i * 20), 15, C["text"] if who == "nova" else C["text_dim"],
                           raw=True)
+        surf.set_clip(clip)
         # fırtına zaman çizelgesi
         self.draw_timeline(surf)
         self.draw_widgets(surf)
