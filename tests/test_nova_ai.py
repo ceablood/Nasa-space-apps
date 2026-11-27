@@ -150,3 +150,82 @@ class LeaderboardServer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RealDataAndMind(unittest.TestCase):
+    """TÜİK/NASA veri yolları, sinir ağı ve duygu modeli (ağ isteği yapılmaz: canlı yenileme kapatılır)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from aetherx.nova_ai import live as LV
+        cls._orig = LV.LIVE.refresh
+        LV.LIVE.refresh = lambda kind: None
+
+    @classmethod
+    def tearDownClass(cls):
+        from aetherx.nova_ai import live as LV
+        LV.LIVE.refresh = cls._orig
+        i18n.set_lang("en")
+
+    def test_tuik_values_come_from_file(self):
+        import json
+        from aetherx.nova_ai import tuik as TU
+        d = json.load(open(TU._PATH, encoding="utf-8"))
+        ist = d["indicators"]["NufusToplam"]["values"][33][-1]
+        tot = sum(v[-1] for v in d["indicators"]["NufusToplam"]["values"])
+        i18n.set_lang("tr")
+        txt = TU.answer(LX.normalize("İstanbul'un nüfusu kaç"), True)[0]
+        self.assertIn(f"{ist:,}".replace(",", "."), txt)
+        self.assertIn(f"{tot:,}".replace(",", "."), TU.answer(LX.normalize("Türkiye nüfusu"), True)[0])
+        self.assertNotIn("NufusErkek", d["indicators"])                         # tutarsız portal verisi alınmadı
+        self.assertIn("uydurmam", TU.answer(LX.normalize("Türkiye ortanca yaş"), True)[0])
+
+    def test_province_matching(self):
+        from aetherx.nova_ai import tuik as TU
+        P = lambda q: TU.find_province(LX.normalize(q))
+        self.assertEqual(P("Ankara'nın ortanca yaşı"), 5)
+        self.assertEqual(P("İzmir'de doğurganlık"), 34)
+        self.assertIsNone(P("karşı tarafın nüfusu"))
+        self.assertIsNone(P("bölüm nüfusu"))
+
+    def test_neural_net_generalises(self):
+        from aetherx.nova_ai import engine as E
+        net = E.get_net()
+        self.assertGreater(net.train_acc, 0.95)
+        for q, want in (("venüste yer çekimi nasıl", "gravity"), ("dünyaya yakın geçecek asteroitler", "asteroids"),
+                        ("depomda ne var", "depot"), ("başarı ihtimalim ne", "chance"), ("orman yangınları", "earth_events")):
+            self.assertEqual(net.predict(LX.normalize(q))[0][0], want, q)
+        self.assertEqual(len(net.last_hidden), 48)
+
+    def test_respond_has_confidence_and_think_time(self):
+        i18n.set_lang("en")
+        ai = NovaAI()
+        r = ai.respond("What is the gravity on Mars?")
+        self.assertEqual(r["intent"], "gravity")
+        self.assertGreater(r["conf"], 0.85)
+        self.assertTrue(0.3 < r["think"] <= 3.2)
+        self.assertIn("exoplanets", ai.reply("how many exoplanets are known").lower())
+        self.assertIn("snapshot", ai.reply("how many exoplanets are known"))               # canlı yoksa açıkça söyler
+        r = ai.respond("qwzx plorf")
+        self.assertIsNone(r["intent"])
+
+    def test_mind_reacts_to_game_events(self):
+        from aetherx.game import Game
+        from aetherx.nova_ai.mind import Mind
+        g = Game()
+        g.new("ORION", (62, 230, 255))
+        m = Mind()
+        m.update(0.0, g)
+        joy0, sad0 = m.e["joy"], m.e["sadness"]
+        g.s["stats"]["success"] += 1
+        m.update(0.0, g)
+        self.assertGreater(m.e["joy"], joy0)
+        g.s["stats"]["fail"] += 1
+        m.update(0.0, g)
+        self.assertGreater(m.e["sadness"], sad0)
+        for _ in range(600):
+            m.update(1.0)                                                        # 10 dk sonra tabana döner
+        self.assertAlmostEqual(m.e["sadness"], 0.05, delta=0.02)
+
+    def test_turkish_number_suffix(self):
+        self.assertEqual([LX.num_ek(x) for x in ("0,9", "18,3", "0,2", "40", "6")], ["u", "ü", "si", "ı", "sı"])

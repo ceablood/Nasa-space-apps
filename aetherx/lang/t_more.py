@@ -186,4 +186,10 @@ ROWS = [
      "Pregunta a NOVA… (p. ej. ¿gravedad en Marte?)", "Спросите NOVA… (напр. гравитация на Марсе?)"),
     ("SEVİYE", "LEVEL", "STUFE", "NIVEAU", "NIVEL", "УРОВЕНЬ"),
     ("SOR", "ASK", "FRAGEN", "DEMANDER", "PREGUNTAR", "СПРОСИТЬ"),
+    ("NOVA düşünüyor", "NOVA is thinking", "NOVA denkt nach", "NOVA réfléchit", "NOVA está pensando", "NOVA думает"),
+    ("sinir ağı eğitiliyor…", "training neural network…", "neuronales Netz wird trainiert…", "entraînement du réseau neuronal…",
+     "entrenando la red neuronal…", "обучение нейросети…"),
+    ("Ruh hali", "Mood", "Stimmung", "Humeur", "Ánimo", "Настроение"),
+    ("Son yanıta güven", "Confidence in last answer", "Sicherheit der letzten Antwort", "Confiance dans la dernière réponse",
+     "Confianza en la última respuesta", "Уверенность в последнем ответе"),
 ]
