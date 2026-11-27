@@ -419,17 +419,24 @@ class Starfield:
             self.y[self.y < -4] += self.h + 8
             self.y[self.y > self.h + 4] -= self.h + 8
 
-    def draw(self, surf, alpha=1.0, streak=0.0):
+    def draw(self, surf, alpha=1.0, streak=0.0, mod=None):
+        """mod: (W, H, 3) uint8 çarpma katmanı (fırça × vinyet); verilirse her yıldızın rengi kendi konumundaki
+        değerle çarpılır — tam ekran çarpma karışımıyla aynı sonuç, ama yalnız yıldız pikselleri için."""
         np_ = self._np
         tw = 0.55 + 0.45 * np_.sin(self.t * self.sp + self.ph)
         k = self.base * tw * alpha
+        col = self.col
+        if mod is not None:
+            mx = np_.clip(self.x.astype(np_.int32), 0, mod.shape[0] - 1)
+            my = np_.clip(self.y.astype(np_.int32), 0, mod.shape[1] - 1)
+            col = col * (mod[mx, my].astype(np_.float64) / 255.0)
         L0 = self.layer == 0
         # katman 0: tek piksel (eskiden set_at döngüsü) — renk = scale_color(col, k*0.8)
         xi, yi = self.x[L0].astype(np_.int32), self.y[L0].astype(np_.int32)
         sw, sh = surf.get_size()
         ok = (xi >= 0) & (xi < sw) & (yi >= 0) & (yi < sh)
         if ok.any():
-            c0 = np_.clip(self.col[L0][ok] * np_.clip(k[L0][ok] * 0.8, 0, None)[:, None], 0, 255).astype(np_.uint8)
+            c0 = np_.clip(col[L0][ok] * np_.clip(k[L0][ok] * 0.8, 0, None)[:, None], 0, 255).astype(np_.uint8)
             try:
                 px = pygame.surfarray.pixels3d(surf)
                 px[xi[ok], yi[ok]] = c0
@@ -437,7 +444,7 @@ class Starfield:
             except Exception:
                 for (xx, yy), cc in zip(zip(xi[ok].tolist(), yi[ok].tolist()), c0.tolist()):
                     surf.set_at((xx, yy), cc)
-        cols = np_.clip(self.col * np_.clip(k, 0, None)[:, None], 0, 255).astype(np_.int32).tolist()
+        cols = np_.clip(col * np_.clip(k, 0, None)[:, None], 0, 255).astype(np_.int32).tolist()
         X, Y, LY, TW, K = self.x.tolist(), self.y.tolist(), self.layer.tolist(), tw.tolist(), k.tolist()
         circle, line = pygame.draw.circle, pygame.draw.line
         for i in np_.flatnonzero(~L0).tolist():
@@ -453,7 +460,7 @@ class Starfield:
                 else:
                     circle(surf, c, (int(x), int(y)), 2)
                     if TW[i] > 0.8:
-                        draw_glow(surf, (x, y), 7, tuple(int(v) for v in self.col[i]), 0.55 * K[i])
+                        draw_glow(surf, (x, y), 7, tuple(int(v) for v in col[i]), 0.55 * K[i])
 
 
 class ShootingStars:
@@ -475,9 +482,12 @@ class ShootingStars:
             s[4] += dt
         self.items = [s for s in self.items if s[4] < s[5]]
 
-    def draw(self, surf):
+    def draw(self, surf, mod=None):
         for x, y, vx, vy, t, life in self.items:
             k = math.sin(math.pi * t / life)
+            if mod is not None:
+                xi, yi = min(max(int(x), 0), mod.shape[0] - 1), min(max(int(y), 0), mod.shape[1] - 1)
+                k *= float(mod[xi, yi].mean()) / 255.0
             tail = 0.11
             pygame.draw.line(surf, scale_color((200, 230, 255), k), (x, y), (x - vx * tail, y - vy * tail), 2)
             draw_glow(surf, (x, y), 9, (180, 220, 255), k)
@@ -524,7 +534,11 @@ class SpaceBackground:
         p = (self.nebula.params(nebula_alpha, drift), id(layers[0]) if layers else 0)
         if WEB and self._comp is not None and self._comp_key[1] == p[1] and self.pulse - self._comp_t < 0.4:
             p = self._comp_key           # tarayıcıda bulutsu en fazla 0,4 sn'de bir yenilenir (hareketi saniyede ~3 px)
-        if self._comp is None or self._comp_key != p:
+        # Hızlı yol (görüntü aynı): huzme durağan olduğundan bulutsuyla birlikte önbelleğe alınır ve fırça×vinyet çarpma
+        # katmanı önbelleğe bir kez uygulanır; her karede tam ekran çarpma yerine yalnız yıldız/zerre renkleri o katmanın
+        # kendi konumlarındaki değeriyle çarpılır. Renk tonu (tint) kullanan arka planlar eski sırayla çizilir.
+        fast = bool(layers) and not self.tint
+        if self._comp is None or self._comp_key != p or getattr(self, "_comp_fast", None) != fast:
             self._comp_t = self.pulse
             # gradyan + bulutsu (+ sinematik pus) birleşik katmanı: yalnızca görünür bir değişiklikte yeniden çizilir
             if self._comp is None:
@@ -537,11 +551,22 @@ class SpaceBackground:
             self.nebula.draw_params(self._comp, p[0])
             if layers:
                 self._comp.blit(layers[0], (0, 0), special_flags=pygame.BLEND_RGB_ADD)
+            if fast:
+                cinema.space_rays(self._comp, self.palette, strength)
+                self._comp.blit(layers[1], (0, 0), special_flags=pygame.BLEND_RGB_MULT)
             self._comp_key = p
+            self._comp_fast = fast
         surf.blit(self._comp, (0, 0))
-        self.stars.draw(surf, 1.0, streak)
+        mod = None
+        if fast:
+            mk = id(layers[1])
+            if getattr(self, "_mod_key", None) != mk:
+                self._mod = pygame.surfarray.array3d(layers[1])
+                self._mod_key = mk
+            mod = self._mod
+        self.stars.draw(surf, 1.0, streak, mod=mod)
         if streak <= 0:
-            self.shooting.draw(surf)
+            self.shooting.draw(surf, mod=mod)
         if self.tint:
             if self._tint_s is None:
                 if WEB:
@@ -552,7 +577,9 @@ class SpaceBackground:
                     self._tint_s = pygame.Surface((W, H), pygame.SRCALPHA)
                     self._tint_s.fill(self.tint)
             surf.blit(self._tint_s, (0, 0))
-        if layers:
+        if fast:
+            cinema.space_motes(surf, self.palette, self.pulse, mod)
+        elif layers:
             cinema.space_dynamic(surf, self.palette, self.pulse, strength)    # huzmeler + toz zerreleri
             surf.blit(layers[1], (0, 0), special_flags=pygame.BLEND_RGB_MULT)  # fırça dokusu × vinyet × soğuk gölge
         else:

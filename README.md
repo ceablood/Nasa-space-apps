@@ -6,6 +6,51 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.11 — NOVA gerçek verilere bağlı, sinir ağı ve duygular; 45+ FPS; yeni ajans görünümü
+
+**NOVA: gerçek veri**
+- **TÜİK:** Nüfus İstatistikleri Portalı'nın (nip.tuik.gov.tr) il düzeyi resmî dosyalarından 11 gösterge, 2008–2025:
+  - nüfus, artış hızı, yoğunluk, ortanca yaş, doğurganlık, bebek ölüm hızı;
+  - ölüm, boşanma, hanehalkı sayısı ve büyüklüğü, yabancı nüfus.
+  - Veri oyunla gelir (`aetherx/nova_ai/data/tuik_il.json`, 27.11.2026); sorularda kaynak ve tarih yazılır.
+  - Sayımlar için Türkiye değeri 81 ilin toplamı. Oranlar için ulusal değer uydurulmaz.
+  - Portalın erkek/kadın dosyaları tutarsız çıktığı (81 ilde değerler aynı) için kullanılmadı.
+- **NASA (anahtarsız):**
+  - JPL yakın geçişler: tarih, uzaklık, hız ve parlaklıktan çap aralığı.
+  - Ötegezegen Arşivi: doğrulanmış gezegen sayısı.
+  - EONET: Dünya'daki açık doğa olayları.
+  - Masaüstünde canlı çekilir. Tarayıcıda yalnız EONET canlı (CORS); diğerleri oyunla gelen tarihli anlık görüntüden gelir.
+  - Yanıt hangisinin kullanıldığını açıkça söyler.
+
+**NOVA: zihin**
+- **Sinir ağı:** numpy ile yazılmış küçük bir ağ (1024 özellik → 48 nöron → 51 niyet).
+  - Oyun içinde, sabit tohumla eğitilir; masaüstünde ~1 sn, arka planda.
+  - Kurallarla birlikte karar verir; tanımadığı sözcüklerden oluşan girdiyi tahmine zorlamaz.
+  - Gizli katmanın gerçek etkinliği AI Kontrol Merkezi'nde yüzün çevresinde nöron olarak görünür.
+- **Duygular:** neşe, merak, endişe, gurur, hüzün.
+  - Oyundaki gerçek olaylardan (görev sonucu, fırtına, hasta ekip, para, koloni mutluluğu) ve sohbetten beslenir; zamanla söner.
+  - Yüzün rengini ve konuşma tonunu belirler, ekranda çubuklarla gösterilir. Bu bir benzetimdir.
+- **Düşünme:** NOVA yanıt vermeden önce sorunun ağırlığına göre 0,6–3 sn düşünür, sonra yanıtı harf harf yazar.
+- **Olasılık ve güven:**
+  - Emin değilse yüzdesiyle söyler ("Sanırım… %78 eminim").
+  - "Başarır mıyım?" sorusunu tasarım analizinin gerçek risk hesabıyla, yorum katarak yanıtlar.
+- **Türkçe:** yüzde ve sayı ekleri ("%18,3'ü", "%0,9'u"), il adlarında hal ekleri ("İstanbul'da", "Ankara'nın").
+
+**Performans (ölçüm: bu geliştirme ortamı, Ultra, 2× süper örnekleme)**
+- **Koloni:** manzara, arazi ve bina gölgeleri kamera ve güneş değişmedikçe önbellekten gelir. Her karede yalnız kolonistlerin çevresi yenilenir.
+  - Üst üste binen gölgeler yine tek kat kararır; önbellekli ve tam çizim piksel piksel aynıdır.
+  - Kamera hareketliyken önbelleğe yazılmaz, tek geçişte çizilir.
+  - Sonuç: sabit kamerada ~19 ms (~52 FPS), kolonist takibinde ~22–24 ms (~42–45 FPS).
+- **Uzay arka planı:** huzme ve fırça×vinyet katmanı önbelleğe işlenir. Yıldız ve zerreler bu katmanı kendi konumlarında örnekler.
+  - Görüntü aynı (ortalama piksel farkı 0,002); her ekranda bir tam ekran karışımı eksik.
+- **Diğer ekranlar:** üs ~10 ms, ajans ~11, NOVA ~9, Güneş Sistemi ~14, Yaşam ~14, uçuş/iniş ~8–12 ms.
+
+**Ajans ekranı**
+- Dönen 3B Dünya (ajans merkezi; 60 karelik dönüş bir kez, arka planda hesaplanır), seviye halkası ve yörüngede ajans roketi.
+- Görev sonuçları halka grafiği ve başarı oranı; ikonlu istatistik kutuları.
+- Zafer yolunda "sıradaki" adımın vurgusu.
+- Karne şeridi: skor, bu cihazdaki sıra, kasa, RP, koloni, ekip.
+
 ## Sürüm 3.10 — Sakin sesler, NOVA sohbet motoru, canlı sıralama, gerçekçi ışık ve gölge
 
 **Sesler**

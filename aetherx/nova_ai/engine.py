@@ -16,6 +16,10 @@ from . import lexicon as LX
 from . import physics as P
 from . import gamestate as GS
 from .quiz import Quiz, convert
+from . import tuik as TU
+from . import live as LV
+from .mind import Mind
+from .neural import IntentNet, build_dataset
 
 # niyet -> anahtar sözcükler (normalize, kök ya da tam)
 INTENT_WORDS = {
@@ -24,7 +28,7 @@ INTENT_WORDS = {
     "thanks": ("tesekkur", "sagol", "eyvallah", "thanks", "thank you", "thx", "danke", "merci", "gracias", "spasibo"),
     "identity": ("sen kimsin", "kimsin", "who are you", "what are you", "nova kim", "adin ne", "your name", "nesin"),
     "help": ("yardim", "help", "ne yapabilirsin", "what can you do", "neler sorabilirim", "komut", "commands", "ornek"),
-    "gravity": ("yercekimi", "cekim", "gravity", "g kuvveti", "kutle cekimi", "gravitasyon", "schwerkraft", "gravite", "gravedad"),
+    "gravity": ("yercekimi", "yer cekimi", "cekim kuvveti", "cekimi nasil", "cekim", "gravity", "g kuvveti", "kutle cekimi", "gravitasyon", "schwerkraft", "gravite", "gravedad"),
     "temp": ("sicaklik", "derece", "sicak", "soguk", "temperature", "temp", "hot", "cold", "isi"),
     "day": ("gun uzunlugu", "bir gun", "gunu", "day length", "how long is a day", "donus", "rotation", "sol"),
     "year": ("bir yil", "yili", "yil uzunlugu", "year", "yorunge suresi", "orbital period", "gunes etrafinda"),
@@ -69,6 +73,14 @@ INTENT_WORDS = {
     "plan": ("ne lazim", "ne gerekli", "neler gerekli", "unlock", "kilidi", "kilidini", "how do i get to", "how to reach",
              "gidebilir miyim", "can i go", "nasil giderim", "what do i need", "requirements", "gereksinim"),
     "quiz": ("bana soru sor", "soru sor", "quiz", "bilgi yarismasi", "test me", "sinav", "trivia", "yarisma"),
+    "asteroids": ("asteroit", "asteroid", "yakin gecis", "close approach", "dunyaya yaklasan", "near earth", "neo",
+                  "gok tasi yaklasiyor", "carpacak mi", "will it hit", "yaklasan asteroit"),
+    "exoplanets": ("kac otegezegen", "otegezegen sayisi", "how many exoplanets", "exoplanet count", "kac gezegen kesfedildi",
+                   "kesfedilen gezegen", "otegezegen kesfi"),
+    "earth_events": ("dogal afet", "orman yangini", "orman yanginlari", "yanginlar", "yangin", "wildfire", "wildfires", "fires", "eonet", "dogal olay", "natural events", "volkan",
+                     "yanardag", "kasirga", "hurricane", "dunyada neler oluyor", "what is happening on earth", "sel", "flood"),
+    "chance": ("ihtimal", "olasilik", "sans", "basarir miyim", "basarir mi", "chance", "probability", "odds", "riskli mi",
+               "basari orani", "will i succeed", "will it work", "tutar mi"),
     "convert": ("kac km/sa", "kac km/s", "kac km", "kac kelvin", "kelvin", "fahrenheit", "convert", "cevir", "in km",
                 "in km/h", "to km"),
 }
@@ -79,6 +91,34 @@ INTENT_WEIGHT = {"facts": 0.4, "status": 0.8, "distance": 0.9, "size": 0.8, "mas
 # Bir niyet bir gök cismi gerektiriyorsa (bağlamdan da gelebilir)
 BODY_INTENTS = {"gravity", "temp", "day", "year", "distance", "moons", "atmo", "size", "mass", "escape", "missions", "hazards",
                 "weight", "jump", "sunlight", "orbit_calc", "facts"}
+SMALL = {"greet", "thanks", "identity", "help", "joke", "quiz", "convert", None}
+_NET = None
+import threading as _threading
+_NET_LOCK = _threading.Lock()
+
+
+def get_net():
+    """Sinir ağı tek sefer eğitilir (sabit tohum) ve tüm NOVA örnekleri tarafından paylaşılır."""
+    global _NET
+    if _NET is not None:
+        return _NET
+    with _NET_LOCK:
+        if _NET is not None:
+            return _NET
+        from . import facts as _F
+        extra = {"concept": [kw for kws, _, _ in CO.CONCEPTS.values() for kw in kws[:3]],
+                 "howto": [f"nasil {kw}" for kws, _ in HT.HOWTO.values() for kw in kws[:2]] +
+                          [f"how do i {kw}" for kws, _ in HT.HOWTO.values() for kw in kws[:1]],
+                 "tuik": [kw for kws, *_ in TU.IND.values() for kw in kws[:3]] +
+                         ["turkiye nufusu", "istanbul nufusu", "ankara ortanca yas", "en kalabalik il", "il nufusu"]}
+        names = [n for k, b in _F.BODIES.items() for n in b["name"]]
+        X, Y, classes = build_dataset(INTENT_WORDS, extra, [LX.normalize(n) for n in names])
+        net = IntentNet()
+        net.train(X, Y, classes)
+        _NET = net
+    return _NET
+
+
 GAME_INTENTS = {"advice", "suggest", "forecast", "best_time", "status", "colonies", "money_now", "score_now", "game_time",
                 "depot", "fuel_now", "crew_now", "research_next", "design_check"}
 
@@ -93,7 +133,8 @@ JOKES = [("Astronotlar neden asla çay içmez? Çünkü bardaklar yörüngeye gi
 class NovaAI:
     """Tek oturumluk sohbet beyni. game: game.Game (None olabilir: menüde genel bilgi)."""
 
-    def __init__(self, game=None, brain=None):
+    def __init__(self, game=None, brain=None, mind=None):
+        self.mind = mind or Mind()
         self.game = game
         self.brain = brain                 # nova.NovaBrain (oyun durumuna dayalı tavsiyeler)
         self.last_body = None
@@ -113,13 +154,31 @@ class NovaAI:
         return F.name(key, "tr" if self.tr_ else "en")
 
     # ------------------------------------------------------------- ana giriş
+    def respond(self, text):
+        """Tam yanıt: {'text', 'intent', 'conf', 'think' (sn), 'mood', 'probs' (ağın ilk 3 tahmini)}."""
+        self._conf, self._intent, self._probs, self._fallback = 1.0, None, [], False
+        out = self._core(text)
+        intent, conf = self._intent, self._conf
+        if self._fallback:
+            intent, conf = None, 0.0
+        self.mind.hear(LX.normalize(text or ""), intent)
+        pre = ""
+        if intent not in SMALL and intent is not None:
+            pre = self.mind.opener(self.tr_) + self.mind.hedge(conf, self.tr_)
+        return {"text": pre + out, "intent": intent, "conf": conf, "think": self.mind.think_time(intent, len(text or "")),
+                "mood": self.mind.face(), "probs": self._probs}
+
     def reply(self, text):
+        return self.respond(text)["text"]
+
+    def _core(self, text):
         text = (text or "").strip()
         if not text:
             return self.L(("Bir şey yazmadın. Örneğin: 'Mars'ta yerçekimi ne kadar?'", "You didn't type anything. Try: 'What is the gravity on Mars?'"))
         self.turns += 1
         norm = LX.normalize(text)
         if self.quiz.pending:                                   # bekleyen yarışma sorusu: önce yanıt olarak değerlendir
+            self._intent = "quiz"
             if LX.has_any(norm, ("pas", "gec", "skip", "pass", "cevap ne", "answer", "bilmiyorum", "don't know", "dont know")):
                 expl = self.quiz.skip()
                 return self.L(("Doğru yanıt: ", "The answer is: ")) + self.L(expl) + "." + self.L((" Yeni soru için 'soru sor' yaz.", " Type 'quiz' for another."))
@@ -132,10 +191,38 @@ class NovaAI:
             self.quiz.pending = None
         conv = convert(norm, self.tr_) if LX.has_any(norm, INTENT_WORDS["convert"]) or "=" in text else None
         if conv:
+            self._intent = "convert"
             return conv
         bodies = LX.find_bodies(norm)
         nums = LX.numbers(norm)
+        if not bodies and TU.wants_tuik(norm):                 # TÜİK il/Türkiye istatistiği
+            ans = TU.answer(norm, self.tr_)
+            if ans:
+                self._intent, self._conf = "tuik", ans[1]
+                self.last_intent = "tuik"
+                return ans[0]
         intent, score = self.classify(norm, bodies, nums)
+        self._conf = min(0.99, 0.8 + 0.08 * score) if intent else 0.0
+        # sinir ağı: kurallar bir şey bulamazsa ya da ağ çok farklı bir şeyden çok eminse onun kararı
+        try:
+            preds = get_net().predict(norm)
+        except Exception:
+            preds = []
+        self._probs = preds[:3]
+        if preds:
+            top, p = preds[0]
+            if intent is None and p >= 0.4:
+                intent, self._conf = top, p
+            elif intent == top:
+                self._conf = max(self._conf, p)
+            elif p > 0.85 and score < 1.6 and top != "facts":
+                intent, self._conf = top, p
+        if intent == "tuik":
+            ans = TU.answer(norm, self.tr_)
+            if ans:
+                self._intent = "tuik"
+                return ans[0]
+            intent = None
         # "peki ya Mars?" / "what about Venus?" -> önceki niyeti yeni cisimle tekrarla
         if intent in (None, "facts") and bodies and self.last_intent in BODY_INTENTS and LX.has_any(
                 norm, ("peki", "ya", "what about", "and", "how about", "ayrica", "bunu", "onun", "its")) and len(LX.tokens(norm)) <= 5:
@@ -155,6 +242,7 @@ class NovaAI:
             self.last_body = bodies[-1] if intent in ("transfer", "delay", "compare") else bodies[0]
         if intent:
             self.last_intent = intent
+        self._intent = intent
         return out
 
     # ------------------------------------------------------------- niyet
@@ -220,6 +308,16 @@ class NovaAI:
             return self.help()
         if intent == "joke":
             return self.L(random.choice(JOKES))
+        if intent == "asteroids":
+            txt, c = LV.asteroids(self.tr_)
+            self._conf = max(self._conf, c) if self._conf else c
+            return txt
+        if intent == "exoplanets":
+            return LV.exoplanets(self.tr_)[0]
+        if intent == "earth_events":
+            return LV.earth_events(self.tr_, norm)[0]
+        if intent == "chance":
+            return self.chance(b)
         if intent == "quiz":
             q = self.quiz.new_question()
             return self.L(("Soru: ", "Question: ")) + self.L(q) + self.L((" (Bilmiyorsan 'pas' yaz.)", " (Type 'skip' if you don't know.)"))
@@ -281,7 +379,21 @@ class NovaAI:
                        "• 'My depot' · 'My crew' · 'What to research?' · 'Check my rocket' · 'What do I need to go to Mars?'\n"
                        "• 'Quiz' (trivia) · '7.8 km/s in km/h' · '5 AU in km'"))
 
+    def overview(self):
+        """Güneş Sistemi özeti (gerçek veri): gezegenler, Güneş'e uzaklık ve uydu sayısı."""
+        rows = []
+        for k in ("mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"):
+            b = F.BODIES[k]
+            rows.append(f"{self.nm(k)} ({self._n(b['a_au'], 2)} AU, {b['moons']} " + self.L(("uydu", "moons")) + ")")
+        return self.L(("Güneş Sistemi'nde 8 gezegen var: ", "The Solar System has 8 planets: ")) + ", ".join(rows) + ". " + \
+            self.L(("Hangisini merak ediyorsan adını yaz; çekimini, sıcaklığını, görevlerini anlatayım.",
+                    "Name one and I'll tell you about its gravity, temperature and missions."))
+
     def fallback(self, norm):
+        self._fallback = True
+        if LX.has_any(norm, ("gezegen", "gezegenler", "planets", "planet", "gunes sistemi", "solar system")):
+            self._fallback = False
+            return self.overview()
         hint = self.L(("Bunu tam anlayamadım. ", "I didn't quite get that. "))
         c = CO.find(norm)
         if c:
@@ -622,6 +734,48 @@ class NovaAI:
                                       "That isn't enough to reach Earth orbit (~9.4 km/s); add a stage.")))
         return self.L((f"Δv = {self._n(isp, 0)} s × 9,81 × ln({self._n(m0 / 1000, 1)} t / {self._n(mf / 1000, 1)} t) = {P.fmt_speed(dv, True)}. ",
                        f"Δv = {self._n(isp, 0)} s × 9.81 × ln({self._n(m0 / 1000, 1)} t / {self._n(mf / 1000, 1)} t) = {P.fmt_speed(dv, False)}. ")) + tail
+
+    def chance(self, body=None):
+        """Olasılık sorusu: varsa son tasarımın gerçek risk hesabı, yoksa hedefin oyun risk değeri; insan gibi yorumlu."""
+        g = self.game
+        if not g or not g.s:
+            return self.L(("Olasılık hesaplamak için önce bir kampanya ve roket tasarımı lazım.",
+                           "I need a campaign and a rocket design before I can estimate odds."))
+        from .. import data as D
+        d = g.s.get("last_design")
+        if d and (body is None or d.get("planet") == body):
+            from .. import rocket as R
+            rk = R.analyze(g, d).get("risk") or {}
+            sp = rk.get("success", 0)
+            sp = sp if sp <= 1 else sp / 100
+            fp = rk.get("fail", 0)
+            fp = fp if fp <= 1 else fp / 100
+            tgt = i18n.tr(D.PLANET[d.get("planet", "moon")]["name"])
+            if sp >= 0.8:
+                feel = ("İçim rahat.", "I feel good about it.")
+            elif sp >= 0.6:
+                feel = ("Fena değil ama bir yedek plan iyi olur.", "Not bad, but a backup plan would help.")
+            else:
+                feel = ("Açıkçası tedirginim; tasarımı güçlendirmeyi öneririm.", "Honestly I'm uneasy; I'd strengthen the design.")
+            storm = ""
+            try:
+                if g.storm_active():
+                    storm = self.L((" Şu an fırtına var; beklemek ihtimali artırır.", " There's a storm now; waiting improves the odds."))
+            except Exception:
+                pass
+            return self.L((f"{tgt} görevinde başarı ihtimalini %{round(sp * 100)}, başarısızlığı %{round(fp * 100)} görüyorum "
+                           f"(tasarım analizinin hesabı). {feel[0]}{storm}",
+                           f"I put the chance of success on the {tgt} mission at {round(sp * 100)}% and failure at {round(fp * 100)}% "
+                           f"(from the design analysis). {feel[1]}{storm}"))
+        tb = body if body in D.PLANET else None
+        if tb:
+            r = D.PLANET[tb]["risk"]
+            return self.L((f"Tasarım olmadan kesin konuşamam; {i18n.tr(D.PLANET[tb]['name'])} için oyunun taban riski %{round(r * 100)}. "
+                           f"İyi bir tasarımla başarı ihtimali bunun üstüne çıkar. Tasarlayıp tekrar sorarsan hesaplarım.",
+                           f"I can't be precise without a design; the base risk for {i18n.tr(D.PLANET[tb]['name'])} is {round(r * 100)}%. "
+                           f"A good design raises the odds. Design one and ask again and I'll compute it."))
+        return self.L(("Hangi görevin ihtimalini soruyorsun? Bir roket tasarla ya da hedef söyle (ör. 'Mars'a başarı ihtimalim').",
+                       "Which mission do you mean? Design a rocket or name a target (e.g. 'my chance on Mars')."))
 
     # ------------------------------------------------------------- oyun durumu
     def game_answer(self, intent):

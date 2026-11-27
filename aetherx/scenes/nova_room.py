@@ -17,6 +17,10 @@ from ..fx import ParticleSystem, draw_glow, scale_color, clamp
 from ..i18n import tr
 from ..nova import draw_nova_face
 from ..nova_ai import NovaAI
+from ..nova_ai import engine as NE
+from ..nova_ai import live as NL
+from ..nova_ai.mind import Mind
+from .. import i18n
 from ..ui import UI, Button, TextInput, draw_icon, draw_paragraph, draw_text, font, glass_panel, fmt_num, wrap_text
 
 
@@ -49,6 +53,9 @@ class NovaRoomScene(Scene):
         self.ai = None
         self.history = []          # yazılan sorular (↑ / ↓ ile geri çağrılır)
         self.hist_i = 0
+        self.thinking = None       # {"t": kalan sn, "dur": toplam, "resp": yanıt} — NOVA cevap vermeden önce düşünür
+        self.last_conf = None
+        self.reveal = 0.0          # son NOVA mesajının yazılan karakter sayısı (harf harf)
 
     def enter(self, **kw):
         g = self.game
@@ -56,7 +63,17 @@ class NovaRoomScene(Scene):
         self.chat = [("nova", tr(greet))]
         self.talk_t = 2.5
         self.app.audio.speak(greet)
-        self.ai = NovaAI(g, self.app.nova)
+        mind = getattr(self.app, "nova_mind", None)
+        if mind is None:
+            mind = self.app.nova_mind = Mind()
+        mind.update(0.0, g)                           # ilk gözlem / uzaktayken olanlara tepki
+        self.ai = NovaAI(g, self.app.nova, mind)
+        self.thinking = None
+        for k in ("cad", "exo", "eonet"):            # canlı NASA verisini önceden iste (masaüstü: arka plan)
+            NL.LIVE.refresh(k)
+        if NE._NET is None and not NL.WEB:            # sinir ağını arka planda eğit (ilk soru takılmasın)
+            import threading
+            threading.Thread(target=NE.get_net, daemon=True).start()
         self.rebuild()
 
     def rebuild(self):
@@ -95,9 +112,14 @@ class NovaRoomScene(Scene):
         self.history.append(text)
         del self.history[:-30]
         self.hist_i = len(self.history)
+        if self.thinking:
+            self.inp.shake = 0.3                     # NOVA hâlâ düşünüyor
+            return
         self.inp.text = ""
         self.push("you", text, raw=True)
-        self.push("nova", self.ai.reply(text), raw=True)
+        r = self.ai.respond(text)
+        self.last_conf = (r["conf"], r["intent"])
+        self.thinking = {"t": r["think"], "dur": r["think"], "resp": r["text"]}
 
     def handle(self, e):
         if e.type == pygame.KEYDOWN and e.key in (pygame.K_UP, pygame.K_DOWN) and self.history:
@@ -117,8 +139,10 @@ class NovaRoomScene(Scene):
         self.rebuild()
 
     def ask(self, key, label):
+        if self.thinking:
+            return
         self.push("you", label)
-        self.push("nova", self.app.nova.answer(key))
+        self.thinking = {"t": 0.7, "dur": 0.7, "resp": tr(self.app.nova.answer(key))}
 
     def push(self, who, text, raw=False):
         if not raw:
@@ -126,13 +150,26 @@ class NovaRoomScene(Scene):
         self.chat.append((who, text))
         del self.chat[:-12]
         if who == "nova":
-            self.talk_t = 1.5 + len(text) * 0.04
+            self.reveal = 0.0
+            self.talk_t = 1.5 + len(text) * 0.025
             self.app.audio.speak(text)
+        else:
+            self.reveal = 1e9
 
     def update(self, dt):
         super().update(dt)
         self.ps.update(dt)
         self.talk_t = max(0.0, self.talk_t - dt)
+        self.reveal += dt * 70                        # harf harf yazma (~70 karakter/sn)
+        if self.ai:
+            self.ai.mind.update(dt, self.game)
+        NL.LIVE.poll()
+        if self.thinking:
+            self.thinking["t"] -= dt
+            if self.thinking["t"] <= 0:
+                txt = self.thinking["resp"]
+                self.thinking = None
+                self.push("nova", txt, raw=True)
         if random.random() < 0.3:
             self.ps.glow(random.uniform(0, W), H + 5, 1, C["cyan"], speed=(10, 40), size=(1, 2), life=(4, 7), grav=-18)
 
@@ -152,36 +189,102 @@ class NovaRoomScene(Scene):
         self.draw_title(surf, sub=f"NOVA Seviye {g.lvl('nova')} · {D.BUILDING['nova']['levels'][max(1, g.lvl('nova'))]}")
         cx, cy = 340, 390
         lv = max(1, g.lvl("nova"))
-        draw_glow(surf, (cx, cy), 380, scale_color(C["cyan"], 0.4), 0.4 + 0.1 * math.sin(t))
-        draw_nova_face(surf, (cx, cy), 190, t, 1.0 if self.talk_t > 0 else 0.0,
-                       "happy" if self.talk_t > 0 and "Tebrik" in self.chat[-1][1] else "calm", lv)
+        mind = self.ai.mind if self.ai else None
+        mood = "think" if self.thinking else (mind.face() if mind else "calm")
+        mcol = {"happy": C["green"], "think": C["violet"], "worried": C["gold"], "sad": (120, 150, 255)}.get(mood, C["cyan"])
+        draw_glow(surf, (cx, cy), 380, scale_color(mcol, 0.4), 0.4 + 0.1 * math.sin(t))
+        self.draw_neurons(surf, cx, cy, mcol)
+        draw_nova_face(surf, (cx, cy), 190, t, 1.0 if self.talk_t > 0 else 0.0, mood, lv)
         draw_text(surf, "N O V A", (cx, cy + 250), 30, C["cyan"], bold=True, anchor="midtop", glow=C["cyan"])
+        self.draw_mind(surf, cx, cy + 292)
         # sohbet
         r = self.chat_rect()
         glass_panel(surf, r, C["cyan"], 160, 18)
         y = r.bottom - 20
         clip = surf.get_clip()
         surf.set_clip(r.inflate(-4, -4))
-        for who, text in reversed(self.chat):
+        entries = list(self.chat)
+        if self.thinking:
+            dots = "●" * (1 + int(t * 3) % 3)
+            entries.append(("think", (tr("NOVA düşünüyor") + " " + dots)))
+        last_nova = max((i for i, e in enumerate(self.chat) if e[0] == "nova"), default=-1)
+        for idx in range(len(entries) - 1, -1, -1):
+            who, text = entries[idx]
             lines = [ln for para in text.split("\n") for ln in (wrap_text(para, 15, r.w - 60, raw=True) or [""])]
-            h = len(lines) * 20 + 18
+            h = len(lines) * 20 + 18 + (8 if who == "think" else 0)
             y -= h
             if y + h < r.y:
                 break
-            bx = r.x + 16 if who == "nova" else r.x + 44
-            br = pygame.Rect(bx, y, r.w - 60, h - 6)
-            col = C["cyan"] if who == "nova" else g.color
+            bx = r.x + 16 if who in ("nova", "think") else r.x + 44
+            br = pygame.Rect(bx, y, (r.w - 60) if who != "think" else 260, h - 6)
+            col = C["cyan"] if who == "nova" else (C["violet"] if who == "think" else g.color)
             bg = pygame.Surface(br.size, pygame.SRCALPHA)
             pygame.draw.rect(bg, (*col, 30), bg.get_rect(), border_radius=10)
             pygame.draw.rect(bg, (*col, 120), bg.get_rect(), 1, border_radius=10)
             surf.blit(bg, br)
+            budget = int(self.reveal) if (who == "nova" and idx == last_nova) else 10 ** 9
             for i, ln in enumerate(lines):
-                draw_text(surf, ln, (br.x + 12, br.y + 6 + i * 20), 15, C["text"] if who == "nova" else C["text_dim"],
-                          raw=True)
+                if budget <= 0:
+                    break
+                draw_text(surf, ln[:budget], (br.x + 12, br.y + 6 + i * 20), 15,
+                          C["text"] if who == "nova" else (C["violet"] if who == "think" else C["text_dim"]), raw=True)
+                budget -= len(ln) + 1
+            if who == "think":                      # düşünme ilerleme çubuğu
+                k = 1 - max(0.0, self.thinking["t"]) / max(0.01, self.thinking["dur"])
+                pygame.draw.rect(surf, scale_color(C["violet"], 0.35), (br.x + 12, br.bottom - 12, br.w - 24, 4), border_radius=2)
+                pygame.draw.rect(surf, C["violet"], (br.x + 12, br.bottom - 12, int((br.w - 24) * k), 4), border_radius=2)
         surf.set_clip(clip)
         # fırtına zaman çizelgesi
         self.draw_timeline(surf)
         self.draw_widgets(surf)
+
+    def draw_neurons(self, surf, cx, cy, col):
+        """Sinir ağının gizli katmanı: 48 nöron yüzün çevresinde; parlaklık = son sorudaki gerçek etkinlik |tanh|.
+        Düşünürken nöronlar sırayla ateşlenir (canlandırma; ağın gerçek hesabı soru gönderildiğinde bir kez yapılır)."""
+        net = NE._NET
+        hid = net.last_hidden if net is not None else None
+        n = 48
+        R = 236
+        t = self.t
+        pts = []
+        for i in range(n):
+            a = -math.pi / 2 + i * math.tau / n
+            pts.append((cx + math.cos(a) * R, cy + math.sin(a) * R))
+        for i in range(0, n, 3):                       # sinaps çizgileri (komşulara)
+            j = (i + 7) % n
+            pygame.draw.line(surf, scale_color(col, 0.18), pts[i], pts[j], 1)
+        for i, (x, y) in enumerate(pts):
+            act = abs(float(hid[i])) if hid is not None and len(hid) == n else 0.15
+            if self.thinking:
+                act = max(act * 0.6, 0.5 + 0.5 * math.sin(t * 9 - i * 0.8))
+            r_ = 3 + 4 * act
+            pygame.draw.circle(surf, scale_color(col, 0.35 + 0.65 * act), (int(x), int(y)), int(r_))
+            if act > 0.55:
+                draw_glow(surf, (x, y), 10 + 10 * act, col, 0.35 * act)
+        if net is None:
+            draw_text(surf, tr("sinir ağı eğitiliyor…"), (cx, cy - R - 26), 12, C["text_mute"], anchor="center")
+
+    def draw_mind(self, surf, cx, y):
+        """Duygu çubukları + son yanıtın güveni (ağın olasılığı / kural eşleşmesi)."""
+        if not self.ai:
+            return
+        tr_ = i18n.LANG == "tr"
+        mind = self.ai.mind
+        draw_text(surf, (tr("Ruh hali") + ": " + mind.label(tr_)), (cx, y), 14, C["text_dim"], anchor="midtop", raw=True)
+        y += 24
+        chips = mind.chips(tr_)
+        cols = (C["green"], C["violet"], C["gold"], C["cyan"], (120, 150, 255))
+        bw = 72
+        x0 = cx - (bw * len(chips) + 8 * (len(chips) - 1)) // 2
+        for i, ((name, v), c) in enumerate(zip(chips, cols)):
+            x = x0 + i * (bw + 8)
+            pygame.draw.rect(surf, (20, 24, 40), (x, y, bw, 8), border_radius=4)
+            pygame.draw.rect(surf, c, (x, y, max(2, int(bw * v)), 8), border_radius=4)
+            draw_text(surf, name, (x + bw // 2, y + 12), 11, C["text_mute"], anchor="midtop", raw=True)
+        if self.last_conf and self.last_conf[1]:
+            conf = int(round(self.last_conf[0] * 100))
+            draw_text(surf, (tr("Son yanıta güven") + f": %{conf}") if tr_ else f"Confidence in last answer: {conf}%",
+                      (cx, y + 34), 12, C["text_mute"], anchor="midtop", raw=True)
 
     def draw_timeline(self, surf):
         g = self.game

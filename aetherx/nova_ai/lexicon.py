@@ -162,3 +162,25 @@ def has_any(norm, words):
         elif w in tk or w in st:
             return True
     return False
+
+
+_DIGIT_EK = {"0": "ı", "1": "i", "2": "si", "3": "ü", "4": "ü", "5": "i", "6": "sı", "7": "si", "8": "i", "9": "u"}
+_TENS_EK = {"1": "u", "2": "si", "3": "u", "4": "ı", "5": "si", "6": "ı", "7": "i", "8": "i", "9": "ı"}
+
+
+def num_ek(num_text):
+    """Türkçe sayı okunuşuna göre iyelik eki (3. tekil): '0,9' -> 'u' (dokuzu), '18,3' -> 'ü', '0,2' -> 'si', '40' -> 'ı'."""
+    t = num_text.strip().replace(".", "")
+    if "," in t:
+        frac = t.split(",")[1].rstrip("0")
+        if frac:
+            return _DIGIT_EK[frac[-1]]
+        t = t.split(",")[0]
+    t = t.lstrip("-") or "0"
+    if t.endswith("000"):
+        return "i"                                   # bin
+    if t.endswith("00") and len(t) > 2:
+        return "ü"                                   # yüz
+    if t[-1] != "0" or len(t) == 1:
+        return _DIGIT_EK[t[-1]]
+    return _TENS_EK[t[-2]]

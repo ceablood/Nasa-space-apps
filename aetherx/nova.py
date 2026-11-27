@@ -352,7 +352,8 @@ def draw_nova_face(surf, center, size, t, talk=0.0, mood="calm", level=1):
     """Simsiyah ekranda mavi göz gibi parlayan yüz; konuşurken ağzı oynar."""
     x, y = int(center[0]), int(center[1])
     s = size
-    col = {"calm": C["cyan"], "alert": C["red"], "happy": C["green"], "think": C["violet"]}.get(mood, C["cyan"])
+    col = {"calm": C["cyan"], "alert": C["red"], "happy": C["green"], "think": C["violet"], "worried": C["gold"],
+           "sad": (120, 150, 255)}.get(mood, C["cyan"])
     # dış halkalar
     draw_glow(surf, (x, y), s * 1.25, scale_color(col, 0.7), 0.55 + 0.15 * math.sin(t * 2))
     pygame.draw.circle(surf, (4, 6, 14), (x, y), int(s * 0.95))
