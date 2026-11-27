@@ -14,6 +14,8 @@ from . import facts as F
 from . import howto as HT
 from . import lexicon as LX
 from . import physics as P
+from . import gamestate as GS
+from .quiz import Quiz, convert
 
 # niyet -> anahtar sözcükler (normalize, kök ya da tam)
 INTENT_WORDS = {
@@ -57,6 +59,18 @@ INTENT_WORDS = {
     "score_now": ("skorum", "puanim", "my score", "siram", "my rank", "kacinci"),
     "game_time": ("saat kac", "oyun saati", "what time", "hangi gun", "kacinci gun", "game time"),
     "joke": ("saka", "fikra", "joke", "funny", "komik", "guldur"),
+    "depot": ("depo", "depom", "depot", "my depot", "envanter", "inventory", "madenlerim", "storage", "neyim var", "stok", "my minerals"),
+    "fuel_now": ("yakitim", "yakit durumu", "ne kadar yakit", "fuel level", "my fuel", "fuel status", "yakit kaldi"),
+    "crew_now": ("ekibim", "murettebatim", "astronotlarim", "my crew", "crew status", "kim hasta", "who is sick", "ekip durumu"),
+    "research_next": ("ne arastirayim", "hangi arastirma", "what to research", "research next", "arastirma oner",
+                      "sonraki arastirma", "which research", "arastirma durumu", "research status"),
+    "design_check": ("roketim", "tasarimim", "my rocket", "my design", "rocket check", "tasarim kontrol", "roketimi kontrol",
+                     "roket hazir mi", "is my rocket ready", "check my rocket"),
+    "plan": ("ne lazim", "ne gerekli", "neler gerekli", "unlock", "kilidi", "kilidini", "how do i get to", "how to reach",
+             "gidebilir miyim", "can i go", "nasil giderim", "what do i need", "requirements", "gereksinim"),
+    "quiz": ("bana soru sor", "soru sor", "quiz", "bilgi yarismasi", "test me", "sinav", "trivia", "yarisma"),
+    "convert": ("kac km/sa", "kac km/s", "kac km", "kac kelvin", "kelvin", "fahrenheit", "convert", "cevir", "in km",
+                "in km/h", "to km"),
 }
 
 # Genel sözcüklerle tetiklenen niyetler daha düşük ağırlık alır (özgül niyet kazansın)
@@ -65,7 +79,8 @@ INTENT_WEIGHT = {"facts": 0.4, "status": 0.8, "distance": 0.9, "size": 0.8, "mas
 # Bir niyet bir gök cismi gerektiriyorsa (bağlamdan da gelebilir)
 BODY_INTENTS = {"gravity", "temp", "day", "year", "distance", "moons", "atmo", "size", "mass", "escape", "missions", "hazards",
                 "weight", "jump", "sunlight", "orbit_calc", "facts"}
-GAME_INTENTS = {"advice", "suggest", "forecast", "best_time", "status", "colonies", "money_now", "score_now", "game_time"}
+GAME_INTENTS = {"advice", "suggest", "forecast", "best_time", "status", "colonies", "money_now", "score_now", "game_time",
+                "depot", "fuel_now", "crew_now", "research_next", "design_check"}
 
 JOKES = [("Astronotlar neden asla çay içmez? Çünkü bardaklar yörüngeye girer.", "Why don't astronauts drink tea? The cups keep going into orbit."),
          ("Bir atom diğerine: 'Bir elektronumu kaybettim!' — 'Emin misin?' — 'Evet, pozitifim.'",
@@ -84,6 +99,7 @@ class NovaAI:
         self.last_body = None
         self.last_intent = None
         self.turns = 0
+        self.quiz = Quiz()
 
     # ------------------------------------------------------------- dil
     @property
@@ -103,6 +119,20 @@ class NovaAI:
             return self.L(("Bir şey yazmadın. Örneğin: 'Mars'ta yerçekimi ne kadar?'", "You didn't type anything. Try: 'What is the gravity on Mars?'"))
         self.turns += 1
         norm = LX.normalize(text)
+        if self.quiz.pending:                                   # bekleyen yarışma sorusu: önce yanıt olarak değerlendir
+            if LX.has_any(norm, ("pas", "gec", "skip", "pass", "cevap ne", "answer", "bilmiyorum", "don't know", "dont know")):
+                expl = self.quiz.skip()
+                return self.L(("Doğru yanıt: ", "The answer is: ")) + self.L(expl) + "." + self.L((" Yeni soru için 'soru sor' yaz.", " Type 'quiz' for another."))
+            if LX.numbers(norm) or LX.find_bodies(norm) or len(LX.tokens(norm)) <= 3:
+                ok, expl = self.quiz.check(text)
+                head = self.L(("Doğru! ", "Correct! ")) if ok else self.L(("Yanlış. ", "Not quite. "))
+                return (head + self.L(("Yanıt: ", "Answer: ")) + self.L(expl) + "." +
+                        self.L((f" Skorun {self.quiz.score}/{self.quiz.asked}. Devam için 'soru sor'.",
+                                f" Score {self.quiz.score}/{self.quiz.asked}. Type 'quiz' to continue.")))
+            self.quiz.pending = None
+        conv = convert(norm, self.tr_) if LX.has_any(norm, INTENT_WORDS["convert"]) or "=" in text else None
+        if conv:
+            return conv
         bodies = LX.find_bodies(norm)
         nums = LX.numbers(norm)
         intent, score = self.classify(norm, bodies, nums)
@@ -171,6 +201,12 @@ class NovaAI:
 
     def dispatch(self, intent, norm, bodies, nums, raw):
         b = bodies[0] if bodies else None
+        self._colony_body = b
+        own = LX.has_any(norm, ("kolonim", "kolonimiz", "my", "benim", "bizim", "our"))
+        if b and self.game and self.game.s and LX.has_any(norm, ("koloni", "kolonim", "kolonimiz", "kolonisi", "colony", "base", "us")) \
+                and (intent not in ("howto", "concept") or own):
+            if self.game.colony(b) if b in F.GAME_TARGETS else None:
+                intent = "colonies"
         if intent == "greet":
             return self.greet()
         if intent == "thanks":
@@ -184,6 +220,20 @@ class NovaAI:
             return self.help()
         if intent == "joke":
             return self.L(random.choice(JOKES))
+        if intent == "quiz":
+            q = self.quiz.new_question()
+            return self.L(("Soru: ", "Question: ")) + self.L(q) + self.L((" (Bilmiyorsan 'pas' yaz.)", " (Type 'skip' if you don't know.)"))
+        if intent == "convert":
+            return self.L(("Çevirmek için sayı ve birim yaz: ör. '7,8 km/s kaç km/sa', '5 AU kaç km', '-180 derece kelvin'.",
+                           "Give a number and unit, e.g. '7.8 km/s in km/h', '5 AU in km', '-180 C to kelvin'."))
+        if intent == "plan" and self.game and self.game.s:
+            tb = next((x for x in bodies if x in F.GAME_TARGETS), None)
+            if tb:
+                return GS.target_plan(self, self.game, tb)
+        if intent == "plan":
+            intent = "hazards" if bodies else "help"
+            if intent == "help":
+                return self.help()
         if intent == "concept":
             return self.concept(CO.find(norm))
         if intent == "howto":
@@ -222,10 +272,14 @@ class NovaAI:
     def help(self):
         return self.L(("Şunları sorabilirsin:\n• 'Mars'ta yerçekimi ne kadar?' · 'Titan hakkında anlat'\n• 'Dünya'dan Jüpiter'e kaç gün?' · "
                        "'Mars ile iletişim gecikmesi'\n• '80 kg Ay'da kaç kilo?' · 'Isp 320 kütle 500 ton boş 150 ton roket denklemi'\n"
-                       "• 'Delta-v nedir?' · 'Para nasıl kazanırım?' · 'Ne yapmalıyım?' · 'Durum raporu'",
+                       "• 'Delta-v nedir?' · 'Para nasıl kazanırım?' · 'Ne yapmalıyım?' · 'Durum raporu'\n"
+                       "• 'Depom' · 'Ekibim' · 'Ne araştırayım?' · 'Roketimi kontrol et' · 'Mars'a gitmek için ne lazım?'\n"
+                       "• 'Soru sor' (bilgi yarışması) · '7,8 km/s kaç km/sa' · '5 AU kaç km'",
                        "You can ask:\n• 'What is the gravity on Mars?' · 'Tell me about Titan'\n• 'How many days from Earth to Jupiter?' · "
                        "'Signal delay to Mars'\n• 'How much does 80 kg weigh on the Moon?' · 'rocket equation isp 320 mass 500 t dry 150 t'\n"
-                       "• 'What is delta-v?' · 'How do I earn money?' · 'What should I do?' · 'Status report'"))
+                       "• 'What is delta-v?' · 'How do I earn money?' · 'What should I do?' · 'Status report'\n"
+                       "• 'My depot' · 'My crew' · 'What to research?' · 'Check my rocket' · 'What do I need to go to Mars?'\n"
+                       "• 'Quiz' (trivia) · '7.8 km/s in km/h' · '5 AU in km'"))
 
     def fallback(self, norm):
         hint = self.L(("Bunu tam anlayamadım. ", "I didn't quite get that. "))
@@ -585,6 +639,10 @@ class NovaAI:
             return T(br.forecast())
         if intent == "best_time" and br:
             return T(br.answer("best"))
+        if intent == "colonies" and self._colony_body:
+            d = GS.colony_detail(self, g, self._colony_body)
+            if d:
+                return d
         if intent == "colonies" and br:
             return T(br.answer("colonies"))
         if intent == "status" and br:
@@ -602,6 +660,16 @@ class NovaAI:
             if rank:
                 out += self.L((f" Bu cihazdaki sıralamada {rank}. / {len(rows)}.", f" You are #{rank} of {len(rows)} on this device."))
             return out + self.L((" Çevrimiçi sıra için SIRALAMA ekranını aç.", " Open the LEADERBOARD screen for the online rank."))
+        if intent == "depot":
+            return GS.depot(self, g)
+        if intent == "fuel_now":
+            return GS.fuel(self, g)
+        if intent == "crew_now":
+            return GS.crew(self, g)
+        if intent == "research_next":
+            return GS.research_next(self, g)
+        if intent == "design_check":
+            return GS.design_check(self, g)
         if intent == "game_time":
             return self.L((f"Oyun saati: {g.day}. gün, {g.time_label()}.", f"Game time: day {g.day}, {g.time_label()}."))
         return self.fallback("")

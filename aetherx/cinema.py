@@ -131,22 +131,37 @@ def _mote_sprite(r, color):
     return s
 
 
+_MOTE_BASE = {}
+MOTE_LEVELS = 24                  # parlaklık kademesi (önbellek sınırlı kalsın; 24 kademe gözle ayırt edilmez)
+
+
 def motes(surf, rect, t, n=60, color=(255, 230, 190), seed=5, strength=1.0):
-    if not enabled() or strength <= 0.02:
+    """Süzülen toz zerreleri: konumlar numpy ile toplu hesaplanır, tek blits() çağrısıyla çizilir."""
+    if not enabled() or strength <= 0.02 or n <= 0:
         return
     rect = pygame.Rect(rect)
-    rng = np.random.default_rng(seed)
-    base = rng.random((n, 5))
+    base = _MOTE_BASE.get((seed, n))
+    if base is None:
+        base = np.random.default_rng(seed).random((n, 5))
+        _MOTE_BASE[(seed, n)] = base
+    x0, y0, sp, ph, sz = base.T
+    x = rect.x + np.mod(x0 * rect.w + np.sin(t * (0.2 + sp * 0.4) + ph * 6) * 26 + t * (6 + sp * 10), rect.w)
+    y = rect.y + np.mod(y0 * rect.h - t * (4 + sp * 9) + np.cos(t * 0.5 + ph * 5) * 12, rect.h)
+    tw = 0.55 + 0.45 * np.sin(t * (1.5 + sp * 2) + ph * 9)
+    lv = np.clip(np.rint(tw * min(1.0, strength) * MOTE_LEVELS), 0, MOTE_LEVELS).astype(int).tolist()
+    rad = (1 + (sz * 2.6).astype(int)).tolist()
+    xs, ys = x.astype(int).tolist(), y.astype(int).tolist()
+    seq = []
+    for i in range(n):
+        if lv[i] <= 0:
+            continue
+        k = lv[i] / MOTE_LEVELS
+        spr = _mote_sprite(rad[i], (int(color[0] * k), int(color[1] * k), int(color[2] * k)))
+        r = rad[i]
+        seq.append((spr, (xs[i] - r, ys[i] - r), None, pygame.BLEND_RGB_ADD))
     old = surf.get_clip()
     surf.set_clip(rect)
-    for i in range(n):
-        x0, y0, sp, ph, sz = base[i]
-        x = rect.x + (x0 * rect.w + math.sin(t * (0.2 + sp * 0.4) + ph * 6) * 26 + t * (6 + sp * 10)) % rect.w
-        y = rect.y + (y0 * rect.h - t * (4 + sp * 9) + math.cos(t * 0.5 + ph * 5) * 12) % rect.h
-        tw = 0.55 + 0.45 * math.sin(t * (1.5 + sp * 2) + ph * 9)
-        c = tuple(int(max(0, min(255, cc * tw * strength))) for cc in color)
-        spr = _mote_sprite(1 + int(sz * 2.6), c)
-        surf.blit(spr, (int(x - spr.get_width() / 2), int(y - spr.get_height() / 2)), special_flags=pygame.BLEND_RGB_ADD)
+    surf.blits(seq, False)
     surf.set_clip(old)
 
 

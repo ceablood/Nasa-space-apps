@@ -768,9 +768,28 @@ def render_body(key, R, M, L, spin=0.0, t=0.0, th=256, ring=None, obl=1.0, emiss
                 cc = ((uu + t * 0.004 * tex["cloud_speed"]) % 1.0 * tw).astype(np.int32) % tw
                 ca = tex["cloud"][rows, cc] * op
                 rgb = rgb + (np.asarray(tex["cloud_rgb"], dtype=F32) - rgb) * ca[:, None]
-        # stüdyo ışığı: yumuşak gün/gece geçişi + çok hafif mavi ortam dolgusu (gece tarafı simsiyah olmaz)
         lam = np.clip(ndl, 0, 1)
-        lit = 0.05 + day * (0.22 + 0.78 * lam ** 0.85)
+        if key in ATMO:
+            # atmosferli: yumuşak gün/gece geçişi (saçılma alacakaranlığı) + çok hafif mavi ortam dolgusu
+            lit = 0.05 + day * (0.22 + 0.78 * lam ** 0.85)
+        else:
+            # havasız yüzey (Ay, Merkür, Phobos…): Ay-Lambert modeli (McEwen 1991) = Lommel-Seeliger + Lambert karışımı.
+            # Gerçek Ay'da olduğu gibi dolunayda kenar kararması neredeyse yok; terminatör keskin (atmosfer saçılması yok).
+            mu = np.clip(vz, 0.02, 1)
+            ls = 2 * lam / (lam + mu)
+            lit = 0.03 + smoothstep(-0.015, 0.05, ndl) * (0.6 * np.minimum(ls, 1.3) + 0.4 * lam)
+        if ca is not None and key == "earth" and R >= 24:
+            # bulut gölgeleri: yüzey noktasından Güneş'e doğru kaydırılmış noktadaki bulut, yeri gölgeler
+            Mt = M.T
+            nb = Mt @ np.stack((vx, vy, vz))
+            Lb = Mt @ np.asarray(L, dtype=F32)
+            tl = Lb[:, None] - (Lb @ nb)[None, :] * nb
+            pb = nb + tl * 0.018
+            pb /= np.linalg.norm(pb, axis=0)[None, :]
+            us = (np.arctan2(pb[0], pb[2]) / TAU + 0.5 - spin / TAU + t * 0.004 * tex["cloud_speed"]) % 1.0
+            vs = 0.5 - np.arcsin(np.clip(pb[1], -1, 1)) / math.pi
+            cs = tex["cloud"][np.clip((vs * th).astype(np.int32), 0, th - 1), (us * tw).astype(np.int32) % tw]
+            lit = lit * (1 - 0.42 * cs * (1 - ca))
         if "limb" in tex:
             lit = lit * (1 - tex["limb"] + tex["limb"] * vz ** 0.5)
         if ring is not None:

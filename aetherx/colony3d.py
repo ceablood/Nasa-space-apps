@@ -1175,9 +1175,13 @@ class Colony3D:
         pal = PALETTE[self.planet]
         # arka plan: boyalı manzara, geceye göre karartılmış
         if bg is not None:
-            v.blit(bg, (0, 0))
             k = int(255 * (0.35 + 0.65 * day))
-            v.fill((k, k, min(255, k + 20)), special_flags=pygame.BLEND_MULT)
+            dkey = (id(bg), bg.get_size(), k)             # karartılmış manzara önbelleği (gün ışığı değişince yenilenir)
+            if getattr(self, "_bgdark_key", None) != dkey:
+                self._bgdark = bg.copy()
+                self._bgdark.fill((k, k, min(255, k + 20)), special_flags=pygame.BLEND_MULT)
+                self._bgdark_key = dkey
+            v.blit(self._bgdark, (0, 0))
         else:
             v.fill(pal[2])
         ty = self.height(self.cam.tx, self.cam.tz)
@@ -1220,11 +1224,21 @@ class Colony3D:
                 scol = (cval, cval, min(255, cval + 22))                 # gölgede gökyüzü ışığı: hafif mavi
                 SX, SY, CN = sx[ok].tolist(), sy[ok].tolist(), cnt[ok].tolist()
                 poly = pygame.draw.polygon
+                bb = None
                 for j in range(len(SX)):
                     k = CN[j]
-                    poly(mask, scol, list(zip(SX[j][:k], SY[j][:k])))
-            soft = pygame.transform.smoothscale(pygame.transform.smoothscale(mask, (max(2, hw // 2), max(2, hh2 // 2))), (w, h))
-            v.blit(soft, (0, 0), special_flags=pygame.BLEND_MULT)
+                    rr = poly(mask, scol, list(zip(SX[j][:k], SY[j][:k])))
+                    bb = rr if bb is None else bb.union(rr)
+                # yalnız gölgelerin sınır kutusu yumuşatılıp karıştırılır (tam ekran çarpma karışımından ~4 kat ucuz)
+                if bb is not None:
+                    bb = bb.inflate(16, 16).clip(mask.get_rect())
+                    bb.w -= bb.w % 2
+                    bb.h -= bb.h % 2
+                    if bb.w >= 4 and bb.h >= 4:
+                        sub = mask.subsurface(bb)
+                        soft = pygame.transform.smoothscale(pygame.transform.smoothscale(sub, (bb.w // 2, bb.h // 2)),
+                                                            (bb.w * 2, bb.h * 2))
+                        v.blit(soft, (bb.x * 2, bb.y * 2), special_flags=pygame.BLEND_MULT)
         lay = self._layer
         # 3) seçim halkası
         if self.selected and not self.selected.hidden:

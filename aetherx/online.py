@@ -50,7 +50,8 @@ def entry_of(game):
 # ------------------------------------------------------------------ yerel sıralama
 def local_load():
     try:
-        rows = json.load(open(LOCAL_FILE, encoding="utf-8"))
+        with open(LOCAL_FILE, encoding="utf-8") as fh:
+            rows = json.load(fh)
         return [r for r in rows if isinstance(r, dict) and "id" in r]
     except Exception:
         return []
@@ -65,7 +66,8 @@ def local_update(game):
     rows[e["id"]] = e
     try:
         LOCAL_FILE.parent.mkdir(parents=True, exist_ok=True)
-        json.dump(list(rows.values()), open(LOCAL_FILE, "w", encoding="utf-8"), ensure_ascii=False)
+        with open(LOCAL_FILE, "w", encoding="utf-8") as fh:
+            json.dump(list(rows.values()), fh, ensure_ascii=False)
     except Exception:
         pass
 

@@ -6,6 +6,9 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if "aetherx.config" not in sys.modules:                            # kayıtlar geçici dizine (gerçek ev dizini kirlenmesin)
+    import tempfile
+    os.environ["HOME"] = tempfile.mkdtemp(prefix="aetherx_test_")
 
 from aetherx import i18n                                           # noqa: E402
 from aetherx.nova_ai import NovaAI, lexicon as LX, physics as P    # noqa: E402
@@ -91,6 +94,48 @@ class Dialogue(unittest.TestCase):
                           "missions", "hazards", "weight", "jump", "sunlight", "orbit_calc"):
                     out = getattr(ai, "a_" + a)(b, [], "")
                     self.assertTrue(isinstance(out, str) and len(out) > 10, (lang, b, a))
+
+
+class GameAware(unittest.TestCase):
+    def setUp(self):
+        from aetherx import data as D
+        from aetherx.game import Game
+        from aetherx.nova import NovaBrain
+        self.g = Game()
+        self.g.new("ORION", (62, 230, 255))
+        self.g.s["inventory"]["moon_rock"] = 40
+        self.g.s["colonies"]["moon"] = {"planet": "moon", "founded": 1, "level": 1, "pop": 10.0, "happiness": 40.0,
+                                        "buildings": {b["key"]: 1 for b in D.COLONY_BUILDINGS}, "storage": 0.0,
+                                        "food": 60.0, "happy_buff": 0.0}
+        self.brain = NovaBrain(self.g)
+
+    def tearDown(self):
+        i18n.set_lang("en")
+
+    def test_state_answers(self):
+        i18n.set_lang("en")
+        ai = NovaAI(self.g, self.brain)
+        self.assertIn("×40", ai.reply("my depot"))
+        self.assertIn("Crew", ai.reply("my crew"))
+        self.assertIn("RP", ai.reply("what to research"))
+        self.assertIn("locked", ai.reply("what do I need to go to Mars?"))
+        self.assertIn("Moon colony", ai.reply("how is my moon colony"))
+        self.assertIn("Fuel", ai.reply("my fuel"))
+        i18n.set_lang("tr")
+        ai = NovaAI(self.g, self.brain)
+        self.assertIn("Ay kolonisi", ai.reply("Ay kolonim nasıl"))
+        self.assertIn("Koloni kurmak", ai.reply("Ay'da koloni nasıl kurulur"))
+
+    def test_quiz_and_convert(self):
+        i18n.set_lang("en")
+        ai = NovaAI()
+        q = ai.reply("quiz")
+        self.assertTrue(q.startswith("Question:"))
+        kind, ans = ai.quiz.pending[1], ai.quiz.pending[2]
+        reply = {"body": {"saturn": "Saturn", "mercury": "Mercury", "venus": "Venus", "ganymede": "Ganymede"}.get(ans, "x")}.get(kind, str(ans))
+        self.assertTrue(ai.reply(reply).startswith("Correct"))
+        self.assertIn("28,080 km/h", ai.reply("7.8 km/s in km/h"))
+        self.assertIn("93.1 K", ai.reply("-180 C to kelvin"))
 
 
 class LeaderboardServer(unittest.TestCase):
