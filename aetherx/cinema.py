@@ -135,8 +135,9 @@ _MOTE_BASE = {}
 MOTE_LEVELS = 24                  # parlaklık kademesi (önbellek sınırlı kalsın; 24 kademe gözle ayırt edilmez)
 
 
-def motes(surf, rect, t, n=60, color=(255, 230, 190), seed=5, strength=1.0):
-    """Süzülen toz zerreleri: konumlar numpy ile toplu hesaplanır, tek blits() çağrısıyla çizilir."""
+def motes(surf, rect, t, n=60, color=(255, 230, 190), seed=5, strength=1.0, mod=None):
+    """Süzülen toz zerreleri: konumlar numpy ile toplu hesaplanır, tek blits() çağrısıyla çizilir.
+    mod: (W, H, 3) uint8 çarpma katmanı; verilirse her zerrenin rengi kendi konumundaki değerle çarpılır."""
     if not enabled() or strength <= 0.02 or n <= 0:
         return
     rect = pygame.Rect(rect)
@@ -151,12 +152,18 @@ def motes(surf, rect, t, n=60, color=(255, 230, 190), seed=5, strength=1.0):
     lv = np.clip(np.rint(tw * min(1.0, strength) * MOTE_LEVELS), 0, MOTE_LEVELS).astype(int).tolist()
     rad = (1 + (sz * 2.6).astype(int)).tolist()
     xs, ys = x.astype(int).tolist(), y.astype(int).tolist()
+    if mod is not None:
+        mm = (mod[np.clip(x.astype(int), 0, mod.shape[0] - 1), np.clip(y.astype(int), 0, mod.shape[1] - 1)] // 16 * 16 + 8).tolist()
     seq = []
     for i in range(n):
         if lv[i] <= 0:
             continue
         k = lv[i] / MOTE_LEVELS
-        spr = _mote_sprite(rad[i], (int(color[0] * k), int(color[1] * k), int(color[2] * k)))
+        if mod is not None:
+            m = mm[i]
+            spr = _mote_sprite(rad[i], (int(color[0] * k * m[0] / 255), int(color[1] * k * m[1] / 255), int(color[2] * k * m[2] / 255)))
+        else:
+            spr = _mote_sprite(rad[i], (int(color[0] * k), int(color[1] * k), int(color[2] * k)))
         r = rad[i]
         seq.append((spr, (xs[i] - r, ys[i] - r), None, pygame.BLEND_RGB_ADD))
     old = surf.get_clip()
@@ -325,6 +332,24 @@ def space_dynamic(surf, palette, t, strength=1.0):
     n = i18n.quality().get("motes", 38)
     if n:
         motes(surf, surf.get_rect(), t, n, p["mote"])
+
+
+def space_rays(surf, palette, strength=1.0):
+    """Uzay arka planının durağan huzmeleri (önbellekli bulutsu katmanına bir kez basılır)."""
+    if not enabled():
+        return
+    p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
+    god_rays(surf, p["sun"], p["key"], 0.55 * strength, t=0.0, clip=surf.get_rect())
+
+
+def space_motes(surf, palette, t, mod=None):
+    """Uzay arka planının toz zerreleri; mod verilirse fırça×vinyet çarpımı zerre başına uygulanır."""
+    if not enabled():
+        return
+    p = PALETTE_LIGHT.get(palette, PALETTE_LIGHT["deep"])
+    n = i18n.quality().get("motes", 38)
+    if n:
+        motes(surf, surf.get_rect(), t, n, p["mote"], mod=mod)
 
 
 def space_pass(surf, palette, t, strength=1.0):
