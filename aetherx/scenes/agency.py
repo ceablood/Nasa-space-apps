@@ -134,58 +134,171 @@ class AgencyScene(Scene):
         getattr(self, f"draw_{self.tab}")(surf)
         self.draw_widgets(surf)
 
+    # ----------------------------------------------------------------- 3B ajans merkezi (Dünya)
+    _EARTH = {"frames": [], "halo": None}
+    N_EARTH = 60
+
+    @staticmethod
+    def _build_earth(n_max, chunk):
+        import numpy as np
+        from .. import space3d as S3
+        E = AgencyScene._EARTH
+        R = 78
+        M = S3.rot_z(math.radians(-23.4)) @ S3.rot_x(0.32)
+        L = S3.norm3(np.array((-0.62, 0.38, 0.69), dtype=np.float32))
+        for _ in range(chunk):
+            i = len(E["frames"])
+            if i >= n_max:
+                break
+            E["frames"].append(S3.to_surface(S3.render_body("earth", R, M, L, i * math.tau / n_max, i * 0.5, 512)))
+        if E["halo"] is None:
+            E["halo"] = S3.atmo_halo("earth", R, L)
+
+    def earth_frame(self):
+        """Dönen 3B Dünya: 60 karelik dönüş bir kez hesaplanır ve oynatılır. Masaüstünde arka plan iş parçacığında
+        (açılışta takılma yok), tarayıcıda karede 2 kare üretilir. Hazır olana kadar None."""
+        E = AgencyScene._EARTH
+        if len(E["frames"]) < self.N_EARTH:
+            import sys as _sys
+            if _sys.platform == "emscripten":
+                self._build_earth(self.N_EARTH, 2)
+            elif not E.get("thread"):
+                import threading
+                E["thread"] = threading.Thread(target=self._build_earth, args=(self.N_EARTH, self.N_EARTH), daemon=True)
+                E["thread"].start()
+        fr = list(E["frames"])
+        if not fr:
+            return None, None
+        k = int(self.t * 6) % self.N_EARTH
+        return fr[min(k, len(fr) - 1)], E["halo"]
+
     def draw_0(self, surf):
         g = self.game
         a = g.s["agency"]
+        col = g.color
         r = pygame.Rect(40, TOPBAR_H + 170, 560, 300)
-        glass_panel(surf, r, g.color, 200, 20, strong=True)
-        cx, cy = r.x + 100, r.y + 110
-        draw_glow(surf, (cx, cy), 90, g.color, 0.6)
-        pygame.draw.circle(surf, (8, 14, 30), (cx, cy), 62)
-        pygame.draw.circle(surf, g.color, (cx, cy), 62, 3)
-        for i in range(12):
-            ang = i * math.pi / 6 + self.t * 0.3
-            pygame.draw.line(surf, g.color, (cx + math.cos(ang) * 66, cy + math.sin(ang) * 66),
-                             (cx + math.cos(ang) * 76, cy + math.sin(ang) * 76), 2)
-        draw_icon(surf, "rocket", (cx, cy), 60, g.color)
-        draw_text(surf, g.name.upper(), (r.x + 190, r.y + 40), 28, C["text"], bold=True, glow=g.color)
-        draw_text(surf, g.badge(), (r.x + 190, r.y + 82), 18, g.color, bold=True)
+        glass_panel(surf, r, col, 200, 20, strong=True)
+        # ajans merkezi: dönen Dünya + seviye halkası + yörüngede ajans roketi
+        cx, cy = r.x + 112, r.y + 122
+        img, halo = self.earth_frame()
+        if halo is not None:
+            surf.blit(halo, (cx - halo.get_width() // 2, cy - halo.get_height() // 2))
+        if img is not None:
+            surf.blit(img, (cx - img.get_width() // 2, cy - img.get_height() // 2))
+        else:
+            draw_glow(surf, (cx, cy), 90, (90, 150, 255), 0.5)
         xp, need, frac = g.xp_progress()
-        draw_bar(surf, (r.x + 190, r.y + 136, 340, 12), frac, g.color, label=f"SEVİYE {a['level']}", value=f"{xp}/{need} XP")
-        draw_bar(surf, (r.x + 190, r.y + 186, 340, 10), a["rep"] / 100, C["gold"], label="İTİBAR", value=f"{a['rep']}/100")
-        draw_text(surf, f"Kuruluş: Gün 1 · Şimdi: {g.time_label()}", (r.x + 30, r.bottom - 44), 14, C["text_dim"])
+        ring = pygame.Rect(0, 0, 196, 196)
+        ring.center = (cx, cy)
+        pygame.draw.arc(surf, (40, 48, 72), ring, 0, math.tau, 4)
+        if frac > 0:
+            pygame.draw.arc(surf, col, ring, math.pi / 2 - frac * math.tau, math.pi / 2, 5)
+        ang = self.t * 0.9
+        ox, oy = cx + math.cos(ang) * 108, cy + math.sin(ang) * 40
+        if math.sin(ang) < 0:                                   # Dünya'nın arkasındayken sönük
+            draw_icon(surf, "rocket", (ox, oy), 14, scale_color(col, 0.45))
+        else:
+            draw_glow(surf, (ox, oy), 14, col, 0.6)
+            draw_icon(surf, "rocket", (ox, oy), 16, col)
+        draw_text(surf, "ajans merkezi · Dünya", (cx, r.bottom - 54), 12, C["text_mute"], anchor="midtop")
+        tx = r.x + 236
+        draw_text(surf, g.name.upper(), (tx, r.y + 34), 28, C["text"], bold=True, glow=col, max_w=r.right - tx - 20)
+        draw_text(surf, g.badge(), (tx, r.y + 76), 18, col, bold=True)
+        draw_bar(surf, (tx, r.y + 128, r.right - tx - 30, 12), frac, col, label=f"SEVİYE {a['level']}", value=f"{xp}/{need} XP")
+        draw_bar(surf, (tx, r.y + 178, r.right - tx - 30, 10), a["rep"] / 100, C["gold"], label="İTİBAR", value=f"{a['rep']}/100")
+        draw_text(surf, f"Kuruluş: Gün 1 · Şimdi: {g.time_label()}", (tx, r.bottom - 44), 14, C["text_dim"])
+        # istatistikler: görev sonuçları halkası + ikonlu kutular
         st = g.s["stats"]
-        stats = [("Fırlatma", st["launches"]), ("Başarılı", st["success"]), ("Kısmi", st["partial"]),
-                 ("Başarısız", st["fail"]), ("Kırılan asteroit", st["asteroids"]), ("Yıldız Tozu", st["stardust"]),
-                 ("Fotoğraf", st["photos"]), ("Kurtarılan uydu", st["rescues"]), ("Toplam kazanç", fmt_num(st["earned"])),
-                 ("Toplam harcama", fmt_num(st["spent"])), ("Araştırma", f"{len(g.s['research']['done'])}/{len(D.RESEARCH)}"),
-                 ("Başarım", f"{len(g.s['achievements'])}/{len(D.ACHIEVEMENTS)}")]
         r2 = pygame.Rect(630, TOPBAR_H + 170, W - 670, 300)
         glass_panel(surf, r2, C["cyan"], 180, 20)
-        for i, (k, v) in enumerate(stats):
-            x = r2.x + 30 + (i % 3) * (r2.w - 60) / 3
-            y = r2.y + 26 + (i // 3) * 68
-            draw_text(surf, str(v), (x, y), 26, C["text"], bold=True)
-            draw_text(surf, k, (x, y + 34), 13, C["text_dim"])
-        # zafer yolu
-        r3 = pygame.Rect(40, TOPBAR_H + 500, W - 80, 170)
+        dc = (r2.x + 130, r2.y + 132)
+        parts = [(st["success"], C["green"]), (st["partial"], C["gold"]), (st["fail"], C["red"])]
+        tot = sum(v for v, _ in parts)
+        dr = pygame.Rect(0, 0, 170, 170)
+        dr.center = dc
+        if tot:
+            a0 = math.pi / 2
+            for v, c in parts:
+                if v:
+                    a1 = a0 - v / tot * math.tau
+                    pygame.draw.arc(surf, c, dr, a1, a0, 16)
+                    a0 = a1
+            rate = st["success"] / tot * 100
+            from .. import i18n as _i18n
+            draw_text(surf, _i18n.pct(rate), dc, 34, C["text"], bold=True,
+                      anchor="center", raw=True)
+            draw_text(surf, "başarı", (dc[0], dc[1] + 26), 13, C["text_dim"], anchor="midtop")
+        else:
+            pygame.draw.arc(surf, (40, 48, 72), dr, 0, math.tau, 16)
+            draw_text(surf, "henüz görev yok", dc, 14, C["text_dim"], anchor="center")
+        lx = r2.x + 40
+        for i, (lab, v, c) in enumerate((("Başarılı", st["success"], C["green"]), ("Kısmi", st["partial"], C["gold"]),
+                                         ("Başarısız", st["fail"], C["red"]))):
+            yy = r2.bottom - 64 + i * 18
+            pygame.draw.circle(surf, c, (lx + 6, yy + 7), 5)
+            draw_text(surf, f"{v}", (lx + 18, yy), 13, C["text"], bold=True, raw=True)
+            draw_text(surf, lab, (lx + 50, yy), 13, C["text_dim"])
+        tiles = [("rocket", "Fırlatma", st["launches"]), ("dust", "Kırılan asteroit", st["asteroids"]),
+                 ("star", "Yıldız Tozu", st["stardust"]), ("camera", "Fotoğraf", st["photos"]),
+                 ("satellite", "Kurtarılan uydu", st["rescues"]), ("money", "Toplam kazanç", fmt_num(st["earned"])),
+                 ("chart", "Toplam harcama", fmt_num(st["spent"])),
+                 ("flask", "Araştırma", f"{len(g.s['research']['done'])}/{len(D.RESEARCH)}"),
+                 ("trophy", "Başarım", f"{len(g.s['achievements'])}/{len(D.ACHIEVEMENTS)}")]
+        gx0, gw = r2.x + 280, r2.w - 300
+        tw_, th_ = (gw - 2 * 12) / 3, 82
+        for i, (ic, k, v) in enumerate(tiles):
+            tr_ = pygame.Rect(gx0 + (i % 3) * (tw_ + 12), r2.y + 20 + (i // 3) * (th_ + 10), tw_, th_)
+            pygame.draw.rect(surf, (12, 18, 34), tr_, border_radius=12)
+            pygame.draw.rect(surf, (34, 48, 80), tr_, 1, border_radius=12)
+            draw_icon(surf, ic, (tr_.x + 26, tr_.centery), 22, C["cyan"])
+            draw_text(surf, str(v), (tr_.x + 52, tr_.y + 14), 24, C["text"], bold=True, raw=True, max_w=tr_.w - 60)
+            draw_text(surf, k, (tr_.x + 52, tr_.y + 48), 13, C["text_dim"], max_w=tr_.w - 60)
+        # zafer yolu (sıradaki adım nabız gibi atar)
+        r3 = pygame.Rect(40, TOPBAR_H + 494, W - 80, 156)
         glass_panel(surf, r3, C["gold"], 180, 20)
         draw_text(surf, "NİHAİ HEDEF: GÜNEŞ SİSTEMİ'Nİ AÇ, JÜPİTER'DE DEV KOLONİYİ KUR", (r3.x + 24, r3.y + 16), 16,
                   C["gold"], bold=True)
         steps = g.victory_progress()
         n = len(steps)
+        nxt = next((i for i, (_, ok) in enumerate(steps) if not ok), None)
         for i, (lab, ok) in enumerate(steps):
             x = r3.x + 80 + i * (r3.w - 160) / (n - 1)
-            y = r3.y + 90
+            y = r3.y + 82
             if i < n - 1:
                 nx = r3.x + 80 + (i + 1) * (r3.w - 160) / (n - 1)
                 pygame.draw.line(surf, C["gold"] if ok else (60, 70, 90), (x + 22, y), (nx - 22, y), 3)
+            pulse = i == nxt
+            if pulse:
+                draw_glow(surf, (x, y), 34 + 6 * math.sin(self.t * 4), C["cyan"], 0.45)
             pygame.draw.circle(surf, scale_color(C["gold"], 0.3) if ok else (20, 26, 44), (int(x), y), 22)
-            pygame.draw.circle(surf, C["gold"] if ok else (70, 80, 100), (int(x), y), 22, 3)
+            pygame.draw.circle(surf, C["gold"] if ok else (C["cyan"] if pulse else (70, 80, 100)), (int(x), y), 22, 3)
             if ok:
                 draw_glow(surf, (x, y), 30, C["gold"], 0.5)
-            draw_icon(surf, "check" if ok else "lock", (x, y), 18, C["white"] if ok else (90, 100, 125))
-            draw_text(surf, lab, (x, y + 32), 13, C["text"] if ok else C["text_dim"], bold=True, anchor="midtop")
+            draw_icon(surf, "check" if ok else ("play" if pulse else "lock"), (x, y), 18,
+                      C["white"] if ok else (C["cyan"] if pulse else (90, 100, 125)))
+            draw_text(surf, lab, (x, y + 32), 13, C["text"] if (ok or pulse) else C["text_dim"], bold=True, anchor="midtop")
+            if pulse:
+                draw_text(surf, "SIRADAKİ", (x, y - 44), 11, C["cyan"], bold=True, anchor="midtop")
+        # ajans karnesi: gerçek değerlerden
+        from .. import online as ON
+        r4 = pygame.Rect(40, TOPBAR_H + 662, W - 80, 64)
+        glass_panel(surf, r4, C["violet"], 170, 16)
+        rows = ON.sorted_rows(ON.local_load(), "score")
+        me = ON.campaign_id(g)
+        rank = next((i + 1 for i, rw in enumerate(rows) if rw.get("id") == me), None)
+        cols_ = sum(1 for c in g.s["colonies"].values() if c)
+        items = [("trophy", "Skor", fmt_num(ON.score_of(g)), C["gold"]),
+                 ("chart", "Bu cihazda sıra", f"{rank}/{len(rows)}" if rank else "–", C["violet"]),
+                 ("money", "Kasa", fmt_num(g.money), C["gold"]), ("rp", "Araştırma puanı", fmt_num(g.rp), C["cyan"]),
+                 ("flag", "Koloni", str(cols_), C["green"]), ("astro", "Ekip", f"{len(g.s['crew'])}/{g.crew_cap()}", C["cyan"])]
+        cw = r4.w / len(items)
+        for i, (ic, lab, val, c) in enumerate(items):
+            x = r4.x + i * cw
+            if i:
+                pygame.draw.line(surf, (40, 48, 80), (x, r4.y + 12), (x, r4.bottom - 12), 1)
+            draw_icon(surf, ic, (x + 34, r4.centery), 20, c)
+            draw_text(surf, val, (x + 58, r4.y + 10), 20, C["text"], bold=True, raw=True, max_w=cw - 66)
+            draw_text(surf, lab, (x + 58, r4.y + 38), 12, C["text_dim"], max_w=cw - 66)
 
     def draw_1(self, surf):
         g = self.game

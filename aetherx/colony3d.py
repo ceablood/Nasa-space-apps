@@ -1240,33 +1240,55 @@ class Colony3D:
         tc = getattr(self, "_tc", None)
         fresh = (tc is None or tc["key"] != ckey or float(np.abs(tc["sun"] - sun).max()) > 0.0015
                  or abs(tc["day"] - day) > 0.004)
+        # kamera iki karedir hareket ediyorsa önbelleğe yazmak boşa: doğrudan tek geçişte çiz (görüntü aynı)
+        moving = fresh and getattr(self, "_tc_last_key", None) not in (None, ckey)
+        self._tc_last_key = ckey
         if fresh:
             if tc is None or tc["raw"].get_size() != (w, h):
                 tc = self._tc = {"raw": pygame.Surface((w, h)), "base": pygame.Surface((w, h)), "mask": pygame.Surface((hw, hh2)),
                                  "work": pygame.Surface((hw, hh2))}
-            # arka plan: boyalı manzara, geceye göre karartılmış
+            # arka plan: boyalı manzara, geceye göre karartılmış (karartılmış hâli önbellekte)
             if bg is not None:
-                v.blit(bg, (0, 0))
-                v.fill((k_bg, k_bg, min(255, k_bg + 20)), special_flags=pygame.BLEND_MULT)
+                dkey = (id(bg), bg.get_size(), k_bg)
+                if getattr(self, "_bgdark_key", None) != dkey:
+                    self._bgdark = bg.copy()
+                    self._bgdark.fill((k_bg, k_bg, min(255, k_bg + 20)), special_flags=pygame.BLEND_MULT)
+                    self._bgdark_key = dkey
+                v.blit(self._bgdark, (0, 0))
             else:
                 v.fill(pal[2])
             # 1) arazi
             self.shade_and_draw(v, terrain.faces, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, cull=False,
                                 cached=True)
-            tc["raw"].blit(v, (0, 0))
-            # 2a) binaların gerçek gölgeleri (Güneş yönünde zemine izdüşüm), yarım çözünürlüklü maskeye
-            tc["mask"].fill((255, 255, 255))
-            if shadows:
-                bb = self._shadow_polys([pack_cached(objects.faces)], tc["mask"], sun, scol, eye, f, r, u, fpx, cx, cy)
-                if bb is not None:
-                    self._shadow_apply(v, tc["mask"], bb)
-            tc["base"].blit(v, (0, 0))
-            tc.update(key=ckey, sun=sun.copy(), day=day)
+            if moving:
+                # 2) bina + kolonist gölgeleri tek maskede, tek yumuşatma (önbellek yok)
+                tc["key"] = None
+                if shadows:
+                    mask = tc["work"]
+                    mask.fill((255, 255, 255))
+                    packs = [pack_cached(objects.faces)]
+                    for a in self.agents:
+                        if not a.hidden:
+                            packs.append(colonist_packed(a.x, self.height(a.x, a.z), a.z, a.heading, a.col, a.phase, a.state,
+                                                         a.carry, self.planet, a.job, a.p.skin))
+                    bb = self._shadow_polys(packs, mask, sun, scol, eye, f, r, u, fpx, cx, cy)
+                    if bb is not None:
+                        self._shadow_apply(v, mask, bb)
+            else:
+                tc["raw"].blit(v, (0, 0))
+                # 2a) binaların gerçek gölgeleri (Güneş yönünde zemine izdüşüm), yarım çözünürlüklü maskeye
+                tc["mask"].fill((255, 255, 255))
+                if shadows:
+                    bb = self._shadow_polys([pack_cached(objects.faces)], tc["mask"], sun, scol, eye, f, r, u, fpx, cx, cy)
+                    if bb is not None:
+                        self._shadow_apply(v, tc["mask"], bb)
+                tc["base"].blit(v, (0, 0))
+                tc.update(key=ckey, sun=sun.copy(), day=day)
         else:
             v.blit(tc["base"], (0, 0))
         # 2b) kolonist gölgeleri: her kolonistin çevresindeki bölgede gölgesiz arazi geri yüklenir, bina + kolonist gölgeleri
         #     aynı maskede birleştirilip birlikte uygulanır (üst üste binen gölge tam ekran yöntemindeki gibi koyulaşmaz)
-        if shadows:
+        if shadows and not moving:
             work = tc["work"]
             work.blit(tc["mask"], (0, 0))
             rects = []
