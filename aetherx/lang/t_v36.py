@@ -121,4 +121,12 @@ ROWS = [
     ("BU KATEGORİYİ SIFIRLA", "RESET THIS CATEGORY"), ("Kategori varsayılana döndü", "Category restored to defaults"),
     ("Görüntü · performans · ses · oyun · erişilebilirlik · dil · kontroller · veri",
      "Graphics · performance · audio · gameplay · accessibility · language · controls · data"),
+    # ------------------------------------------------------------ NPC'ler
+    ("Çalışkan", "Hard-working"), ("Meraklı", "Curious"), ("Sakin", "Calm"), ("Neşeli", "Cheerful"), ("Titiz", "Meticulous"),
+    ("Uykucu", "Sleepy"), ("Sosyal", "Sociable"), ("Cesur", "Brave"),
+    ("Kazı yapıyor", "Digging"), ("Araştırma yapıyor", "Doing research"), ("İnşaat yapıyor", "Building"),
+    ("Bitki yetiştiriyor", "Growing plants"), ("Spor yapıyor", "Working out"), ("Bakım yapıyor", "Doing maintenance"),
+    ("Ders veriyor", "Teaching"), ("İşe gidiyor", "Heading to work"), ("Eve dönüyor", "Heading home"),
+    ("Maden taşıyor", "Carrying ore"), ("Uyuyor", "Sleeping"), ("Çalışıyor", "Working"), ("Boşta", "Idle"),
+    ("Takip ediliyor", "Following"),
 ]

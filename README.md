@@ -6,6 +6,26 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.8 — Yaşayan NPC'ler
+
+* **Kimlik:** her NPC'nin kalıcı adı, kişilik özelliği, boyu, ten ve saç rengi, aksesuarı var ([`aetherx/npc.py`](aetherx/npc.py)).
+  * Özellikler: çalışkan, meraklı, sakin, neşeli, titiz, uykucu, sosyal, cesur.
+  * Kişilik yürüme hızını, çalışma süresini ve mola sıklığını etkiler.
+* **Kıyafet ve kask:** astronotlar kask takar (vizör yansıması, kask kenarı, sırt çantası, eldiven, çizme). Kıyafet yere göre değişir:
+  * Ay: beyaz kıyafet, altın vizör.
+  * Mars: pas tonlu, tozlu kıyafet.
+  * Venüs: gümüş ısı kıyafeti.
+  * Jüpiter istasyonu: lacivert-altın üniforma, şeffaf kask ve ışıklı rozet.
+* **Ajans üssü:** binaların önünde personel çalışır ve yaya yolunda yürür.
+  * Araştırma merkezinde araştırmacılar teleskop, tezgâh ve tabletle araştırma yapar.
+  * Hangarda kaynak ve bakım, depodan hangara sandık taşıma, yakıt deposunda bakım yapılır.
+  * Mola verip başka binalara uğrarlar; gece yalnızca vardiya çalışır.
+* **Bina içi:** bir binaya tıklayınca panelin arka planında, yarı saydam olarak içeride çalışan NPC'ler görünür.
+* **Koloni:** kolonistler rollerine göre iş seçer ve elde aletle çalışır.
+  * İşler: madende kazma ve maden taşıma, kulübede tabletle araştırma, parkta bitki sulama, spor salonunda antrenman,
+    hastanede muayene, okulda ders, yapımı süren binada çekiçle inşaat.
+  * Bir kolonist seçilince adı, kişiliği ve o anki işi görünür.
+
 ## Sürüm 3.7 — Açılışta Ultra + sınırsız FPS, genişletilmiş ayarlar
 
 * Oyun her açılışta **Ultra** kalite ve **sınırsız FPS** ile başlar.

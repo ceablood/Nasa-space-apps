@@ -19,6 +19,8 @@ from ..colony3d import Colony3D
 from .. import space3d as S3
 from .. import i18n
 from .. import art
+from .. import npc
+from ..i18n import tr
 from .. import data as D
 from ..config import C, CREW_COLORS, H, TOPBAR_H, W
 from ..fx import DustStorm, ParticleSystem, draw_glow, lerp_color, scale_color, vertical_gradient, clamp
@@ -93,9 +95,12 @@ class ColonyScene(Scene):
         if not c:
             return
         n = min(14, int(c["pop"]))
+        roles = list(CREW_COLORS.keys())
         for i in range(n):
-            self.walkers.append([random.uniform(80, 940), random.choice([-1, 1]) * random.uniform(14, 34),
-                                 random.choice(list(CREW_COLORS.keys())), random.uniform(0, 9)])
+            p = npc.Persona(sum(map(ord, self.planet)) * 131 + i * 7919, roles[i % len(roles)])
+            # [x, hız, kişi, iş pozu, iş süresi sayacı]: çalış -> yürü -> çalış döngüsü
+            self.walkers.append([random.uniform(80, 940), random.choice([-1, 1]) * random.uniform(14, 34) * p.speed_k, p,
+                                 npc.ROLE_WORK.get(p.role, "scan"), random.uniform(0, 6)])
 
     def rebuild(self):
         g = self.game
@@ -210,9 +215,13 @@ class ColonyScene(Scene):
             self.dust.update(dt)
         c = self.game.colony(self.planet)
         for w in self.walkers:
-            w[0] += w[1] * dt
-            if w[0] < 60 or w[0] > 960:
-                w[1] *= -1
+            w[4] -= dt
+            if w[4] < -6 * w[2].work_k:                       # iş bitti: yeniden yürü
+                w[4] = random.uniform(4, 9)
+            if w[4] > 0:                                      # yürüyor
+                w[0] += w[1] * dt
+                if w[0] < 60 or w[0] > 960:
+                    w[1] *= -1
         sig = (self.game.money // 50, c and (int(c["pop"]), c["level"], int(c["happiness"])))
         if getattr(self, "_sig", None) != sig:
             self._sig = sig
@@ -286,8 +295,9 @@ class ColonyScene(Scene):
                     break
         art.draw_flag(surf, scene.right - 120, gy, g.name, g.color, t, 1.0)
         # sakinler
-        for wx, vx, ct, ph in self.walkers:
-            art.draw_astronaut(surf, scene.x + wx * scene.w / 1000, gy + 6, ct, 0.55, t + ph)
+        for wx, vx, per, job, tm in self.walkers:
+            pose = "walk" if tm > 0 else job
+            npc.draw_person(surf, scene.x + wx * scene.w / 1000, gy + 30, 1.25, per, self.planet, pose, t, 1 if vx > 0 else -1, "astro")
         self.draw_overlays(surf, scene, p, c, old)
 
     def draw_overlays(self, surf, scene, p, c, old):
@@ -318,8 +328,10 @@ class ColonyScene(Scene):
                 if wd.place.get("cell") and not wd.place.get("valid"):
                     draw_text(surf, "Geçersiz konum", (bn.right - 16, bn.y + 18), 15, C["red"], bold=True, anchor="topright")
             elif wd.cam.follow is not None:
-                role = D.CREW_TYPE.get(wd.cam.follow.role, {}).get("name", wd.cam.follow.role)
-                draw_text(surf, f"Takip ediliyor: {role}", (scene.x + 20, scene.y + 16), 14, C["gold"], bold=True)
+                fa = wd.cam.follow
+                role = D.CREW_TYPE.get(fa.role, {}).get("name", fa.role)
+                draw_text(surf, tr("Takip ediliyor") + f": {tr(role)} · {fa.label()}", (scene.x + 20, scene.y + 16), 14, C["gold"],
+                          bold=True, raw=True, max_w=scene.w - 40)
             if wd.lighting()[4] < 0.25:
                 draw_text(surf, "Gece: kolonistler uyuyor", (scene.right - 20, scene.y + 40), 13, C["cyan"], bold=True,
                           anchor="topright")

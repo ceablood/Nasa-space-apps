@@ -14,6 +14,7 @@ from . import Scene
 from .. import cinema
 from .. import archviz
 from .. import art
+from .. import npc
 from .. import data as D
 from ..config import C, H, TOPBAR_H, W
 from ..i18n import tr
@@ -112,6 +113,8 @@ class BaseScene(Scene):
                                          rng.choice([C["gold"], C["cyan"], C["white"], C["orange"]]),
                                          rng.uniform(0, 3000)))
         self.crane = 0.0
+        self.crew = []                    # üs personeli (NPC): binaların önünde iş yapar, yaya yolunda yürür
+        self.crew_sig = None
         self.shadows = {}
         self.advisor = None
         self.adv_t = 0.0
@@ -349,6 +352,10 @@ class BaseScene(Scene):
             s.update(dt)
         for v in self.vehicles:
             v.update(dt)
+        self.sync_crew()
+        night = self.night_factor()
+        for w_ in self.crew:
+            w_.update(dt, night)
         for b in self.panel_buttons:
             b.update(dt)
         self.ps.update(dt)
@@ -382,6 +389,25 @@ class BaseScene(Scene):
             have = sum(1 for b in self.panel_buttons if b.label == "FIRLAT")
             if ready != have:
                 self.build_panel()
+
+    def sync_crew(self):
+        """Kurulu binalara göre personel: araştırma binasında 3 araştırmacı, diğerlerinde 1-2 çalışan."""
+        g = self.game
+        built = tuple(k for k in npc.BASE_JOBS if g.lvl(k) > 0 or k == "pads")
+        if built == self.crew_sig:
+            return
+        self.crew_sig = built
+        spots = {}
+        for k in built:
+            r = self.rects[k]
+            n = len(npc.BASE_JOBS[k])
+            spots[k] = [(r.x + r.w * (0.25 + 0.5 * i / max(1, n - 1)) if n > 1 else r.centerx, r.bottom + 4) for i in range(n)]
+        self.crew = []
+        seed = 1000
+        for k in built:
+            for i in range(len(npc.BASE_JOBS[k])):
+                self.crew.append(npc.Walker(seed, k, i, spots))
+                seed += 17
 
     def pad_center(self, i):
         r = self.rects["pads"]
@@ -442,6 +468,14 @@ class BaseScene(Scene):
         # binalar
         for b in D.BUILDINGS:
             self.draw_building(s, b, night, t)
+        # personel: önce sahne nesneleri (teleskop, tezgâh...), sonra derinliğe göre kişiler
+        late = night > 0.75
+        for w_ in sorted(self.crew, key=lambda a: a.y):
+            if late and w_.p.seed % 3:                       # gece vardiyası: personelin üçte biri çalışır
+                continue
+            if w_.state == "work" and w_.prop and not getattr(w_, "back", False):
+                npc._prop(s, w_.prop, w_.x + w_.facing * 16, w_.y, 0.5, t, D.BUILDING[w_.home]["color"])
+            w_.draw(s, t, 0.72)
         # giriş tabelası
         self.draw_sign(s, night, t)
         self.ps.draw(s)
@@ -960,6 +994,11 @@ class BaseScene(Scene):
         pr = self.panel_rect()
         dx = pr.x - (W - 560)
         glass_panel(surf, pr, b["color"], 225, 20, strong=True)
+        # arka planda: binanın içinde çalışan personel (yalnız görsel, panelin altında yarı saydam)
+        inner = pr.inflate(-16, -16)
+        inner.h = int(pr.h * 0.44)
+        inner.y = pr.y + int(pr.h * 0.36)
+        npc.draw_interior(surf, inner, key, self.t, b["color"], alpha=85, seed=len(key))
         draw_glow(surf, (pr.x + 50, pr.y + 50), 50, b["color"], 0.6)
         draw_icon(surf, b["icon"], (pr.x + 50, pr.y + 50), 34, b["color"])
         draw_text(surf, b["name"], (pr.x + 90, pr.y + 24), 24, C["text"], bold=True)
