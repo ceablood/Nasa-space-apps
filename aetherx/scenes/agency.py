@@ -43,8 +43,8 @@ class AgencyScene(Scene):
         g = self.game
         self.widgets = []
         self.back_button()
-        self.add(Tabs((40, TOPBAR_H + 100, 820, 46), ["GENEL", "DİPLOMASİ", "GÜNLÜK", "AYARLAR"], self.set_tab,
-                      C["violet"], self.tab, ["flag", "handshake", "chart", "settings"]))
+        self.add(Tabs((40, TOPBAR_H + 100, 1020, 46), ["GENEL", "DİPLOMASİ", "GÜNLÜK", "AYARLAR", "DAHA FAZLA"], self.set_tab,
+                      C["violet"], self.tab, ["flag", "handshake", "chart", "settings", "star"]))
         if self.tab == 1:
             for i, p in enumerate(D.PARTNERS):
                 st = g.s["diplomacy"][p["key"]]
@@ -226,3 +226,23 @@ class AgencyScene(Scene):
         draw_text(surf, f"Kayıt dosyası: {SAVE_FILE}", (40, H - 130), 12, C["text_mute"])
         draw_text(surf, "Oyun otomatik kaydedilir: her fırlatma, koloni, araştırma, NOVA seviyesi ve ajans adı.",
                   (40, H - 108), 13, C["text_dim"])
+
+    def draw_4(self, surf):
+        """DAHA FAZLA: kaynaklar ve eklenemeyenler (6 dilde, lang/t_more.py)."""
+        from ..lang import t_more
+        rows = [r_[0] for r_ in t_more.ROWS]
+        src, lim = rows[6:15], rows[15:]
+        top = TOPBAR_H + 170
+        hh = H - top - 96
+        for i, (title, sub, items, col) in enumerate((("KAYNAKLAR", rows[4], src, C["cyan"]),
+                                                       ("EKLENEMEYENLER VE SINIRLAR", rows[5], lim, C["orange"]))):
+            r = pygame.Rect(40 + i * ((W - 100) // 2 + 20), top, (W - 100) // 2, hh)
+            glass_panel(surf, r, col, 185, 18)
+            draw_text(surf, title, (r.x + 22, r.y + 16), 18, col, bold=True)
+            draw_paragraph(surf, sub, (r.x + 22, r.y + 44), r.w - 44, 13, C["text_dim"], max_lines=2)
+            y = r.y + 82
+            for it in items:
+                pygame.draw.circle(surf, col, (r.x + 28, y + 9), 4)
+                n = draw_paragraph(surf, it, (r.x + 42, y), r.w - 66, 14, C["text"], max_lines=3)
+                y += (n if isinstance(n, int) and n > 10 else 40) + 10
+

@@ -33,7 +33,7 @@ SAVE_VERSION = 4
 # ---------------------------------------------------------------------------
 # EKONOMİ
 # ---------------------------------------------------------------------------
-START_MONEY = 1000
+START_MONEY = 10000          # başlangıç parası (oyuncu isteğiyle 1.000 -> 10.000)
 START_RP = 0
 RENAME_COST = 500
 MARKET_FUEL_PRICE = 4          # Para / kg  (Yakıt Deposu üretimi bedava)

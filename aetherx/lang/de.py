@@ -13,3 +13,8 @@ for _row in _v34.ROWS:
 from . import t_v36 as _v36
 for _row in _v36.ROWS:
     T.setdefault(_row[0], _row[1])
+
+# AJANS > DAHA FAZLA: bu dilde yazılmış çeviriler
+from . import t_more as _more
+for _row in _more.ROWS:
+    T[_row[0]] = _row[2]

@@ -129,4 +129,12 @@ ROWS = [
     ("Ders veriyor", "Teaching"), ("İşe gidiyor", "Heading to work"), ("Eve dönüyor", "Heading home"),
     ("Maden taşıyor", "Carrying ore"), ("Uyuyor", "Sleeping"), ("Çalışıyor", "Working"), ("Boşta", "Idle"),
     ("Takip ediliyor", "Following"),
+    # ------------------------------------------------------------ görülen hayvanlar (3B)
+    ("GÖRÜLEN HAYVANLAR", "ANIMALS SEEN"), ("{0} tür görüldü", "{0} species seen"), ("fare tekerleği: kaydır", "mouse wheel: scroll"),
+    ("Henüz hayvan görmedin. YAŞAM sekmesinde bir biyomu ARAŞTIR: keşfedilen hayvanlar burada gerçekçi 3B çizimleriyle toplanır.",
+     "You have not seen any animals yet. SURVEY a biome on the LIFE tab: discovered animals are collected here as realistic 3D renders."),
+    ("Gezegen", "Planet"), ("Biyom", "Biome"), ("Yaşam alanı", "Habitat"), ("Beslenme", "Diet"), ("Köken", "Origin"),
+    ("evrimleşti, atası", "evolved, ancestor"), ("başlangıç türü", "original species"),
+    ("3B çizim genomdan üretilir; temsilîdir.", "The 3D render is generated from the genome; it is illustrative."),
+    ("Temas ışığı. Motoru kapat.", "Contact light. Engine stop."),
 ]

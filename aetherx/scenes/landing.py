@@ -110,6 +110,11 @@ class Terrain:
         return abs(self.at(x + 4) - self.at(x - 4)) / 8.0
 
 
+VE = 311 * 9.80665        # egzoz hızı (m/s): Isp ~311 s (Apollo iniş motoru DPS sınıfı, hipergolik)
+SPOOL = 0.25              # motor tepki süresi (s): gaz anında değil, kısa gecikmeyle açılır/kapanır
+CONTACT = 1.7             # m: temas sondası zemine değer -> "temas ışığı" (Apollo LM)
+
+
 class Lander:
     def __init__(self, g, thrust, budget):
         self.x, self.y = START_DX, START_ALT
@@ -121,6 +126,13 @@ class Lander:
         self.dv = budget          # kalan Δv (m/s) = yakıt
         self.dv0 = budget
         self.throttle = 0.0
+        self.tmax0 = thrust       # tam yakıtlı kütlede itki ivmesi
+        self.cmd = 0.0            # istenen gaz (motor buna SPOOL süresiyle yaklaşır)
+        self.comp = 0.0           # bacak amortisör sıkışması (m), temasta
+
+    def mass_ratio(self):
+        """m0 / m: harcanan Δv kadar yakıt yandı (Tsiolkovsky) -> aynı itki daha çok ivme verir."""
+        return math.exp((self.dv0 - self.dv) / VE)
 
 
 class LandingScene(Scene):
@@ -179,6 +191,9 @@ class LandingScene(Scene):
         self.landed_pad = False
         self._done = False
         self.flash = 0.0
+        self.streaks = []
+        self._contact = False
+        self.sun_dir = 1.0 if self.key != "mars" else -1.0         # gölgenin düştüğü yön (+ sağa)
         self.ps.clear()
         self.far = self._far_hills()
         self.widgets = []
@@ -256,6 +271,13 @@ class LandingScene(Scene):
         self.flash = max(0.0, self.flash - dt * 1.6)
         if self.state != "fly":
             self.end_t += dt
+            self.L.comp *= (1 - min(1.0, dt * 1.5)) if self.L.comp > 0.12 else 1.0     # amortisör yerleşir
+            for p_ in self.streaks:
+                p_[0] += p_[2] * dt
+                p_[1] += p_[3] * dt
+                p_[3] -= self.L.g * dt
+                p_[4] -= dt
+            self.streaks = [p_ for p_ in self.streaks if p_[4] > 0 and p_[1] > self.terrain.at(p_[0]) - 0.2]
             return
         L = self.L
         dt = min(dt, 1 / 30)
@@ -267,10 +289,11 @@ class LandingScene(Scene):
         if self.assist and (thr_in or rot_in):
             self.assist = False
             self.app.toast("Kumanda sende", "cyan", "nova")
+        L.tmax = L.tmax0 * L.mass_ratio()                   # yakıt azaldıkça hafifleyen araç
         if self.assist:
             thr, ang = self.guidance()
             rcs_toward(L, ang, dt)
-            L.throttle = thr
+            L.cmd = thr
         else:
             if mouse[0] and not over_ui and not rot_in:       # dokunmatik: basılan yana eğ
                 sx, _ = self.to_screen(L.x, L.y)
@@ -282,8 +305,11 @@ class LandingScene(Scene):
                 L.omega -= clamp(L.omega, -RCS_ACC * dt, RCS_ACC * dt)
                 L.ang += L.omega * dt
             L.ang = clamp(L.ang, -75, 75)
-            L.throttle = 1.0 if thr_in else 0.0
+            L.cmd = 1.0 if thr_in else 0.0
         if L.dv <= 0:
+            L.cmd = 0.0
+        L.throttle += (L.cmd - L.throttle) * min(1.0, dt / SPOOL)          # motor tepki gecikmesi
+        if L.throttle < 0.01 and L.cmd == 0:
             L.throttle = 0.0
         # fizik
         a = L.throttle * L.tmax
@@ -308,13 +334,36 @@ class LandingScene(Scene):
         self.engine_sound(L.throttle)
         if L.throttle > 0:
             if alt < 45:
-                k = 1 - alt / 45
+                k = (1 - alt / 45) * L.throttle
                 gx, gy = self.to_screen(L.x, ground)
-                for side in (-1, 1):
-                    self.ps.smoke(gx + side * 10, gy - 2, n=max(1, int((1 + 2 * k) * FX())), angle=math.pi if side < 0 else 0.0,
-                                  spread=0.25, speed=(80 * k + 40, 260 * k + 60), size=(8, 18), life=(0.8, 1.8),
-                                  color=self.b["dust"], alpha=int(120 * k + 40), grow=30,
-                                  grav=0 if self.key == "moon" else -6)
+                if self.key == "moon":                  # vakum: toz dümdüz ve hızlı uçar (hava direnci yok)
+                    for _ in range(max(1, int((3 + 8 * k) * FX()))):
+                        side = random.choice((-1, 1))
+                        sp = random.uniform(140, 420) * (0.4 + k)
+                        self.streaks.append([L.x, ground + random.uniform(0.1, 0.6), side * sp * random.uniform(0.8, 1.0),
+                                             random.uniform(-2, 6), random.uniform(0.6, 1.4)])
+                    if random.random() < 0.3 * k:
+                        self.ps.smoke(gx, gy - 2, n=1, angle=-math.pi / 2, spread=1.2, speed=(10, 40), size=(10, 20),
+                                      life=(0.5, 1.0), color=self.b["dust"], alpha=50, grow=20, grav=0)
+                else:
+                    for side in (-1, 1):
+                        self.ps.smoke(gx + side * 10, gy - 2, n=max(1, int((1 + 2 * k) * FX())), angle=math.pi if side < 0 else 0.0,
+                                      spread=0.3, speed=(80 * k + 40, 260 * k + 60), size=(10, 24), life=(1.0, 2.4),
+                                      color=self.b["dust"], alpha=int(130 * k + 40), grow=36, grav=-6)
+        # balistik toz çizgileri (Ay): yalnız yerçekimiyle, sürtünmesiz
+        alive = []
+        for p_ in self.streaks:
+            p_[0] += p_[2] * dt
+            p_[1] += p_[3] * dt
+            p_[3] -= L.g * dt
+            p_[4] -= dt
+            if p_[4] > 0 and p_[1] > self.terrain.at(p_[0]) - 0.2:
+                alive.append(p_)
+        self.streaks = alive[-500:]
+        if alt < CONTACT and not self._contact and L.vy < 0:
+            self._contact = True
+            self.app.say("Temas ışığı. Motoru kapat.", "calm", priority=True)
+            self.app.audio.play("beep", 0.6)
         self.callout(alt)
         if alt <= 0:
             self.touchdown(ground)
@@ -362,7 +411,8 @@ class LandingScene(Scene):
         vy_des = -clamp(0.09 * alt + 1.2, 1.2, 38)
         if d > 25 and alt < 160:
             vy_des = max(vy_des, -0.4 if alt > 40 else 0.4)      # hedefe varmadan yere yaklaşma
-        ax = (vx_des - L.vx) * 0.9
+        near = d < 60 and abs(L.vx) < 5                         # pist üstünde ve yavaş: yumuşak denetim (gecikmeyle salınmaz)
+        ax = (vx_des - L.vx) * (0.5 if near else 0.9)
         ay = (vy_des - L.vy) * 1.2 + L.g
         v = math.hypot(L.vx, L.vy)
         if self.b["drag"]:
@@ -371,7 +421,7 @@ class LandingScene(Scene):
         # dikey talep sıfıra yaklaşınca atan2 tekilleşir (açı ±45° arası çırpınır): açıyı en az 0,3g dikey referansla
         # hesapla; itki yalnız gerçekten gereken kadar
         thr = clamp(math.hypot(ax, max(ay, 0.0)) / L.tmax, 0.0, 1.0)
-        lim = 6 if alt < 12 else 45
+        lim = 6 if alt < 12 else (15 if near else 45)
         ang = clamp(math.degrees(math.atan2(ax, max(ay, 0.3 * L.g))), -lim, lim)
         return thr, ang
 
@@ -381,9 +431,11 @@ class LandingScene(Scene):
         L = Lander(self.b["g"], thrust, 1e9)
         used, dt = 0.0, 1 / 30
         for _ in range(30 * 400):
+            L.tmax = thrust * math.exp(used / VE)               # gerçek uçuşla aynı: kütle azalır
             thr, ang = self.guidance(L)
             rcs_toward(L, ang, dt)
-            a = thr * L.tmax
+            L.throttle += (thr - L.throttle) * min(1.0, dt / SPOOL)   # gerçek uçuşla aynı motor gecikmesi
+            a = L.throttle * L.tmax
             rad = math.radians(L.ang)
             ax, ay = math.sin(rad) * a, math.cos(rad) * a - L.g
             v = math.hypot(L.vx, L.vy)
@@ -421,6 +473,7 @@ class LandingScene(Scene):
         vy, vx = abs(L.vy), abs(L.vx)
         on_pad = abs(L.x) < 45
         self.contact = (vy, vx, tilt, abs(L.x))
+        L.comp = clamp(vy * 0.12, 0.05, 0.6)                    # iniş bacağı amortisörü (m)
         if vy <= SAFE_VY and vx <= SAFE_VX and tilt <= SAFE_TILT and slope < 0.2:
             self.state = "landed"
             prec = "iniş alanının tam ortasına" if abs(L.x) < 12 else ("iniş alanına" if on_pad else "alan dışına")
@@ -549,19 +602,45 @@ class LandingScene(Scene):
         if pts:
             poly = pts + [(W + 40, H + 40), (-40, H + 40)]
             pygame.draw.polygon(surf, self.b["ground2"], poly)
-            pygame.draw.lines(surf, self.b["ground"], False, pts, max(2, int(3 * min(1.5, self.scale))))
+            # aydınlatılmış yüzey kuşağı: Güneş'e bakan yamaç açık, öteki koyu; aşağı doğru kararan regolit
+            g1, g2 = self.b["ground"], self.b["ground2"]
+            for i, dy in enumerate((14, 9, 5)):
+                c = tuple(int(g2[j] + (g1[j] - g2[j]) * (0.35 + 0.2 * i)) for j in range(3))
+                pygame.draw.lines(surf, c, False, [(px_, py_ + dy * min(2.0, self.scale)) for px_, py_ in pts], max(3, int(6 * min(2.0, self.scale))))
+            for a_, b_ in zip(pts, pts[1:]):
+                sl = (b_[1] - a_[1]) / max(1e-3, b_[0] - a_[0])
+                lit = clamp(1.0 - sl * 1.6 * self.sun_dir, 0.55, 1.35)
+                pygame.draw.line(surf, tuple(int(clamp(v * lit, 0, 255)) for v in g1), a_, b_, max(2, int(3 * min(1.5, self.scale))))
             # yüzey dokusu: yakında taşlar
-            if self.scale > 1.2:
-                rnd = random.Random(int(x_left / 6))
-                xx = math.floor(x_left / 6) * 6
+            if self.scale > 0.8:                     # gölgeli kayalar (yakında): ışık tarafı açık, gölge tarafı koyu
+                xx = math.floor(x_left / 5) * 5
                 while xx < x_right:
-                    r = random.Random(int(xx * 13.7)).random()
-                    if r > 0.82:
+                    rr_ = random.Random(int(xx * 13.7)).random()
+                    if rr_ > 0.8:
                         sx, sy = self.to_screen(xx, self.terrain.at(xx))
-                        pygame.draw.circle(surf, scale_color(self.b["ground"], 0.8), (int(sx + ox), int(sy + oy + 2)),
-                                           max(1, int(self.scale * (0.3 + r * 0.6))))
-                    xx += 6
+                        rad = max(1.5, self.scale * (0.25 + (rr_ - 0.8) * 4.0))
+                        pygame.draw.ellipse(surf, (0, 0, 0), (sx + ox - rad * 0.2 + self.sun_dir * rad * 0.8, sy + oy - rad * 0.2,
+                                                              rad * 2.6, rad * 0.7))
+                        pygame.draw.circle(surf, scale_color(self.b["ground"], 0.62), (int(sx + ox), int(sy + oy - rad * 0.4)), int(rad))
+                        pygame.draw.circle(surf, scale_color(self.b["ground"], 1.15),
+                                           (int(sx + ox - self.sun_dir * rad * 0.35), int(sy + oy - rad * 0.65)), max(1, int(rad * 0.55)))
+                    xx += 5
         self.draw_pad(surf, ox, oy)
+        # aracın Güneş yönünde zemine düşen gölgesi (irtifa arttıkça yana kayar, soluklaşır)
+        if self.state != "crashed":
+            shx = L.x + alt * 0.55 * self.sun_dir
+            gsx, gsy = self.to_screen(shx, self.terrain.at(shx))
+            ssz = max(46, 9 * self.scale)
+            a_ = int(clamp(150 - alt * 1.2, 0, 150))
+            if a_ > 4:
+                sh = pygame.Surface((int(ssz * 1.4), int(ssz * 0.3)), pygame.SRCALPHA)
+                pygame.draw.ellipse(sh, (0, 0, 0, a_), sh.get_rect())
+                surf.blit(sh, (gsx + ox - sh.get_width() / 2, gsy + oy - sh.get_height() / 2))
+        for p_ in self.streaks:                                  # Ay: dümdüz uçan toz çizgileri
+            ax_, ay_ = self.to_screen(p_[0], p_[1])
+            bx_, by_ = self.to_screen(p_[0] - p_[2] * 0.03, p_[1] - p_[3] * 0.03)
+            a_ = int(200 * min(1.0, p_[4]))
+            pygame.draw.line(surf, tuple(int(c * (0.6 + 0.4 * min(1.0, p_[4]))) for c in self.b["dust"]), (ax_ + ox, ay_ + oy), (bx_ + ox, by_ + oy), 1)
         # araç
         sx, sy = self.to_screen(L.x, L.y)
         sx += ox
@@ -576,18 +655,42 @@ class LandingScene(Scene):
             nx = cx + (self.noz[0] * math.cos(rad) - self.noz[1] * math.sin(rad)) * k
             ny = cy + (self.noz[0] * math.sin(rad) + self.noz[1] * math.cos(rad)) * k
             if L.throttle > 0:
-                art.draw_flame_core(surf, nx, ny, self.eng_key, math.pi / 2 + rad, L.throttle * 0.9,
-                                    0.55 * k / 0.42 + 0.25, self.t)
+                if self.b["drag"] == 0:           # vakum: egzoz geniş açılı ve neredeyse saydam genişler
+                    plen = size * (1.6 + 1.2 * L.throttle)
+                    ang_ = math.pi / 2 + rad
+                    pl = pygame.Surface((int(plen * 2) + 4, int(plen * 2) + 4), pygame.SRCALPHA)
+                    c0 = pl.get_width() / 2
+                    for i in range(6):
+                        w_ = plen * (0.25 + i * 0.12)
+                        pygame.draw.polygon(pl, (170, 190, 255, int(26 * L.throttle * (1 - i / 7))),
+                                            [(c0, c0), (c0 + math.cos(ang_ - 0.42) * w_, c0 + math.sin(ang_ - 0.42) * w_),
+                                             (c0 + math.cos(ang_ + 0.42) * w_, c0 + math.sin(ang_ + 0.42) * w_)])
+                    surf.blit(pl, (nx - c0, ny - c0))
+                    art.draw_flame_core(surf, nx, ny, self.eng_key, math.pi / 2 + rad, L.throttle * 0.45,
+                                        0.4 * k / 0.42 + 0.2, self.t)
+                else:                              # atmosfer: daha dar ve görünür alev
+                    art.draw_flame_core(surf, nx, ny, self.eng_key, math.pi / 2 + rad, L.throttle * 0.95,
+                                        0.6 * k / 0.42 + 0.25, self.t)
                 draw_glow(surf, (int(nx), int(ny + 10)), 40, (255, 190, 120), 0.35 * L.throttle)
             surf.blit(img, (cx - img.get_width() / 2, cy - img.get_height() / 2))
-            # iniş bacakları
+            # iniş bacakları: ana dikme + çapraz destek + amortisör, ayak tabanı, temas sondası (Apollo LM düzeni)
+            comp = L.comp * self.scale
+            lw = max(2, int(size / 26))
+            ca_, sa_ = math.cos(rad), math.sin(rad)
             for s in (-1, 1):
-                fx = sx + s * size * 0.42 * math.cos(rad)
-                fy = sy + s * size * 0.42 * math.sin(rad)
-                hx = cx + s * size * 0.16 * math.cos(rad)
-                hy2 = cy + s * size * 0.16 * math.sin(rad) + size * 0.2
-                pygame.draw.line(surf, (200, 204, 214), (hx, hy2), (fx, fy), max(2, int(size / 26)))
-                pygame.draw.line(surf, (200, 204, 214), (fx - 6, fy), (fx + 6, fy), max(2, int(size / 26)))
+                fx = sx + s * size * 0.46 * ca_ + comp * 0 * sa_
+                fy = sy + s * size * 0.46 * sa_
+                hx = cx + s * size * 0.2 * ca_ - size * 0.05 * sa_
+                hy2 = cy + s * size * 0.2 * sa_ + size * 0.05 * ca_
+                kx = cx + s * size * 0.22 * ca_ + size * 0.26 * sa_
+                ky = cy + s * size * 0.22 * sa_ + size * 0.3 * ca_
+                mx_, my_ = (hx + fx) / 2, (hy2 + fy) / 2 - comp
+                pygame.draw.line(surf, (150, 154, 164), (hx, hy2), (mx_, my_), lw + 1)          # üst dikme
+                pygame.draw.line(surf, (214, 218, 226), (mx_, my_), (fx, fy - comp * 0.5), lw)    # amortisör (sıkışır)
+                pygame.draw.line(surf, (120, 124, 134), (kx, ky), (mx_, my_), max(1, lw - 1))    # çapraz destek
+                pygame.draw.ellipse(surf, (190, 170, 110), (fx - size * 0.09, fy - comp * 0.5 - size * 0.025, size * 0.18, size * 0.05))  # ayak tabanı
+                if self.state == "fly":                                                          # temas sondası
+                    pygame.draw.line(surf, (200, 200, 210), (fx, fy - comp * 0.5), (fx + sa_ * 1.7 * self.scale, fy + ca_ * 1.7 * self.scale), 1)
         self.ps.draw(surf)
         if self.flash > 0:
             overlay(surf, (255, 240, 220, int(200 * self.flash)))

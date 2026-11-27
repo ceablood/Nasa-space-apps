@@ -70,12 +70,24 @@ def species_art(surf, sp, cx, cy, size, t=0.0, alive=True, facing=1, phase=0.0):
                 pts = [(x0 + math.sin(ph * 1.4 + j * 0.7 + i) * s * 0.06 * j, cy - j * s * 0.24) for j in range(5)]
                 pygame.draw.lines(surf, col, False, pts, max(2, int(s * 0.07)))
             return
-        if g.size > 0.4:                                            # ağaç
+        if g.size > 0.4:                                            # ağaç: gölgeli, katmanlı taç
             sway = math.sin(ph * 0.9) * s * 0.03
-            pygame.draw.line(surf, (96, 70, 48) if alive else dark, (cx, cy), (cx + sway, cy - s * 0.55), max(2, int(s * 0.09)))
-            for dx, dy, r in ((0, -0.72, 0.30), (-0.2, -0.6, 0.22), (0.2, -0.62, 0.22), (0, -0.92, 0.2)):
-                pygame.draw.circle(surf, dark, (int(cx + sway + dx * s), int(cy + dy * s + s * 0.03)), max(2, int(r * s)))
-                pygame.draw.circle(surf, col, (int(cx + sway + dx * s - s * 0.02), int(cy + dy * s)), max(2, int(r * s * 0.9)))
+            shd = pygame.Surface((int(s * 0.9) + 2, int(s * 0.14) + 2), pygame.SRCALPHA)
+            pygame.draw.ellipse(shd, (0, 0, 0, 70), shd.get_rect())
+            surf.blit(shd, (cx - s * 0.45 + s * 0.12, cy - s * 0.06))
+            tw = max(2, int(s * 0.09))
+            pygame.draw.line(surf, (70, 50, 34) if alive else dark, (cx + tw * 0.3, cy), (cx + sway + tw * 0.3, cy - s * 0.55), tw)
+            pygame.draw.line(surf, (112, 82, 56) if alive else dark, (cx - tw * 0.2, cy), (cx + sway - tw * 0.2, cy - s * 0.55), max(1, tw // 2))
+            rng_ = random.Random(_hash(sp.name))
+            clumps = [(0, -0.74, 0.28), (-0.22, -0.6, 0.21), (0.22, -0.62, 0.21), (0, -0.94, 0.19), (-0.12, -0.86, 0.17),
+                      (0.14, -0.84, 0.17), (rng_.uniform(-0.25, 0.25), -0.68, 0.16)]
+            deep = scale_color(col, 0.42)
+            for dx, dy, r in clumps:                                       # gölge katmanı
+                pygame.draw.circle(surf, deep, (int(cx + sway + dx * s + s * 0.03), int(cy + dy * s + s * 0.04)), max(2, int(r * s)))
+            for dx, dy, r in clumps:                                       # orta ton
+                pygame.draw.circle(surf, col, (int(cx + sway + dx * s), int(cy + dy * s)), max(2, int(r * s * 0.88)))
+            for dx, dy, r in clumps:                                       # güneş tarafı (sol-üst) parlak
+                pygame.draw.circle(surf, lite, (int(cx + sway + dx * s - r * s * 0.3), int(cy + dy * s - r * s * 0.3)), max(1, int(r * s * 0.42)))
             return
         if g.size > -2:                                             # çalı / ot
             for i in range(5):
@@ -164,7 +176,7 @@ def species_art(surf, sp, cx, cy, size, t=0.0, alive=True, facing=1, phase=0.0):
         pygame.draw.circle(surf, lite, (int(cx), int(y0 - s * 0.3)), max(1, int(s * 0.04)))
 
 
-def species_portrait(surf, sp, rect, t):
+def species_portrait(surf, sp, rect, t, figure=True):
     """Detay panelinde büyük figür: yaşam alanına uygun küçük arka plan + figür."""
     r = pygame.Rect(rect)
     g = sp.genome
@@ -180,7 +192,8 @@ def species_portrait(surf, sp, rect, t):
         pygame.draw.rect(sub, (40, 30, 24), (0, int(r.h * 0.78), r.w, r.h))
     surf.blit(sub, r.topleft)
     gy = r.y + int(r.h * (0.8 if g.habitat in ("kara", "yeraltı") else 0.72))
-    species_art(surf, sp, r.centerx, gy, r.h * 0.62, t, sp.alive)
+    if figure:
+        species_art(surf, sp, r.centerx, gy, r.h * 0.62, t, sp.alive)
     pygame.draw.rect(surf, (90, 120, 150), r, 1, border_radius=6)
 
 
@@ -210,6 +223,52 @@ def sky_colors(env, key):
     if a.get("CO2", 0) > 0.4:
         return (150, 100, 70), (220, 170, 120)
     return (60, 120, 200), (160, 200, 235)
+
+
+# --------------------------------------------------------------------- 3B sprite bütçesi
+BUDGET = {"n": 0}          # karede en çok bir yeni 3B çizim (akıcılık); hazır olana kadar 2B figür kullanılır
+
+
+def new_frame():
+    BUDGET["n"] = 1
+
+
+def sprite3d(sp, size, facing=1):
+    """Biyom kesiti için küçük 3B hayvan (sağa ya da sola dönük)."""
+    from . import creature3d as C3
+    px = int(max(40, min(120, size * 2.8)) // 8 * 8)
+    step = 0 if facing >= 0 else 12
+    if C3.is_cached(sp, px, step, 24, -0.25, 2):
+        return C3.surface(sp, px, step, 24, -0.25, 2)
+    if BUDGET["n"] > 0:
+        BUDGET["n"] -= 1
+        return C3.surface(sp, px, step, 24, -0.25, 2)
+    return None
+
+
+def card3d(sp, px):
+    """Kart görseli: 2x süper örneklemeli tek açı."""
+    from . import creature3d as C3
+    if C3.is_cached(sp, px, 1, 24, -0.3, 2) or BUDGET["n"] > 0:
+        if not C3.is_cached(sp, px, 1, 24, -0.3, 2):
+            BUDGET["n"] -= 1
+        return C3.surface(sp, px, 1, 24, -0.3, 2)
+    return None
+
+
+def portrait3d(sp, size, t, ss=1, steps=24):
+    """Dönen 3B portre: açı adımı zamana göre; yeni açı bütçe varsa çizilir, yoksa en son hazır açı gösterilir."""
+    from . import creature3d as C3
+    want = int(t * 6) % steps
+    for k in range(steps):
+        st = (want - k) % steps
+        if C3.is_cached(sp, size, st, steps, -0.32, ss):
+            if k and BUDGET["n"] > 0:
+                BUDGET["n"] -= 1
+                return C3.surface(sp, size, want, steps, -0.32, ss)
+            return C3.surface(sp, size, st, steps, -0.32, ss)
+    BUDGET["n"] -= 1
+    return C3.surface(sp, size, want, steps, -0.32, ss)
 
 
 class Diorama:
@@ -269,11 +328,8 @@ class Diorama:
                     pygame.draw.polygon(surf, (170, 196, 220), [(x, 18), (x + 12, 18 + rng.randint(6, 26)), (x + 24, 18)])
             return surf
         g1, g2 = GROUND.get(biome) or ((110, 100, 90), (70, 64, 58))
-        # uzak tepeler
-        far = scale_color(g1, 0.7)
-        far = tuple(int(lerp(a, b, 0.35)) for a, b in zip(far, bot))
-        pts = [(0, gy)] + [(x, gy - 30 - 26 * math.sin(x * 0.011 + 1) - 14 * math.sin(x * 0.037)) for x in range(0, w + 10, 10)] + [(w, gy)]
-        pygame.draw.polygon(surf, far, pts)
+        # gerçekçi katmanlı arazi: uzaktan yakına 3 sırt; hava perspektifi (uzak = gökyüzüne karışır), eğime göre gölge
+        self._layers(surf, world, biome, w, h, gy, g1, top, bot, rng)
         if biome == "kanyon":
             for i in range(5):
                 c = scale_color(g1, 0.8 + 0.1 * (i % 2))
@@ -284,10 +340,7 @@ class Diorama:
             pygame.draw.polygon(surf, (44, 34, 34), [(vx - 120, gy), (vx - 20, gy - 110), (vx + 20, gy - 110), (vx + 130, gy)])
             pygame.draw.line(surf, (255, 120, 40), (vx, gy - 108), (vx - 30, gy - 40), 3)
             pygame.draw.line(surf, (255, 160, 60), (vx + 6, gy - 108), (vx + 40, gy - 30), 2)
-        pygame.draw.rect(surf, g1, (0, gy, w, h - gy))
-        for y in range(gy, h, 3):
-            k = (y - gy) / max(1, h - gy)
-            pygame.draw.line(surf, tuple(int(lerp(a, b, k)) for a, b in zip(g1, g2)), (0, y), (w, y))
+        self._ground(surf, w, h, gy, g1, g2, bot, rng)
         if biome in ("regolit ovası", "kalıcı gölgeli krater", "toz ovası"):
             for _ in range(8):
                 cx, cy, r = rng.randrange(w), rng.randint(gy + 8, h - 8), rng.randint(6, 22)
@@ -315,6 +368,80 @@ class Diorama:
             for x in range(0, w, 30):
                 pygame.draw.polygon(surf, (30, 24, 22), [(x, 26), (x + 15, 26 + rng.randint(10, 46)), (x + 30, 26)])
         return surf
+
+    # -------------------------------------------------------------- gerçekçi arka plan yardımcıları
+    @staticmethod
+    def _noise2(w, h, cell, seed):
+        """Yumuşak 2B gürültü (0..1): küçük rastgele ızgara büyütülerek (çift doğrusal)."""
+        import numpy as np
+        rng = np.random.default_rng(seed)
+        gw, gh = max(2, w // cell + 2), max(2, h // cell + 2)
+        g = (rng.random((gw, gh)) * 255).astype(np.uint8)
+        sm = pygame.surfarray.make_surface(np.stack([g] * 3, -1))
+        big = pygame.transform.smoothscale(sm, (w, h))
+        return pygame.surfarray.array3d(big)[..., 0].astype(np.float32) / 255.0
+
+    def _layers(self, surf, world, biome, w, h, gy, g1, top, bot, rng):
+        import numpy as np
+        env = world.env
+        thick = 0.0 if (not env.pressure_bar or env.pressure_bar < 0.01) else min(1.0, 0.3 + 0.25 * math.log10(1 + env.pressure_bar * 10))
+        # bulutlar (atmosferli gezegenler): yumuşak gürültü eşiği
+        if thick > 0.2:
+            n = self._noise2(w, int(gy * 0.75), 40, rng.randrange(10 ** 6)) * 0.6 + self._noise2(w, int(gy * 0.75), 14, rng.randrange(10 ** 6)) * 0.4
+            a = np.clip((n - 0.55) * 3.2, 0, 1) * 150 * thick
+            cl = pygame.Surface((w, int(gy * 0.75)), pygame.SRCALPHA)
+            px = pygame.surfarray.pixels3d(cl)
+            cc = np.array((250, 250, 255) if world.key != "mars" else (230, 200, 170), np.float32)
+            px[...] = (cc * (0.85 + 0.15 * n[..., None])).astype(np.uint8)
+            del px
+            pa = pygame.surfarray.pixels_alpha(cl)
+            pa[...] = a.astype(np.uint8)
+            del pa
+            surf.blit(cl, (0, 0))
+        xs = np.arange(w + 1)
+        for li, (base, amp, haze, freq) in enumerate(((gy - 70, 46, 0.62, 0.006), (gy - 38, 30, 0.38, 0.011), (gy - 14, 16, 0.16, 0.02))):
+            ph = [rng.uniform(0, 6.28) for _ in range(4)]
+            ridge = base - amp * (0.55 * np.sin(xs * freq + ph[0]) + 0.3 * np.sin(xs * freq * 2.3 + ph[1])
+                                  + 0.15 * np.abs(np.sin(xs * freq * 5.1 + ph[2])) + 0.1 * np.sin(xs * freq * 11 + ph[3]))
+            slope = np.gradient(ridge)
+            col = np.array(g1, np.float32) * (0.75 + 0.1 * li)
+            sky = np.array(bot, np.float32)
+            for x in range(0, w, 2):
+                y0 = int(ridge[x])
+                if y0 >= gy:
+                    continue
+                shade = float(np.clip(1.0 - slope[x] * 0.06, 0.7, 1.25))       # güneş solda: sola bakan yamaç aydınlık
+                c = col * shade
+                c = c + (sky - c) * (haze * (0.6 + 0.4 * thick) if thick > 0 else haze * 0.25)
+                pygame.draw.line(surf, tuple(int(v) for v in np.clip(c, 0, 255)), (x, y0), (x, gy), 2)
+        # ufuk pusu
+        if thick > 0:
+            hz = pygame.Surface((w, 40), pygame.SRCALPHA)
+            for i in range(40):
+                pygame.draw.line(hz, (*bot, int(90 * thick * (1 - abs(i - 20) / 20))), (0, i), (w, i))
+            surf.blit(hz, (0, gy - 34))
+
+    def _ground(self, surf, w, h, gy, g1, g2, bot, rng):
+        """Dokulu zemin: renk geçişi + iki ölçekli gürültü + çakıl."""
+        import numpy as np
+        gh = h - gy
+        if gh <= 0:
+            return
+        yy = np.linspace(0, 1, gh, dtype=np.float32)[None, :, None]
+        base = np.array(g1, np.float32)[None, None, :] * (1 - yy) + np.array(g2, np.float32)[None, None, :] * yy
+        n = self._noise2(w, gh, 22, rng.randrange(10 ** 6)) * 0.6 + self._noise2(w, gh, 5, rng.randrange(10 ** 6)) * 0.4
+        img = base * (0.82 + 0.36 * n[..., None])
+        top_haze = np.clip(1 - yy * 6, 0, 1) * 0.25                               # uzak zemin gökyüzüne karışır
+        img = img + (np.array(bot, np.float32)[None, None, :] - img) * top_haze
+        gs = pygame.surfarray.make_surface(np.clip(img, 0, 255).astype(np.uint8))
+        surf.blit(gs, (0, gy))
+        for _ in range(60):                                                         # çakıllar (yakında büyük)
+            y = rng.randint(gy + 4, h - 2)
+            k = (y - gy) / max(1, gh)
+            r = 1 + int(k * 4 * rng.random())
+            x = rng.randrange(w)
+            pygame.draw.ellipse(surf, scale_color(g2, 0.55), (x - r, y - r * 0.4 + 1, r * 2, r * 0.9))
+            pygame.draw.ellipse(surf, scale_color(g1, 1.15), (x - r, y - r * 0.5, r * 2 - 1, r * 0.7))
 
     # -------------------------------------------------------------- canlı ajanlar
     def _agents(self, world, biome, w, h):
@@ -385,7 +512,12 @@ class Diorama:
                 yy += math.sin(t * 1.5 + a["ph"]) * 10
             elif a["kind"] in ("yüz", "süzül"):
                 yy += math.sin(t * 1.1 + a["ph"]) * 5
-            species_art(canvas, s, a["x"], yy, a["size"], t, True, 1 if a["vx"] >= 0 else -1, a["ph"])
+            img = sprite3d(s, a["size"], 1 if a["vx"] >= 0 else -1) if s.kingdom == "hayvan" else None
+            if img is not None:                                       # gerçekçi 3B hayvan (önbellekli)
+                bob = abs(math.sin(t * 6 + a["ph"])) * 1.5 if a["kind"] == "yürü" else 0
+                canvas.blit(img, (int(a["x"] - img.get_width() / 2), int(yy - img.get_height() * 0.78 - bob)))
+            else:
+                species_art(canvas, s, a["x"], yy, a["size"], t, True, 1 if a["vx"] >= 0 else -1, a["ph"])
             if s.kingdom == "mikrop" and water:
                 draw_glow(canvas, (int(a["x"]), int(yy - a["size"] * 0.4)), 8, (120, 255, 200), 0.25)
         if storm > 0.05:                                             # yağmur / toz fırtınası
