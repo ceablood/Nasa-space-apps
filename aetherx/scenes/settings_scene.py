@@ -148,6 +148,9 @@ class SettingsScene(Scene):
         self.choice("3B süper örnekleme", "Koloni 3B görünümünde kenar yumuşatma. OTO: kalite kademesine göre.",
                     [(v, f"×{v:g}" if v else "OTO") for v in SET.SS_CHOICES], float(SET.get("ss") or 0),
                     lambda v: (SET.set("ss", v), self.changed()), 104)
+        self.toggle("Hareketli kamerada 45 FPS koruması", "Koloni kamerası hareket ederken kare hızı 45'in altına düşerse 3B süper "
+                    "örnekleme geçici olarak ×1,5'e iner; kamera durunca tam kaliteye döner.", SET.get("motion_res"),
+                    lambda v: (SET.set("motion_res", v), self.changed()))
         self.toggle("FPS göstergesi", "Sağ altta kare hızı (kısayol: F3).", self.app.fps_show, self.set_fps_show)
         self.toggle("Performans grafiği", "Son 180 karenin süresi (ms), 60 ve 30 FPS çizgileriyle.", SET.get("perf_graph"),
                     lambda v: (SET.set("perf_graph", v), self.changed()))

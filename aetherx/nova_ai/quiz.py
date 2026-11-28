@@ -9,6 +9,7 @@ import re
 from . import facts as F
 from . import lexicon as LX
 from . import physics as P
+from .tx import pick as _pick
 
 NUM_TOL = 0.15
 
@@ -123,22 +124,21 @@ def convert(norm, tr_):
         v = float(m.group(1).replace(",", "."))
         f = lambda x, d=1: P.fmt_num(x, d, tr_)
         if kind == "kms":
-            return f"{f(v, 2)} km/s = {f(v * 3600, 0)} km/" + ("sa" if tr_ else "h") + (
-                f" ({'ışık hızının' if tr_ else 'of light speed'} %{f(v / 299792.458 * 100, 4)})" if tr_ else
-                f" ({f(v / 299792.458 * 100, 4)}% of light speed)")
+            return f"{f(v, 2)} km/s = {f(v * 3600, 0)} km/" + (_pick(tr_, "sa", "h")) + (
+                _pick(tr_, f" ({_pick(tr_, 'ışık hızının', 'of light speed')} %{f(v / 299792.458 * 100, 4)})", f" ({f(v / 299792.458 * 100, 4)}% of light speed)"))
         if kind == "kmh":
-            return f"{f(v, 0)} km/" + ("sa" if tr_ else "h") + f" = {f(v / 3600, 3)} km/s"
+            return f"{f(v, 0)} km/" + (_pick(tr_, "sa", "h")) + f" = {f(v / 3600, 3)} km/s"
         if kind == "au":
             km = v * P.AU / 1000
-            return f"{f(v, 2)} AU = {f(km / 1e6, 1)} " + ("milyon km" if tr_ else "million km") + (
-                f"; {'ışık' if tr_ else 'light'} {P.fmt_dur(v * P.AU / P.C_LIGHT, tr_)}")
+            return f"{f(v, 2)} AU = {f(km / 1e6, 1)} " + (_pick(tr_, "milyon km", "million km")) + (
+                f"; {_pick(tr_, 'ışık', 'light')} {P.fmt_dur(v * P.AU / P.C_LIGHT, tr_)}")
         if kind == "ly":
-            return f"{f(v, 2)} " + ("ışık yılı" if tr_ else "light years") + f" = {f(v * 9.4607e12 / 1e12, 2)} " + (
-                "trilyon km" if tr_ else "trillion km")
+            return f"{f(v, 2)} " + (_pick(tr_, "ışık yılı", "light years")) + f" = {f(v * 9.4607e12 / 1e12, 2)} " + (
+                _pick(tr_, "trilyon km", "trillion km"))
         if kind == "c":
             return f"{f(v, 1)} °C = {f(v + 273.15, 1)} K = {f(v * 9 / 5 + 32, 1)} °F"
         if kind == "k":
             return f"{f(v, 1)} K = {f(v - 273.15, 1)} °C"
         if kind == "mi":
-            return f"{f(v, 1)} " + ("mil" if tr_ else "miles") + f" = {f(v * 1.609344, 1)} km"
+            return f"{f(v, 1)} " + (_pick(tr_, "mil", "miles")) + f" = {f(v * 1.609344, 1)} km"
     return None

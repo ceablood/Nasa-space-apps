@@ -7,6 +7,7 @@ Basitleştirmeler açıkça yazılıdır: dairesel ve eş düzlemli yörüngeler
 import math
 
 from .facts import BODIES
+from .tx import pick as _pick
 
 G = 6.674e-11                  # m³ kg⁻¹ s⁻²
 AU = 1.495978707e11            # m
@@ -150,21 +151,21 @@ def burn_time(m0, mf, thrust_n, isp_s):
 # ----------------------------------------------------------------- okunur biçimler
 def fmt_dur(sec, tr_=True):
     if sec < 90:
-        return fmt_num(sec, 1, tr_) + (" sn" if tr_ else " s")
+        return fmt_num(sec, 1, tr_) + (_pick(tr_, " sn", " s"))
     if sec < 5400:
-        return fmt_num(sec / 60, 1, tr_) + (" dk" if tr_ else " min")
+        return fmt_num(sec / 60, 1, tr_) + (_pick(tr_, " dk", " min"))
     if sec < 3 * DAY:
-        return fmt_num(sec / 3600, 1, tr_) + (" saat" if tr_ else " h")
+        return fmt_num(sec / 3600, 1, tr_) + (_pick(tr_, " saat", " h"))
     d = sec / DAY
     if d < 800:
-        return fmt_num(d, 1 if d < 60 else 0, tr_) + (" gün" if tr_ else " days")
-    return fmt_num(d / 365.25, 1, tr_) + (" yıl" if tr_ else " years")
+        return fmt_num(d, 1 if d < 60 else 0, tr_) + (_pick(tr_, " gün", " days"))
+    return fmt_num(d / 365.25, 1, tr_) + (_pick(tr_, " yıl", " years"))
 
 
 def fmt_dist(m, tr_=True):
     if m < 1e9:
         return fmt_num(m / 1000, 0, tr_) + " km"
-    return fmt_num(m / 1e9, 1, tr_) + (" milyon km" if tr_ else " million km")
+    return fmt_num(m / 1e9, 1, tr_) + (_pick(tr_, " milyon km", " million km"))
 
 
 def fmt_speed(ms, tr_=True):

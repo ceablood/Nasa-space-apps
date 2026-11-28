@@ -527,7 +527,9 @@ class SpaceBackground:
         self.shooting.update(dt)
         self.pulse += dt
 
-    def draw(self, surf, nebula_alpha=1.0, streak=0.0, drift=(0, 0)):
+    def draw(self, surf, nebula_alpha=1.0, streak=0.0, drift=(0, 0), occluded=None):
+        """occluded: üstüne her karede opak bir görüntü basılacak dikdörtgen (ör. koloni 3B görünümü); oraya bulutsu
+        katmanı kopyalanmaz (sonuç aynı, daha az piksel)."""
         from . import cinema
         strength = 0.6 if streak > 0 else 1.0
         layers = cinema.space_layers(self.palette, self.vig, strength)     # (pus+sıcak ışık, fırça×vinyet) ya da None
@@ -556,7 +558,15 @@ class SpaceBackground:
                 self._comp.blit(layers[1], (0, 0), special_flags=pygame.BLEND_RGB_MULT)
             self._comp_key = p
             self._comp_fast = fast
-        surf.blit(self._comp, (0, 0))
+        if occluded is None:
+            surf.blit(self._comp, (0, 0))
+        else:
+            o = pygame.Rect(occluded).clip(surf.get_rect())
+            sw, sh = surf.get_size()
+            for band in (pygame.Rect(0, 0, sw, o.top), pygame.Rect(0, o.bottom, sw, sh - o.bottom),
+                         pygame.Rect(0, o.top, o.left, o.h), pygame.Rect(o.right, o.top, sw - o.right, o.h)):
+                if band.w > 0 and band.h > 0:
+                    surf.blit(self._comp, band.topleft, area=band)
         mod = None
         if fast:
             mk = id(layers[1])

@@ -262,7 +262,7 @@ class NovaRoomScene(Scene):
             if act > 0.55:
                 draw_glow(surf, (x, y), 10 + 10 * act, col, 0.35 * act)
         if net is None:
-            draw_text(surf, tr("sinir ağı eğitiliyor…"), (cx, cy - R - 26), 12, C["text_mute"], anchor="center")
+            draw_text(surf, tr("sinir ağı eğitiliyor…"), (cx, cy - R - 26), 12, C["text_mute"], anchor="center", raw=True)
 
     def draw_mind(self, surf, cx, y):
         """Duygu çubukları + son yanıtın güveni (ağın olasılığı / kural eşleşmesi)."""
@@ -283,8 +283,7 @@ class NovaRoomScene(Scene):
             draw_text(surf, name, (x + bw // 2, y + 12), 11, C["text_mute"], anchor="midtop", raw=True)
         if self.last_conf and self.last_conf[1]:
             conf = int(round(self.last_conf[0] * 100))
-            draw_text(surf, (tr("Son yanıta güven") + f": %{conf}") if tr_ else f"Confidence in last answer: {conf}%",
-                      (cx, y + 34), 12, C["text_mute"], anchor="midtop", raw=True)
+            draw_text(surf, tr("Son yanıta güven") + ": " + i18n.pct(conf), (cx, y + 34), 12, C["text_mute"], anchor="midtop", raw=True)
 
     def draw_timeline(self, surf):
         g = self.game

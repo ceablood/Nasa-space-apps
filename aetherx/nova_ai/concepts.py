@@ -170,3 +170,48 @@ def _contains(text, kw):
     if " " in kw or len(kw) > 4:
         return kw in text
     return kw in text.split()
+
+
+# Almanca, Fransızca, İspanyolca, Rusça anahtar sözcükler (normalize edilmiş; Rusçada önek olarak eşleşir)
+CONCEPTS_ML = {
+    "delta_v": ("дельта-v", "дельта v", "дельта"),
+    "isp": ("spezifischer impuls", "impulsion specifique", "impulso especifico", "удельный импульс"),
+    "rocket_equation": ("raketengleichung", "ziolkowski", "equation de tsiolkovski", "ecuacion de tsiolkovski", "уравнение циолковского"),
+    "twr": ("schub-gewicht", "poussee/poids", "empuje-peso", "тяговооруженност"),
+    "staging": ("raketenstufe", "etage de fusee", "etapas del cohete", "ступенчат"),
+    "orbit": ("umlaufbahn", "orbite", "orbita", "орбита"),
+    "escape": ("fluchtgeschwindigkeit", "vitesse de liberation", "velocidad de escape", "вторая космическая"),
+    "hohmann": ("hohmann-transfer", "transfert de hohmann", "transferencia de hohmann", "гоман"),
+    "launch_window": ("startfenster", "fenetre de tir", "ventana de lanzamiento", "стартовое окно"),
+    "gravity_assist": ("swing-by", "assistance gravitationnelle", "asistencia gravitatoria", "гравитационный маневр"),
+    "lagrange": ("лагранж",),
+    "solar_flare": ("sonneneruption", "sonnensturm", "eruption solaire", "tempete solaire", "tormenta solar", "fulguracion",
+                    "солнечная вспышк", "солнечная буря"),
+    "radiation": ("strahlung", "rayonnement", "radiacion", "радиаци"),
+    "regolith": ("regolithe", "regolito", "реголит"),
+    "isru": ("ressourcennutzung vor ort", "ressources in situ", "recursos in situ", "местных ресурсов"),
+    "life_support": ("lebenserhaltung", "support vie", "soporte vital", "жизнеобеспечени"),
+    "microgravity": ("schwerelosigkeit", "apesanteur", "ingravidez", "невесомост"),
+    "reentry": ("wiedereintritt", "hitzeschild", "rentree atmospherique", "bouclier thermique", "reentrada", "escudo termico",
+                "вход в атмосферу", "тепловой щит"),
+    "landing": ("landung", "atterrissage", "aterrizaje", "посадк"),
+    "light_year": ("lichtjahr", "astronomische einheit", "annee-lumiere", "unite astronomique", "ano luz", "unidad astronomica",
+                   "световой год", "астрономическая единица"),
+    "exoplanet": ("bewohnbare zone", "zone habitable", "zona habitable", "зона обитаемости"),
+    "black_hole": ("schwarzes loch", "trou noir", "agujero negro", "черная дыра", "черной дыр"),
+    "ion_engine": ("ionentriebwerk", "moteur ionique", "motor ionico", "ионный двигатель"),
+    "nuclear": ("kernenergie", "nucleaire", "энергия ядерн", "ритэг"),
+    "solar_power": ("solarenergie", "solarmodul", "energie solaire", "panneau solaire", "energia solar", "panel solar",
+                    "солнечная энерги", "солнечная панел"),
+    "terraforming": ("терраформ",),
+    "spacesuit": ("raumanzug", "weltraumspaziergang", "combinaison spatiale", "sortie extravehiculaire", "traje espacial",
+                  "caminata espacial", "скафандр", "выход в открытый космос"),
+    "astrobiology": ("leben im all", "ausserirdisch", "vie extraterrestre", "extraterrestre", "vida extraterrestre",
+                     "инопланетн", "внеземная жизнь"),
+    "asteroid": ("komet", "comete", "cometa", "комет"),
+    "telescope": ("teleskop", "telescopio", "телескоп"),
+    "reusable": ("wiederverwendbar", "reutilisable", "reutilizable", "многоразов"),
+}
+for _k, _v in CONCEPTS_ML.items():
+    _kws, _d, _g = CONCEPTS[_k]
+    CONCEPTS[_k] = (tuple(_kws) + _v, _d, _g)

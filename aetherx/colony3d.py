@@ -1138,27 +1138,23 @@ class Colony3D:
         order = np.argsort(-z.mean(1))
         order = order[keep[order]]
         # numpy -> Python listesi tek seferde (öğe öğe float() çağrısı yerine)
-        SX, SY, RGB = sx[order].tolist(), sy[order].tolist(), rgb[order].tolist()
+        PT, RGB = np.stack((sx[order], sy[order]), axis=-1).tolist(), rgb[order].tolist()
         CNT, TWO = cnt[order].tolist(), two[order].tolist()
         if ink:
             ICS = (rgb[order] * np.array((0.38, 0.34, 0.42)) + np.array((8, 4, 16))).astype(np.int32).tolist()
         poly, lines = pygame.draw.polygon, pygame.draw.lines
         a_ = int(alpha) if alpha is not None else None
-        for j in range(len(SX)):
+        for j in range(len(PT)):
             k = CNT[j]
-            pts = list(zip(SX[j][:k], SY[j][:k]))
+            pts = PT[j] if k == nv else PT[j][:k]
             col = RGB[j]
             poly(surf, col if a_ is None else (col[0], col[1], col[2], a_), pts)
             if ink and not TWO[j]:
                 # Arcane tarzı mürekkep çizgisi: koyu, hafif mor kontur (kenar yumuşatma süper örneklemeden gelir)
                 lines(surf, ICS[j], True, pts, lw)
 
-    def _shadow_polys(self, packs, mask, sun, scol, eye, f, r, u, fpx, cx, cy):
-        """Güneş'e bakan yüzleri zemine izdüşürüp yarım çözünürlüklü maskeye çizer; çizilen alanın sınır kutusu."""
-        pk = concat_packs(packs)
-        if pk is None:
-            return None
-        hw, hh2 = mask.get_size()
+    def _ground_shadow(self, pk, sun):
+        """Güneş'e bakan yüzlerin köşelerini Güneş yönünde zemine izdüşürür: (dünya noktaları (N*4, 3), köşe sayıları)."""
         Pf, nf, cnt = pk["P"], pk["n"], pk["cnt"]
         lit = (nf @ sun) > 0.02
         Pf, cnt = Pf[lit], cnt[lit]
@@ -1169,15 +1165,39 @@ class Colony3D:
         hgt = np.maximum(flat[:, 1] - gyv, 0.0)
         proj = flat - np.outer(hgt / sun[1], sun)
         proj[:, 1] = gyv + 0.02
+        return proj, cnt
+
+    def _shadow_polys(self, packs, mask, sun, scol, eye, f, r, u, fpx, cx, cy, static_key=None):
+        """Güneş'e bakan yüzleri zemine izdüşürüp yarım çözünürlüklü maskeye çizer; çizilen alanın sınır kutusu.
+        static_key verilirse (binalar) zemindeki izdüşüm Güneş değişene kadar önbellekten gelir — yalnız kamera
+        izdüşümü her karede yapılır (sonuç aynı)."""
+        gs = None
+        if static_key is not None:
+            ck = (static_key, tuple(np.round(sun, 6).tolist()))
+            c = getattr(self, "_gshadow", None)
+            if c is not None and c[0] == ck:
+                gs = c[1]
+        if gs is None:
+            pk = concat_packs(packs)
+            if pk is None:
+                return None
+            gs = self._ground_shadow(pk, sun)
+            if static_key is not None:
+                self._gshadow = (ck, gs)
+        if gs is None:
+            return None
+        proj, cnt = gs
+        hw, hh2 = mask.get_size()
         _, _, zz, sx, sy = self.project(proj, eye, f, r, u, fpx, cx, cy)
         zz, sx, sy = zz.reshape(-1, 4), sx.reshape(-1, 4) * 0.5, sy.reshape(-1, 4) * 0.5
         ok = (zz.min(1) > 0.3) & (sx.max(1) >= 0) & (sx.min(1) <= hw) & (sy.max(1) >= 0) & (sy.min(1) <= hh2)
-        SX, SY, CN = sx[ok].tolist(), sy[ok].tolist(), cnt[ok].tolist()
+        PT = np.stack((sx[ok], sy[ok]), axis=-1).tolist()
+        CN = cnt[ok].tolist()
         poly = pygame.draw.polygon
         bb = None
-        for j in range(len(SX)):
+        for j in range(len(PT)):
             k = CN[j]
-            rr = poly(mask, scol, list(zip(SX[j][:k], SY[j][:k])))
+            rr = poly(mask, scol, PT[j][:k] if k < 4 else PT[j])
             bb = rr if bb is None else bb.union(rr)
         return bb
 
@@ -1208,11 +1228,38 @@ class Colony3D:
         t_start = _time.perf_counter()
         # süper örnekleme: pürüzsüz siluetler; bilgisayar yavaşsa kendiliğinden kapanır (uyarlanır kalite)
         ss = i18n.quality().get("ss", 1.35) if (cinema.enabled() and not getattr(self, "low_perf", False)) else 1.0
+        # Hareket sırasında uyarlanır çözünürlük: kamera hareket ederken ölçülen kare süresi 45 FPS bütçesini (22,2 ms)
+        # aşıyorsa süper örnekleme 2,0 -> 1,5'e iner (kenar yumuşatma sürer). Kamera durduğu karede tam kaliteye döner;
+        # durağan görüntü hiç değişmez. Hızlı cihazda bütçe aşılmadığı için devreye girmez. AYARLAR'dan kapatılabilir.
+        now = _time.perf_counter()
+        last = getattr(self, "_last_draw_t", None)
+        self._last_draw_t = now
+        if last is not None and now - last < 0.25:
+            dtf = now - last
+            self._frame_ema = dtf if not hasattr(self, "_frame_ema") else self._frame_ema * 0.85 + dtf * 0.15
+        c = self.cam
+        camsig = (round(c.tx, 4), round(c.tz, 4), round(c.yaw, 4), round(c.pitch_base, 3), round(c.dist, 4))
+        cam_moving = camsig != getattr(self, "_camsig", None)
+        self._camsig = camsig
+        from . import settings as _SET
+        if not cam_moving or not _SET.get("motion_res") or ss <= 1.5:
+            self.motion_lo = False
+        elif not getattr(self, "motion_lo", False) and getattr(self, "_frame_ema", 0.0) > 1 / 45:
+            self.motion_lo = True
+        if getattr(self, "motion_lo", False):
+            ss = 1.5
         self.ss = ss
         w, h = int(rect.w * ss), int(rect.h * ss)
         if self.view is None or self.view.get_size() != (w, h):
-            self.view = pygame.Surface((w, h))
-            self._layer = pygame.Surface((w, h), pygame.SRCALPHA)
+            pool = self.__dict__.setdefault("_pool", {})              # çözünürlük başına yüzeyler (geçişte yeniden ayırma yok)
+            if self.view is not None:
+                pool[self.view.get_size()] = (self.view, self._layer, getattr(self, "_tc", None))
+            if (w, h) in pool:
+                self.view, self._layer, self._tc = pool[(w, h)]
+            else:
+                self.view = pygame.Surface((w, h))
+                self._layer = pygame.Surface((w, h), pygame.SRCALPHA)
+                self._tc = None
         v = self.view
         if bg is not None and bg.get_size() != (w, h):
             key = (id(bg), w, h)
@@ -1232,6 +1279,9 @@ class Colony3D:
         hw, hh2 = max(2, w // 2), max(2, h // 2)
         cval = int(255 * (1 - sh_k))
         scol = (cval, cval, min(255, cval + 22))                         # gölgede gökyüzü ışığı: hafif mavi
+        # kolonist modelleri karede bir kez kurulur (gölge ve nesne geçişi aynı paketi kullanır)
+        agent_packs = [(a, colonist_packed(a.x, self.height(a.x, a.z), a.z, a.heading, a.col, a.phase, a.state, a.carry,
+                                           self.planet, a.job, a.p.skin)) for a in self.agents if not a.hidden]
         # Durağan katman önbelleği: manzara + arazi + bina gölgeleri yalnız kamera, güneş ya da yerleşim değişince yeniden
         # çizilir (görüntü aynı). Kamera sabitken her karede yalnız kolonistlerin çevresindeki küçük bölgeler yenilenir.
         k_bg = int(255 * (0.35 + 0.65 * day))
@@ -1266,12 +1316,11 @@ class Colony3D:
                 if shadows:
                     mask = tc["work"]
                     mask.fill((255, 255, 255))
-                    packs = [pack_cached(objects.faces)]
-                    for a in self.agents:
-                        if not a.hidden:
-                            packs.append(colonist_packed(a.x, self.height(a.x, a.z), a.z, a.heading, a.col, a.phase, a.state,
-                                                         a.carry, self.planet, a.job, a.p.skin))
-                    bb = self._shadow_polys(packs, mask, sun, scol, eye, f, r, u, fpx, cx, cy)
+                    bb = self._shadow_polys([pack_cached(objects.faces)], mask, sun, scol, eye, f, r, u, fpx, cx, cy,
+                                            static_key=id(objects))
+                    apk = [pk for _a, pk in agent_packs]
+                    bb2 = self._shadow_polys(apk, mask, sun, scol, eye, f, r, u, fpx, cx, cy) if apk else None
+                    bb = bb2 if bb is None else (bb if bb2 is None else bb.union(bb2))
                     if bb is not None:
                         self._shadow_apply(v, mask, bb)
             else:
@@ -1279,7 +1328,8 @@ class Colony3D:
                 # 2a) binaların gerçek gölgeleri (Güneş yönünde zemine izdüşüm), yarım çözünürlüklü maskeye
                 tc["mask"].fill((255, 255, 255))
                 if shadows:
-                    bb = self._shadow_polys([pack_cached(objects.faces)], tc["mask"], sun, scol, eye, f, r, u, fpx, cx, cy)
+                    bb = self._shadow_polys([pack_cached(objects.faces)], tc["mask"], sun, scol, eye, f, r, u, fpx, cx, cy,
+                                        static_key=id(objects))
                     if bb is not None:
                         self._shadow_apply(v, tc["mask"], bb)
                 tc["base"].blit(v, (0, 0))
@@ -1292,13 +1342,10 @@ class Colony3D:
             work = tc["work"]
             work.blit(tc["mask"], (0, 0))
             rects = []
-            for a in self.agents:
-                if not a.hidden:
-                    pk = colonist_packed(a.x, self.height(a.x, a.z), a.z, a.heading, a.col, a.phase, a.state, a.carry,
-                                         self.planet, a.job, a.p.skin)
-                    rr = self._shadow_polys([pk], work, sun, scol, eye, f, r, u, fpx, cx, cy)
-                    if rr is not None:
-                        rects.append(rr.inflate(20, 20))
+            for a, pk in agent_packs:
+                rr = self._shadow_polys([pk], work, sun, scol, eye, f, r, u, fpx, cx, cy)
+                if rr is not None:
+                    rects.append(rr.inflate(20, 20))
             merged = []
             for rr in rects:                                 # örtüşen bölgeleri birleştir (her piksel bir kez işlenir)
                 i = rr.collidelist(merged)
@@ -1340,10 +1387,7 @@ class Colony3D:
         packs = [pack_cached(objects.faces), pack_faces(faces)]
         for a in self.agents:
             a.screen = None
-            if a.hidden:
-                continue
-            gy = self.height(a.x, a.z)
-            packs.append(colonist_packed(a.x, gy, a.z, a.heading, a.col, a.phase, a.state, a.carry, self.planet, a.job, a.p.skin))
+        packs.extend(pk for _a, pk in agent_packs)
         allp = concat_packs(packs)
         if allp is not None:
             self.shade_and_draw(v, allp, eye, f, r, u, fpx, cx, cy, sun, sun_col, sky, gnd, day, fog, objects=True)
@@ -1416,7 +1460,12 @@ class Colony3D:
                     if zz[i] > 0.3:
                         draw_glow(v, (float(sx[i]), float(sy[i])), float(min(70.0, fpx * 0.9 / zz[i])), col, 0.5 * night)
         # 7) küçült (kenar yumuşatma) + sinematik geçiş + tilt-shift alan derinliği
-        out = pygame.transform.smoothscale(v, rect.size) if ss != 1.0 else v
+        if ss != 1.0:                                   # hedef yüzey kalıcı (her karede yeni yüzey ayırmaz; çıktı aynı)
+            if getattr(self, "_out", None) is None or self._out.get_size() != rect.size:
+                self._out = pygame.Surface(rect.size)
+            out = pygame.transform.smoothscale(v, rect.size, self._out)
+        else:
+            out = v
         if cinema.enabled():
             sp = eye + sun * 200
             _, _, sz, ssx, ssy = self.project(np.array([sp]), eye, f, r, u, fpx, cx, cy)
@@ -1471,8 +1520,12 @@ class Colony3D:
 
     def tilt_shift(self, v):
         w, h = v.get_size()
-        small = pygame.transform.smoothscale(v, (max(1, w // 5), max(1, h // 5)))
-        big = pygame.transform.smoothscale(small, (w, h))
+        ssz = (max(1, w // 5), max(1, h // 5))
+        ts = getattr(self, "_tilt", None)
+        if ts is None or ts[0].get_size() != ssz or ts[1].get_size() != (w, h):
+            ts = self._tilt = (pygame.Surface(ssz), pygame.Surface((w, h)))
+        small = pygame.transform.smoothscale(v, ssz, ts[0])
+        big = pygame.transform.smoothscale(small, (w, h), ts[1])
         bands = 6
         top_h, bot_h = int(h * 0.2), int(h * 0.16)
         for i in range(bands):

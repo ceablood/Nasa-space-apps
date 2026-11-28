@@ -232,7 +232,8 @@ class ColonyScene(Scene):
         g = self.game
         p = D.PLANET[self.planet]
         c = g.colony(self.planet)
-        self.bg.draw(surf, 0.7)
+        scene = pygame.Rect(40, TOPBAR_H + 160, 940, 500)
+        self.bg.draw(surf, 0.7, occluded=scene if (c and self.view3d) else None)   # 3B görünüm o alanı tamamen kaplar
         if c:
             self.draw_colony(surf, p, c)
         else:

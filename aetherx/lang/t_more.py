@@ -202,4 +202,13 @@ ROWS = [
     ("Kasa", "Treasury", "Kasse", "Trésorerie", "Tesorería", "Казна"),
     ("Koloni", "Colonies", "Kolonien", "Colonies", "Colonias", "Колонии"),
     ("Ekip", "Crew", "Crew", "Équipage", "Tripulación", "Экипаж"),
+    ("Hareketli kamerada 45 FPS koruması", "45 FPS guard while the camera moves", "45-FPS-Schutz bei Kamerabewegung",
+     "Protection 45 IPS pendant les mouvements de caméra", "Protección de 45 FPS con la cámara en movimiento",
+     "Защита 45 FPS при движении камеры"),
+    ("Koloni kamerası hareket ederken kare hızı 45'in altına düşerse 3B süper örnekleme geçici olarak ×1,5'e iner; kamera durunca tam kaliteye döner.",
+     "If the frame rate drops below 45 while the colony camera moves, 3D supersampling temporarily drops to ×1.5; full quality returns when the camera stops.",
+     "Fällt die Bildrate bei bewegter Kolonie-Kamera unter 45, sinkt das 3D-Supersampling vorübergehend auf ×1,5; steht die Kamera, gilt wieder volle Qualität.",
+     "Si la fréquence d'images passe sous 45 pendant que la caméra de la colonie bouge, le suréchantillonnage 3D descend temporairement à ×1,5 ; la qualité maximale revient à l'arrêt de la caméra.",
+     "Si la tasa de imágenes baja de 45 mientras la cámara de la colonia se mueve, el supermuestreo 3D baja temporalmente a ×1,5; la calidad completa vuelve al detenerse la cámara.",
+     "Если при движении камеры колонии частота кадров падает ниже 45, 3D-суперсэмплинг временно снижается до ×1,5; при остановке камеры возвращается полное качество."),
 ]
