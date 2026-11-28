@@ -13,6 +13,7 @@ DEFAULTS = {
     "dyn_quality": False,     # app.App.update: FPS uzun süre 30'un altındaysa kaliteyi bir kademe düşür
     "perf_graph": False,      # app.App.draw: kare süresi grafiği
     "ss": 0.0,                # i18n.quality(): 3B koloni süper örnekleme (0 = kademeye göre)
+    "motion_res": True,       # colony3d.Colony3D.draw: kamera hareketliyken 45 FPS altına düşülürse süper örnekleme 2,0 -> 1,5
     "brightness": 1.0,        # app.App.draw: ekran parlaklığı (0,6..1,4)
     "show_fps": False,        # app.App.draw: FPS göstergesi (F3 ile de)
     "bloom_k": 1.0,           # i18n.quality(): parlama şiddeti çarpanı
@@ -42,7 +43,7 @@ SS_CHOICES = (0.0, 1.0, 1.5, 2.0)
 
 # kategori -> sıfırlanacak anahtarlar (AYARLAR ekranındaki "kategoriyi sıfırla")
 GROUPS = {"gfx": ("bloom_k", "motes", "stars_k", "fx_k", "brightness"),
-          "perf": ("fps_cap", "boot_max", "dyn_quality", "show_fps", "perf_graph", "ss"),
+          "perf": ("fps_cap", "boot_max", "dyn_quality", "show_fps", "perf_graph", "ss", "motion_res"),
           "game": ("nova_hints", "autosave_min", "tooltips", "game_speed", "toast_k"),
           "access": ("reduce_motion", "shake", "custom_cursor", "high_contrast")}
 

@@ -19,7 +19,8 @@ from .tx import pick as _pick
 _PATH = os.path.join(os.path.dirname(__file__), "data", "tuik_il.json")
 _D = None
 
-COUNT = {"NufusToplam", "Olum", "Bosanma", "HanehalkiSayisi", "YabanciNufusBuyuklugu", "Evlilik", "AlinanGoc", "VerilenGoc"}
+COUNT = {"NufusToplam", "Olum", "Bosanma", "HanehalkiSayisi", "YabanciNufusBuyuklugu", "Evlilik", "AlinanGoc", "VerilenGoc",
+         "Dogum", "YurtdisindanGelenGoc", "YurtdisinaGidenGoc", "YabanciNufusErkek", "YabanciNufusKadin"}
 DERIVED = {"NetGoc": ("AlinanGoc", "VerilenGoc")}       # il bazında aldığı - verdiği göç (hesaplanır)
 
 # gösterge -> (anahtar sözcükler (normalize), (tr ad, en ad), tr birim, en birim)
@@ -43,6 +44,20 @@ IND = {
                         ("hanehalkı sayısı", "number of households"), "", ""),
     "OrtalamaHanehalkiBuyuklugu": (("hanehalki buyuklugu", "haushaltsgrosse", "taille des menages", "tamano del hogar", "размер домохозяйства", "hane buyuklugu", "household size", "evde kac kisi"),
                                    ("ortalama hanehalkı büyüklüğü", "average household size"), "kişi", "people"),
+    "Dogum": (("dogum sayisi", "canli dogum", "kac bebek", "births", "live births", "geburten", "naissances", "nacimientos",
+               "рождени", "родилось"), ("canlı doğum sayısı", "number of live births"), "", ""),
+    "BagimlilikCocuk": (("cocuk bagimlilik", "child dependency", "jugendquotient", "dependance des jeunes",
+                         "dependencia infantil", "нагрузка детьми"), ("çocuk bağımlılık oranı", "child dependency ratio"), "%", "%"),
+    "YurtdisindanGelenGoc": (("yurtdisindan gelen", "yurt disindan gelen", "from abroad", "aus dem ausland", "venant de l etranger",
+                              "del extranjero", "из-за рубежа", "из-за границы"),
+                             ("yurt dışından gelen göç", "migration from abroad"), "kişi", "people"),
+    "YurtdisinaGidenGoc": (("yurtdisina giden", "yurt disina giden", "to abroad", "emigration", "ins ausland", "vers l etranger",
+                            "al extranjero", "за рубеж", "уехали за границу"),
+                           ("yurt dışına giden göç", "migration abroad"), "kişi", "people"),
+    "YabanciNufusErkek": (("yabanci erkek", "foreign men", "auslandische manner", "hommes etrangers", "hombres extranjeros",
+                           "иностранцы мужчины"), ("yabancı erkek nüfus", "foreign male population"), "kişi", "people"),
+    "YabanciNufusKadin": (("yabanci kadin", "foreign women", "auslandische frauen", "femmes etrangeres", "mujeres extranjeras",
+                           "иностранки"), ("yabancı kadın nüfus", "foreign female population"), "kişi", "people"),
     "Evlilik": (("evlenme", "evlilik", "marriage", "marriages", "heirat", "eheschliessung", "mariage", "matrimonio", "брак"),
                 ("evlenme sayısı", "number of marriages"), "", ""),
     "OkumaYazmaOran": (("okuma yazma", "okuryazar", "literacy", "alphabetisierung", "alphabetisation", "alfabetizacion",
@@ -96,7 +111,8 @@ def find_province(norm):
     toks = LX.tokens(norm)
     for t in toks:
         for ex, idx in EXONYMS.items():
-            if t == ex or (t.startswith(ex) and len(t) - len(ex) <= 2):
+            if t == ex or (t.startswith(ex) and len(t) - len(ex) <= 2) or \
+                    (len(ex) >= 5 and t[:len(ex) - 1] == ex[:-1] and 0 <= len(t) - len(ex) <= 2):   # Rusça çekim: Анкаре, Стамбуле
                 return idx
     best = None
     for i, pn in enumerate(d["_norm"]):

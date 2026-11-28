@@ -337,10 +337,12 @@ class App:
 
     def draw_topbar(self, surf):
         g = self.game
-        bar = pygame.Surface((W, TOPBAR_H), pygame.SRCALPHA)
-        for y in range(TOPBAR_H):
-            k = y / TOPBAR_H
-            pygame.draw.line(bar, (6, 12, 28, int(235 - 60 * k)), (0, y), (W, y))
+        bar = getattr(self, "_topbar_grad", None)       # değişmeyen degrade bir kez çizilir
+        if bar is None:
+            bar = self._topbar_grad = pygame.Surface((W, TOPBAR_H), pygame.SRCALPHA)
+            for y in range(TOPBAR_H):
+                k = y / TOPBAR_H
+                pygame.draw.line(bar, (6, 12, 28, int(235 - 60 * k)), (0, y), (W, y))
         surf.blit(bar, (0, 0))
         acc = g.color
         pygame.draw.line(surf, scale_color(acc, 0.6), (0, TOPBAR_H), (W, TOPBAR_H), 1)

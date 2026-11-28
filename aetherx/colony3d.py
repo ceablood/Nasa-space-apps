@@ -1228,11 +1228,38 @@ class Colony3D:
         t_start = _time.perf_counter()
         # süper örnekleme: pürüzsüz siluetler; bilgisayar yavaşsa kendiliğinden kapanır (uyarlanır kalite)
         ss = i18n.quality().get("ss", 1.35) if (cinema.enabled() and not getattr(self, "low_perf", False)) else 1.0
+        # Hareket sırasında uyarlanır çözünürlük: kamera hareket ederken ölçülen kare süresi 45 FPS bütçesini (22,2 ms)
+        # aşıyorsa süper örnekleme 2,0 -> 1,5'e iner (kenar yumuşatma sürer). Kamera durduğu karede tam kaliteye döner;
+        # durağan görüntü hiç değişmez. Hızlı cihazda bütçe aşılmadığı için devreye girmez. AYARLAR'dan kapatılabilir.
+        now = _time.perf_counter()
+        last = getattr(self, "_last_draw_t", None)
+        self._last_draw_t = now
+        if last is not None and now - last < 0.25:
+            dtf = now - last
+            self._frame_ema = dtf if not hasattr(self, "_frame_ema") else self._frame_ema * 0.85 + dtf * 0.15
+        c = self.cam
+        camsig = (round(c.tx, 4), round(c.tz, 4), round(c.yaw, 4), round(c.pitch_base, 3), round(c.dist, 4))
+        cam_moving = camsig != getattr(self, "_camsig", None)
+        self._camsig = camsig
+        from . import settings as _SET
+        if not cam_moving or not _SET.get("motion_res") or ss <= 1.5:
+            self.motion_lo = False
+        elif not getattr(self, "motion_lo", False) and getattr(self, "_frame_ema", 0.0) > 1 / 45:
+            self.motion_lo = True
+        if getattr(self, "motion_lo", False):
+            ss = 1.5
         self.ss = ss
         w, h = int(rect.w * ss), int(rect.h * ss)
         if self.view is None or self.view.get_size() != (w, h):
-            self.view = pygame.Surface((w, h))
-            self._layer = pygame.Surface((w, h), pygame.SRCALPHA)
+            pool = self.__dict__.setdefault("_pool", {})              # çözünürlük başına yüzeyler (geçişte yeniden ayırma yok)
+            if self.view is not None:
+                pool[self.view.get_size()] = (self.view, self._layer, getattr(self, "_tc", None))
+            if (w, h) in pool:
+                self.view, self._layer, self._tc = pool[(w, h)]
+            else:
+                self.view = pygame.Surface((w, h))
+                self._layer = pygame.Surface((w, h), pygame.SRCALPHA)
+                self._tc = None
         v = self.view
         if bg is not None and bg.get_size() != (w, h):
             key = (id(bg), w, h)
@@ -1433,7 +1460,12 @@ class Colony3D:
                     if zz[i] > 0.3:
                         draw_glow(v, (float(sx[i]), float(sy[i])), float(min(70.0, fpx * 0.9 / zz[i])), col, 0.5 * night)
         # 7) küçült (kenar yumuşatma) + sinematik geçiş + tilt-shift alan derinliği
-        out = pygame.transform.smoothscale(v, rect.size) if ss != 1.0 else v
+        if ss != 1.0:                                   # hedef yüzey kalıcı (her karede yeni yüzey ayırmaz; çıktı aynı)
+            if getattr(self, "_out", None) is None or self._out.get_size() != rect.size:
+                self._out = pygame.Surface(rect.size)
+            out = pygame.transform.smoothscale(v, rect.size, self._out)
+        else:
+            out = v
         if cinema.enabled():
             sp = eye + sun * 200
             _, _, sz, ssx, ssy = self.project(np.array([sp]), eye, f, r, u, fpx, cx, cy)
@@ -1488,8 +1520,12 @@ class Colony3D:
 
     def tilt_shift(self, v):
         w, h = v.get_size()
-        small = pygame.transform.smoothscale(v, (max(1, w // 5), max(1, h // 5)))
-        big = pygame.transform.smoothscale(small, (w, h))
+        ssz = (max(1, w // 5), max(1, h // 5))
+        ts = getattr(self, "_tilt", None)
+        if ts is None or ts[0].get_size() != ssz or ts[1].get_size() != (w, h):
+            ts = self._tilt = (pygame.Surface(ssz), pygame.Surface((w, h)))
+        small = pygame.transform.smoothscale(v, ssz, ts[0])
+        big = pygame.transform.smoothscale(small, (w, h), ts[1])
         bands = 6
         top_h, bot_h = int(h * 0.2), int(h * 0.16)
         for i in range(bands):

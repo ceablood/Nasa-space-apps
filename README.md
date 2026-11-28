@@ -6,6 +6,52 @@ Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 
 dönüş noktası: [`docs/AYRI_3D_SURUM_KALDIRILDI.md`](docs/AYRI_3D_SURUM_KALDIRILDI.md). Unreal Engine 5 sürümü ve C++ çekirdeği:
 [`kozmogenis/`](kozmogenis/) (UE5 istemcisi henüz derlenmedi).
 
+## Sürüm 3.12 — NOVA altı dilde, genişletilmiş TÜİK verisi, kolonide 45 FPS koruması
+
+**NOVA: Almanca, Fransızca, İspanyolca, Rusça**
+- NOVA'nın ürettiği her cümle bu dillere çevrildi: gezegen bilgileri, görevler, kavramlar, oyun rehberi, oyun durumu,
+  TÜİK ve NASA yanıtları, yarışma soruları, duygu cümleleri. Toplam ~440 metin ve kalıp, 4 dil
+  (`aetherx/nova_ai/tx_engine.py`, `tx_kb.py`).
+- Yer tutuculu kalıplarla değişken parçalar (sayı, gezegen adı) yerine konur.
+  - Sayılar dile göre biçimlenir: de/es 1.234,5 · fr 1 234,5 · ru 1 234,5.
+  - Rusçada birimler Kiril (км/с, м/с²).
+  - Gök cismi adları her dilde.
+- NOVA bu dillerde yazılan soruları da anlar: niyet, kavram, gök cismi ve TÜİK göstergesi anahtar sözcükleri, Rusça çekimler
+  (на Марсе, в Анкаре), sinir ağı bu sözcüklerle de eğitilir.
+- Otomatik test dört dilde bütün gök cisimleri × bütün soru türleri, TÜİK, NASA, oyun durumu ve yarışma yanıtlarını üretir;
+  çevrilmeden kalan cümle sayısı 0'dır.
+
+**TÜİK verisi (nip.tuik.gov.tr, 28.11.2026)**
+- Portalın 31 sayfası gerçek tarayıcıyla taranıp gösterge listesi çıkarıldı.
+- Pakette olan 11 gösterge yeniden indirildi ve portalla birebir aynı çıktı (en son yayımlanan yıllar 2024–2025 zaten içerideydi).
+- 12 gösterge eklendi:
+  - canlı doğum, evlenme, okuryazarlık oranı;
+  - iller arası alınan ve verilen göç, il bazında hesaplanan net göç;
+  - yurt dışından gelen ve yurt dışına giden göç;
+  - toplam, çocuk ve yaşlı bağımlılık oranları;
+  - yabancı nüfusun erkek ve kadın dağılımı.
+- Eklemeden önce tutarlılık denetlendi:
+  - iller arası alınan göç = verilen göç (her yıl);
+  - toplam bağımlılık = çocuk + yaşlı (her ilde);
+  - yabancı erkek + kadın = yabancı toplam (her ilde).
+- Genel erkek/kadın nüfus dosyaları hâlâ tutarsız (81 ilde aynı değerler), kullanılmadı.
+
+**Koloni performansı**
+- Görüntüyü değiştirmeyen iyileştirmeler:
+  - binaların zemine düşen gölge geometrisi güneş değişene kadar önbellekte;
+  - kolonist modelleri karede bir kez kuruluyor;
+  - poligon noktaları numpy'den hazır liste;
+  - küçültme ve tilt-shift kalıcı hedef yüzeylere yazıyor;
+  - uzay arka planı, 3B görünümün kapattığı alana kopyalanmıyor;
+  - üst çubuk degradesi önbellekte.
+  - Bu değişikliklerin her biri önceki sürümle piksel piksel karşılaştırıldı.
+- **Hareketli kamerada 45 FPS koruması** (AYARLAR > PERFORMANS, varsayılan açık):
+  - Yalnız kamera hareket ederken ve ölçülen kare süresi 22,2 ms'yi aşarsa 3B süper örnekleme ×2'den ×1,5'e iner.
+  - Kamera durduğu karede tam kaliteye döner; durağan görüntü değişmez.
+  - Hızlı cihazlarda hiç devreye girmez.
+- Not: 3.11'de eklenen bölgesel gölge önbelleği, önbellekli ve baştan çizilen kareyi piksel piksel aynı üretir. Önceki tek geçişli
+  yönteme göre ise gölge kenarlarında birkaç yüz pikselde görünmez yuvarlama farkı vardır (bulanıklık bölge boyutuna göre örneklenir).
+
 ## Sürüm 3.11 — NOVA gerçek verilere bağlı, sinir ağı ve duygular; 45+ FPS; yeni ajans görünümü
 
 **NOVA: gerçek veri**
