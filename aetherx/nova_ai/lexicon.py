@@ -68,27 +68,28 @@ def stems(norm):
 
 # Gök cisimleri: farklı dillerdeki adlar (normalize edilmiş). Oyunun desteklediği 6 dil + yaygın yazımlar.
 BODY_ALIASES = {
-    "sun": ("gunes", "sun", "sonne", "soleil", "sol", "solntse", "солнце"),
-    "mercury": ("merkur", "mercury", "mercure", "mercurio", "меркурий"),
-    "venus": ("venus", "venera", "венера"),
-    "earth": ("dunya", "earth", "erde", "terre", "tierra", "zemlya", "земля", "yerkure"),
-    "moon": ("ay", "moon", "mond", "lune", "luna", "луна", "ayda", "aya", "ayi", "aydaki", "ayin"),
-    "mars": ("mars", "марс", "kizil gezegen", "red planet"),
-    "phobos": ("phobos", "fobos"),
-    "deimos": ("deimos",),
-    "ceres": ("ceres", "seres"),
-    "jupiter": ("jupiter", "юпитер", "jupiter"),
-    "io": ("io",),
-    "europa": ("europa", "avrupa uydusu", "europe moon"),
-    "ganymede": ("ganymede", "ganimede", "ganymed", "ganimedes"),
-    "callisto": ("callisto", "kallisto", "calisto"),
-    "saturn": ("saturn", "saturne", "saturno", "сатурн"),
-    "titan": ("titan", "титан"),
-    "enceladus": ("enceladus", "enselados", "encelade", "encelado"),
-    "uranus": ("uranus", "uranus", "urano", "уран"),
-    "neptune": ("neptun", "neptune", "neptuno", "нептун"),
-    "triton": ("triton",),
-    "pluto": ("pluton", "pluto", "плутон"),
+    "sun": ("gunes", "sun", "sonne", "soleil", "sol", "solntse", "солнце", "солнца"),
+    "mercury": ("merkur", "mercury", "mercure", "mercurio", "меркурий", "меркурии", "меркурия"),
+    "venus": ("venus", "venuskolonie", "venera", "венера", "венере", "венеры"),
+    "earth": ("dunya", "earth", "erde", "terre", "tierra", "zemlya", "земля", "земли", "земле", "yerkure"),
+    "moon": ("ay", "moon", "mond", "mondkolonie", "mondbasis", "lune", "luna", "луна", "луне", "луны", "ayda", "aya", "ayi", "aydaki", "ayin"),
+    "mars": ("mars", "marskolonie", "марс", "марсе", "марса", "marte", "kizil gezegen", "red planet", "roter planet", "planete rouge", "planeta rojo",
+             "красная планета"),
+    "phobos": ("phobos", "fobos", "фобос"),
+    "deimos": ("deimos", "деймос"),
+    "ceres": ("ceres", "seres", "церер"),
+    "jupiter": ("jupiter", "jupiterkolonie", "юпитер", "юпитере", "юпитера"),
+    "io": ("io", "ио"),
+    "europa": ("europa", "avrupa uydusu", "europe moon", "европа"),
+    "ganymede": ("ganymede", "ganimede", "ganymed", "ganimedes", "ганимед"),
+    "callisto": ("callisto", "kallisto", "calisto", "каллисто"),
+    "saturn": ("saturn", "saturne", "saturno", "сатурн", "сатурне", "сатурна"),
+    "titan": ("titan", "титан", "титане", "титана"),
+    "enceladus": ("enceladus", "enselados", "encelade", "encelado", "энцелад"),
+    "uranus": ("uranus", "urano", "уран", "уране", "урана"),
+    "neptune": ("neptun", "neptune", "neptuno", "нептун", "нептуне", "нептуна"),
+    "triton": ("triton", "тритон"),
+    "pluto": ("pluton", "pluto", "плутон", "плутоне", "плутона"),
 }
 # "ay" Türkçede "month" da demek; yalnız gök cismi bağlamında (ya da ekli biçimde) kabul et.
 _AMBIG = {"ay", "sol", "io", "luna"}
@@ -129,8 +130,10 @@ def _ambig_ok(alias, words, wi):
              "kacis", "hizi", "buyuk", "yaricap", "kutle", "kutlesi", "cap", "su", "buz", "gorevler", "tehlike", "apollo", "artemis"}
     if alias == "ay":
         return bool(ctx & space) or len(words) <= 2
-    if alias == "sol":
-        return False
+    if alias == "luna":                                  # İspanyolca/İtalyanca "la luna", "de la luna"
+        return (wi > 0 and words[wi - 1] in ("la", "de", "del", "a")) or bool(ctx & space) or len(words) <= 2
+    if alias == "sol":                                   # İspanyolca "el sol / del sol" (Güneş); Mars günü "sol" değil
+        return wi > 0 and words[wi - 1] in ("el", "del", "al")
     return bool(ctx & space) or len(words) <= 2
 
 

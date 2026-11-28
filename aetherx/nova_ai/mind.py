@@ -8,6 +8,8 @@ hissetmez; duygu değerleri oyun durumundan hesaplanan sayılardır ve ekranda a
 """
 import math
 import random
+from .tx import pick as _pick
+from . import tx as _tx
 
 EMOS = ("joy", "curiosity", "worry", "pride", "sadness")
 NAME = {"joy": ("neşeli", "cheerful"), "curiosity": ("meraklı", "curious"), "worry": ("endişeli", "worried"),
@@ -102,11 +104,12 @@ class Mind:
         return {"joy": "happy", "pride": "happy", "curiosity": "think", "worry": "worried", "sadness": "sad"}.get(self.dominant(), "calm")
 
     def label(self, tr_):
-        return NAME[self.dominant()][0 if tr_ else 1]
+        return NAME[self.dominant()][0] if tr_ else _tx.translate(NAME[self.dominant()][1])
 
     def opener(self, tr_):
         ops = OPEN[self.dominant()][0 if tr_ else 1]
-        return self.rng.choice(ops)
+        o = self.rng.choice(ops)
+        return o if tr_ else _tx.translate(o)
 
     def hedge(self, conf, tr_):
         """Güvene göre insan gibi temkin: %90+ düz söyler, altında 'sanırım', %60 altında 'emin değilim'."""
@@ -114,8 +117,8 @@ class Mind:
         if conf >= 0.9:
             return ""
         if conf >= 0.7:
-            return (f"Sanırım bunu soruyorsun (%{p} eminim): " if tr_ else f"I think this is what you mean ({p}% sure): ")
-        return (f"Emin değilim (yalnız %{p}), ama tahminim şu: " if tr_ else f"I'm not sure (only {p}%), but my best guess: ")
+            return (_pick(tr_, f"Sanırım bunu soruyorsun (%{p} eminim): ", f"I think this is what you mean ({p}% sure): "))
+        return (_pick(tr_, f"Emin değilim (yalnız %{p}), ama tahminim şu: ", f"I'm not sure (only {p}%), but my best guess: "))
 
     def think_time(self, intent, text_len):
         """Yanıt öncesi düşünme süresi (sn): hesap ve veri sorgusu daha uzun; meraklıyken biraz daha düşünür."""
@@ -128,4 +131,4 @@ class Mind:
         """Ekranda gösterilecek duygu çubukları: [(ad, değer)]."""
         names = {"joy": ("Neşe", "Joy"), "curiosity": ("Merak", "Curiosity"), "worry": ("Endişe", "Worry"),
                  "pride": ("Gurur", "Pride"), "sadness": ("Hüzün", "Sadness")}
-        return [(names[k][0 if tr_ else 1], self.e[k]) for k in EMOS]
+        return [(names[k][0] if tr_ else _tx.translate(names[k][1]), self.e[k]) for k in EMOS]

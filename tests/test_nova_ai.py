@@ -229,3 +229,123 @@ class RealDataAndMind(unittest.TestCase):
 
     def test_turkish_number_suffix(self):
         self.assertEqual([LX.num_ek(x) for x in ("0,9", "18,3", "0,2", "40", "6")], ["u", "ü", "si", "ı", "sı"])
+
+
+class Multilingual(unittest.TestCase):
+    """NOVA Almanca/Fransızca/İspanyolca/Rusça: tablo tutarlılığı ve geniş tarama (hiçbir yanıt İngilizce kalmamalı)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from aetherx.nova_ai import live as LV
+        cls._orig = LV.LIVE.refresh
+        LV.LIVE.refresh = lambda kind: None
+
+    @classmethod
+    def tearDownClass(cls):
+        from aetherx.nova_ai import live as LV
+        LV.LIVE.refresh = cls._orig
+        i18n.set_lang("en")
+
+    def test_tables_complete_and_placeholders_match(self):
+        import re
+        from aetherx.nova_ai import tx_engine, tx_kb
+        for T in (tx_engine.T, tx_kb.T):
+            for en, tgt in T.items():
+                self.assertEqual(len(tgt), 4, en)
+                want = sorted(re.findall(r"\{\d+\}", en))
+                for t in tgt:
+                    self.assertTrue(t.strip(), en)
+                    self.assertEqual(sorted(re.findall(r"\{\d+\}", t)), want, (en, t))
+
+    def test_sweep_all_languages(self):
+        import tempfile
+        from aetherx import data as D
+        from aetherx.game import Game
+        from aetherx.nova import NovaBrain
+        from aetherx.nova_ai import tx, facts as FF
+        g = Game()
+        g.new("ORION", (62, 230, 255))
+        g.s["inventory"]["moon_rock"] = 12
+        g.hire(D.CREW_TYPES[0]["key"])
+        g.s["colonies"]["moon"] = {"planet": "moon", "founded": 1, "level": 1, "pop": 10.0, "happiness": 30.0,
+                                   "buildings": {b["key"]: 1 for b in D.COLONY_BUILDINGS}, "storage": 0.0, "food": 60.0,
+                                   "happy_buff": 0.0}
+        attrs = ("facts", "gravity", "temp", "day", "year", "distance", "moons", "atmo", "size", "mass", "escape",
+                 "missions", "hazards", "weight", "jump", "sunlight", "orbit_calc")
+        for lang in ("de", "fr", "es", "ru"):
+            i18n.set_lang(lang)
+            tx.MISSES.clear()
+            ai = NovaAI(g, NovaBrain(g))
+            for b in FF.BODIES:
+                for a in attrs:
+                    self.assertTrue(getattr(ai, "a_" + a)(b, [], ""))
+            for fn in (lambda: ai.transfer(["earth", "mars"]), lambda: ai.transfer(["earth", "moon"]),
+                       lambda: ai.delay(["earth", "mars"]), lambda: ai.compare(["jupiter", "saturn"]),
+                       lambda: ai.rocket_eq(LX.normalize("isp 320 500 t 150 t"), LX.numbers(LX.normalize("isp 320 500 t 150 t"))),
+                       lambda: ai.chance("mars"), lambda: ai.overview(), lambda: ai.help(), lambda: ai.identity(),
+                       lambda: ai.greet()):
+                self.assertTrue(fn())
+            for intent in ("depot", "fuel_now", "crew_now", "research_next", "design_check", "money_now", "score_now",
+                           "game_time", "colonies"):
+                ai._colony_body = "moon"
+                self.assertTrue(ai.game_answer(intent))
+            for key in CO.CONCEPTS:
+                self.assertTrue(ai.concept(key))
+            from aetherx.nova_ai import howto as HT, live as LVm, tuik as TU, gamestate as GS
+            for key in HT.HOWTO:
+                self.assertTrue(ai.howto(key))
+            LVm.asteroids(False); LVm.exoplanets(False); LVm.earth_events(False)
+            for q in ("Ankara", "Türkiye", "en kalabalık il", "Türkiye ortanca yaş"):
+                TU.answer(LX.normalize(q + " nüfus" if q != "Türkiye ortanca yaş" else q), False)
+            TU.answer(LX.normalize("en genç il ortanca yaş en düşük"), False)
+            for p in ("mars", "venus", "jupiter"):
+                GS.target_plan(ai, g, p)
+            ai.mind.e["sadness"] = 0.9
+            ai.mind.opener(False); ai.mind.label(False); ai.mind.chips(False); ai.mind.hedge(0.7, False); ai.mind.hedge(0.5, False)
+            for _ in range(12):
+                ai.quiz.new_question()
+                ai.reply("skip")
+            self.assertEqual(sorted(tx.MISSES), [], lang)
+
+    def test_understands_questions_in_each_language(self):
+        cases = {"de": [("Wie groß ist die Schwerkraft auf dem Mars?", "gravity"), ("Was ist ein schwarzes Loch?", "concept"),
+                        ("Bevölkerung von Istanbul", "tuik"), ("Asteroiden in Erdnähe", "asteroids")],
+                 "fr": [("Quelle est la gravité sur Mars ?", "gravity"), ("Combien de lunes a Saturne ?", "moons"),
+                        ("population d'Istanbul", "tuik")],
+                 "es": [("¿Cuál es la gravedad en Marte?", "gravity"), ("población de Estambul", "tuik"),
+                        ("¿Cuántos exoplanetas hay?", "exoplanets")],
+                 "ru": [("Какая гравитация на Марсе?", "gravity"), ("Что такое дельта-v?", "concept"),
+                        ("население Стамбула", "tuik"), ("Сколько дней лететь от Земли до Марса?", "transfer")]}
+        for lang, qs in cases.items():
+            i18n.set_lang(lang)
+            ai = NovaAI()
+            for q, want in qs:
+                self.assertEqual(ai.respond(q)["intent"], want, (lang, q))
+        i18n.set_lang("de")
+        self.assertIn("3,70 m/s²", NovaAI().reply("Schwerkraft auf dem Mars"))
+        i18n.set_lang("ru")
+        self.assertIn("км/с", NovaAI().reply("Сколько дней лететь от Земли до Марса?"))
+
+
+class TuikExtended(unittest.TestCase):
+    def tearDown(self):
+        i18n.set_lang("en")
+
+    def test_new_indicators_consistent(self):
+        from aetherx.nova_ai import tuik as TU
+        d = TU.data()
+        for k in ("Evlilik", "OkumaYazmaOran", "AlinanGoc", "VerilenGoc", "BagimlilikToplam", "BagimlilikYasli"):
+            self.assertIn(k, d["indicators"])
+            self.assertEqual(len(d["indicators"][k]["values"]), 81)
+        a, v = d["indicators"]["AlinanGoc"]["values"], d["indicators"]["VerilenGoc"]["values"]
+        for j in range(len(d["indicators"]["AlinanGoc"]["years"])):
+            self.assertEqual(sum(x[j] for x in a), sum(x[j] for x in v))           # iç göç: alınan = verilen
+        lit = [x[-1] for x in d["indicators"]["OkumaYazmaOran"]["values"]]
+        self.assertTrue(all(80 <= x <= 100 for x in lit))
+
+    def test_net_migration_answers(self):
+        from aetherx.nova_ai import tuik as TU
+        self.assertIn("sıfırdır", TU.answer(LX.normalize("Türkiye net göç"), True)[0])
+        txt = TU.answer(LX.normalize("Ankara net göç"), True)[0]
+        self.assertIn("Hesaplandı", txt)
+        self.assertIn("%43,9", TU.answer(LX.normalize("Hakkari bağımlılık oranı"), True)[0])

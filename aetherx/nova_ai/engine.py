@@ -19,6 +19,7 @@ from .quiz import Quiz, convert
 from . import tuik as TU
 from . import live as LV
 from .mind import Mind
+from . import tx as TX
 from .neural import IntentNet, build_dataset
 
 # niyet -> anahtar sözcükler (normalize, kök ya da tam)
@@ -85,6 +86,80 @@ INTENT_WORDS = {
                 "in km/h", "to km"),
 }
 
+# Almanca, Fransızca, İspanyolca, Rusça anahtar sözcükler (normalize edilmiş: küçük harf, aksansız; Rusçada ≥5 harfli
+# sözcükler önek olarak da eşleşir: "гравитац" -> гравитация/гравитации)
+INTENT_WORDS_ML = {
+    "greet": ("hallo", "guten tag", "servus", "bonjour", "salut", "bonsoir", "hola", "buenos dias", "buenas", "привет",
+              "здравствуй", "добрый день"),
+    "thanks": ("danke", "vielen dank", "merci", "gracias", "muchas gracias", "спасибо", "благодарю"),
+    "identity": ("wer bist du", "was bist du", "qui es tu", "qui etes vous", "quien eres", "que eres", "кто ты", "что ты такое"),
+    "help": ("hilfe", "was kannst du", "aide", "que sais tu faire", "ayuda", "que puedes hacer", "помощь", "помоги", "что ты умеешь"),
+    "gravity": ("schwerkraft", "anziehungskraft", "gravitation", "pesanteur", "gravedad", "гравитац", "сила тяжести", "притяжени"),
+    "temp": ("temperatur", "wie heiss", "wie kalt", "temperature", "quelle temperature", "temperatura", "que temperatura",
+             "температур", "насколько жарко", "насколько холодно"),
+    "day": ("tageslange", "ein tag", "duree du jour", "un jour", "duracion del dia", "un dia", "сутки", "длина дня", "день на"),
+    "year": ("ein jahr", "umlaufzeit", "une annee", "periode orbitale", "un ano", "periodo orbital", "один год", "год на",
+             "период обращения"),
+    "distance": ("entfernung", "abstand", "wie weit", "a quelle distance", "loin", "distancia", "que tan lejos", "a que distancia",
+                 "расстояни", "как далеко"),
+    "moons": ("monde", "wie viele monde", "lunes", "combien de lunes", "lunas", "cuantas lunas", "спутник", "сколько спутников"),
+    "atmo": ("atmosphare", "luft", "atmosphere", "air", "atmosfera", "aire", "атмосфер", "воздух", "давлени"),
+    "size": ("grosse", "wie gross", "durchmesser", "taille", "diametre", "tamano", "que tan grande", "diametro", "размер",
+             "диаметр", "насколько больш"),
+    "mass": ("masse", "masa", "сколько весит планета", "масса"),
+    "escape": ("fluchtgeschwindigkeit", "vitesse de liberation", "velocidad de escape", "вторая космическая", "скорость убегания"),
+    "missions": ("missionen", "sonden", "wer war dort", "missions", "sondes", "misiones", "sondas", "миссии", "аппараты",
+                 "кто летал"),
+    "hazards": ("gefahren", "gefahrlich", "risiken", "dangers", "dangereux", "risques", "peligros", "peligroso", "riesgos",
+                "опасност", "опасно", "риски"),
+    "compare": ("vergleiche", "vergleich", "comparer", "compare", "comparar", "compara", "сравни", "сравнени"),
+    "transfer": ("wie lange", "wie viele tage", "reise", "flug zum", "combien de temps", "combien de jours", "voyage",
+                 "cuanto tarda", "cuantos dias", "viaje", "сколько лететь", "сколько дней", "перелет", "полет до"),
+    "delay": ("verzogerung", "signal", "funksignal", "delai", "signal radio", "retraso", "senal", "задержк", "сигнал"),
+    "weight": ("wie viel wiege", "wiegen", "gewicht", "combien pese", "poids", "cuanto peso", "peso", "сколько буду весить",
+               "вес", "весит"),
+    "jump": ("springen", "sprung", "sauter", "saut", "saltar", "salto", "прыгн", "прыжок"),
+    "sunlight": ("sonnenlicht", "sonneneinstrahlung", "ensoleillement", "luz solar", "солнечный свет", "освещенност"),
+    "rocket_eq": ("raketengleichung", "equation de la fusee", "ecuacion del cohete", "уравнение циолковского"),
+    "orbit_calc": ("bahngeschwindigkeit", "vitesse orbitale", "velocidad orbital", "орбитальная скорость"),
+    "facts": ("erzahl", "uber", "was ist", "parle moi", "qu est ce que", "hablame", "que es", "расскажи", "что такое"),
+    "advice": ("was soll ich tun", "rat", "tipp", "que dois je faire", "conseil", "que debo hacer", "consejo",
+               "что мне делать", "совет"),
+    "suggest": ("mission vorschlagen", "wohin soll ich", "suggere une mission", "ou aller", "sugiere una mision", "adonde voy",
+                "предложи миссию", "куда лететь"),
+    "forecast": ("vorhersage", "weltraumwetter", "sturm", "prevision", "meteo spatiale", "tempete", "pronostico",
+                 "clima espacial", "tormenta", "прогноз", "космическая погода", "буря"),
+    "best_time": ("beste startzeit", "wann starten", "meilleure heure", "quand lancer", "mejor hora", "cuando lanzar",
+                  "лучшее время запуска", "когда запускать"),
+    "status": ("status", "bericht", "statut", "rapport", "estado", "informe", "статус", "отчет", "как дела у агентства"),
+    "colonies": ("meine kolonien", "mes colonies", "mis colonias", "мои колонии"),
+    "money_now": ("wie viel geld", "kontostand", "combien d argent", "solde", "cuanto dinero", "saldo", "сколько денег", "баланс"),
+    "score_now": ("mein punktestand", "mein rang", "mon score", "mon rang", "mi puntuacion", "mi puesto", "мой счет", "мое место"),
+    "game_time": ("wie spat", "spielzeit", "quelle heure", "quelle heure est il", "que hora", "hora del juego", "который час",
+                  "игровое время"),
+    "joke": ("witz", "erzahl einen witz", "blague", "raconte une blague", "chiste", "cuentame un chiste", "шутк", "анекдот"),
+    "depot": ("mein depot", "lager", "lagerbestand", "mon depot", "stock", "mi deposito", "almacen", "склад", "запасы"),
+    "fuel_now": ("treibstoff", "mein treibstoff", "carburant", "mon carburant", "combustible", "mi combustible", "топливо"),
+    "crew_now": ("meine crew", "besatzung", "mon equipage", "equipage", "mi tripulacion", "tripulacion", "мой экипаж", "экипаж"),
+    "research_next": ("was soll ich erforschen", "forschung", "que rechercher", "recherche", "que investigo", "investigacion",
+                      "что исследовать", "исследовани"),
+    "design_check": ("pruf meine rakete", "meine rakete", "verifie ma fusee", "ma fusee", "revisa mi cohete", "mi cohete",
+                     "проверь мою ракету", "моя ракета"),
+    "plan": ("was brauche ich", "freischalten", "que faut il", "debloquer", "que necesito", "desbloquear", "что нужно",
+             "как открыть"),
+    "quiz": ("quiz", "quizz", "frag mich", "interroge moi", "preguntame", "викторин", "задай вопрос"),
+    "asteroids": ("asteroid", "asteroiden", "erdnah", "asteroide", "asteroides", "geocroiseur", "cercanos a la tierra",
+                  "астероид", "сближени"),
+    "exoplanets": ("exoplaneten", "wie viele exoplaneten", "exoplanetes", "combien d exoplanetes", "exoplanetas",
+                   "cuantos exoplanetas", "экзопланет"),
+    "earth_events": ("waldbrand", "waldbrande", "naturereignis", "naturkatastrophe", "feux de foret", "incendies", "catastrophe",
+                     "incendios", "incendio forestal", "desastre natural", "пожар", "стихийн", "природные события"),
+    "chance": ("chance", "wahrscheinlichkeit", "schaffe ich", "probabilite", "chances", "vais je reussir", "probabilidad",
+               "posibilidad", "lo lograre", "шанс", "вероятност", "получится ли"),
+}
+for _k, _v in INTENT_WORDS_ML.items():
+    INTENT_WORDS[_k] = tuple(INTENT_WORDS.get(_k, ())) + _v
+
 # Genel sözcüklerle tetiklenen niyetler daha düşük ağırlık alır (özgül niyet kazansın)
 INTENT_WEIGHT = {"facts": 0.4, "status": 0.8, "distance": 0.9, "size": 0.8, "mass": 0.8, "transfer": 0.9, "joke": 1.3}
 
@@ -148,10 +223,10 @@ class NovaAI:
         return i18n.LANG == "tr"
 
     def L(self, pair):
-        return pair[0] if self.tr_ else pair[1]
+        return pair[0] if self.tr_ else TX.translate(pair[1])
 
     def nm(self, key):
-        return F.name(key, "tr" if self.tr_ else "en")
+        return TX.body_name(key, F.name(key, "tr" if self.tr_ else "en"))
 
     # ------------------------------------------------------------- ana giriş
     def respond(self, text):
@@ -192,7 +267,7 @@ class NovaAI:
         conv = convert(norm, self.tr_) if LX.has_any(norm, INTENT_WORDS["convert"]) or "=" in text else None
         if conv:
             self._intent = "convert"
-            return conv
+            return TX.loc(conv)
         bodies = LX.find_bodies(norm)
         nums = LX.numbers(norm)
         if not bodies and TU.wants_tuik(norm):                 # TÜİK il/Türkiye istatistiği
@@ -225,7 +300,8 @@ class NovaAI:
             intent = None
         # "peki ya Mars?" / "what about Venus?" -> önceki niyeti yeni cisimle tekrarla
         if intent in (None, "facts") and bodies and self.last_intent in BODY_INTENTS and LX.has_any(
-                norm, ("peki", "ya", "what about", "and", "how about", "ayrica", "bunu", "onun", "its")) and len(LX.tokens(norm)) <= 5:
+                norm, ("peki", "ya", "what about", "and", "how about", "ayrica", "bunu", "onun", "its", "und", "was ist mit", "et", "et pour",
+                       "y", "y en", "и", "а", "а на")) and len(LX.tokens(norm)) <= 5:
             intent = self.last_intent
         if not bodies and self.last_intent in BODY_INTENTS and "ay" in LX.tokens(norm) and len(LX.tokens(norm)) <= 4:
             bodies = ["moon"]                              # "peki ya Ay?" — kısa takip sorusunda Ay = Moon
@@ -279,7 +355,8 @@ class NovaAI:
         if nums and bodies and "weight" in scores:
             scores["weight"] += 1.0
         if CO.find(norm) and not bodies and not any(k in scores for k in GAME_INTENTS | {"rocket_eq", "weight"}):
-            scores["concept"] = 1.6 + (1.0 if LX.has_any(norm, ("nedir", "what is", "ne demek", "explain", "acikla", "meaning")) else 0)
+            scores["concept"] = 1.6 + (1.0 if LX.has_any(norm, ("nedir", "what is", "ne demek", "explain", "acikla", "meaning", "was ist", "was bedeutet",
+                                              "qu est ce que", "c est quoi", "que es", "que significa", "что такое", "что значит")) else 0)
         if HT.find(norm) and LX.has_any(norm, ("nasil", "how", "how do", "how to", "nereden", "ne ise yarar", "nasil yapilir", "where")):
             scores["howto"] = scores.get("howto", 0) + 2.6
         if not scores:
@@ -290,8 +367,11 @@ class NovaAI:
     def dispatch(self, intent, norm, bodies, nums, raw):
         b = bodies[0] if bodies else None
         self._colony_body = b
-        own = LX.has_any(norm, ("kolonim", "kolonimiz", "my", "benim", "bizim", "our"))
-        if b and self.game and self.game.s and LX.has_any(norm, ("koloni", "kolonim", "kolonimiz", "kolonisi", "colony", "base", "us")) \
+        own = LX.has_any(norm, ("kolonim", "kolonimiz", "my", "benim", "bizim", "our", "mein", "meine", "meiner", "unsere", "ma",
+                                "mon", "mes", "notre", "mi", "mis", "nuestra", "мой", "моя", "мои", "наша"))
+        colw = ("koloni", "kolonim", "kolonimiz", "kolonisi", "colony", "base", "us", "kolonie", "mondkolonie", "marskolonie",
+                "colonie", "colonia", "колония", "колонии", "колонию")
+        if b and self.game and self.game.s and (LX.has_any(norm, colw) or any("kolonie" in t for t in LX.tokens(norm))) \
                 and (intent not in ("howto", "concept") or own):
             if self.game.colony(b) if b in F.GAME_TARGETS else None:
                 intent = "colonies"
@@ -384,7 +464,7 @@ class NovaAI:
         rows = []
         for k in ("mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"):
             b = F.BODIES[k]
-            rows.append(f"{self.nm(k)} ({self._n(b['a_au'], 2)} AU, {b['moons']} " + self.L(("uydu", "moons")) + ")")
+            rows.append(TX.loc(f"{self.nm(k)} ({self._n(b['a_au'], 2)} AU, {b['moons']} ") + self.L(("uydu", "moons")) + ")")
         return self.L(("Güneş Sistemi'nde 8 gezegen var: ", "The Solar System has 8 planets: ")) + ", ".join(rows) + ". " + \
             self.L(("Hangisini merak ediyorsan adını yaz; çekimini, sıcaklığını, görevlerini anlatayım.",
                     "Name one and I'll tell you about its gravity, temperature and missions."))
@@ -438,7 +518,7 @@ class NovaAI:
         extra = (" " + self.L(notes[k])) if notes else ""
         if b in F.GAME_TARGETS:
             extra += self.L((" Oyunda bu hedefe gidebilirsin.", " You can fly there in the game."))
-        return head + ", ".join(parts) + "." + extra
+        return TX.loc(head + ", ".join(parts) + ".") + extra
 
     def a_gravity(self, b, nums=None, norm=""):
         d = F.BODIES[b]
@@ -459,6 +539,9 @@ class NovaAI:
         elif b == "mars":
             extra = self.L((" Ekvatorda yaz öğlesi ~20 °C'ye çıkabilir, kutuplarda ~−125 °C'ye iner.",
                             " Equatorial summer noons can reach ~20 °C; the poles drop to ~−125 °C."))
+        elif b == "sun":
+            extra = self.L((" (Görünen yüzey, fotosfer; dış katman korona 1 milyon °C'yi aşar.)",
+                            " (Visible surface, the photosphere; the outer corona exceeds 1 million °C.)"))
         elif d["p_bar"] is None:
             extra = self.L((" (Gaz devi: bulut tepesi sıcaklığı; derinlere indikçe ısınır.)", " (Gas giant: cloud-top temperature; it heats up with depth.)"))
         return self.L((f"{LX.ek(self.nm(b), 'in')} ortalama sıcaklığı yaklaşık {t} °C.", f"The average temperature on {self.nm(b)} is about {t} °C.")) + extra
@@ -648,12 +731,13 @@ class NovaAI:
             r1 = P.radius_m(par) + P.low_orbit_alt(par) * 1000
             r2 = F.BODIES[moon]["orbit_km"] * 1000
             dv1, dv2, t = P.hohmann(r1, r2, P.mu(par))
-            return self.L((f"{self.nm(par)} alçak yörüngesinden {LX.ek(self.nm(moon), 'a')} Hohmann transferi ~{P.fmt_dur(t, True)} sürer; "
-                           f"çıkış ateşlemesi {P.fmt_speed(dv1, True)}. (Apollo bu yolu ~3 günde aldı.)" if moon == "moon" else
-                           f"{self.nm(par)} alçak yörüngesinden {LX.ek(self.nm(moon), 'a')} Hohmann transferi ~{P.fmt_dur(t, True)} sürer; "
-                           f"çıkış ateşlemesi {P.fmt_speed(dv1, True)}.",
-                           f"A Hohmann transfer from low {self.nm(par)} orbit to {self.nm(moon)} takes ~{P.fmt_dur(t, False)}; "
-                           f"departure burn {P.fmt_speed(dv1, False)}." + (" (Apollo made the trip in about 3 days.)" if moon == "moon" else "")))
+            out = self.L((f"{self.nm(par)} alçak yörüngesinden {LX.ek(self.nm(moon), 'a')} Hohmann transferi ~{P.fmt_dur(t, True)} sürer; "
+                          f"çıkış ateşlemesi {P.fmt_speed(dv1, True)}.",
+                          f"A Hohmann transfer from low {self.nm(par)} orbit to {self.nm(moon)} takes ~{P.fmt_dur(t, False)}; "
+                          f"departure burn {P.fmt_speed(dv1, False)}."))
+            if moon == "moon":
+                out += self.L((" (Apollo bu yolu ~3 günde aldı.)", " (Apollo made the trip in about 3 days.)"))
+            return out
         tr_ = P.transfer(a, b)
         if not tr_:
             return self.L(("Bu iki cisim aynı gezegen sisteminde; güneş merkezli transfer gerekmez.", "Both bodies are in the same planetary system; no heliocentric transfer needed."))
@@ -697,7 +781,7 @@ class NovaAI:
                 (("Uydu", "Moons"), A["moons"], B["moons"], "", 0)]
         lines = [f"{self.nm(a)} vs {self.nm(b)}:"]
         for lab, x, y, u, d in rows:
-            lines.append(f"• {self.L(lab)}: {self._n(x, d)} {u} · {self._n(y, d)} {u}".rstrip())
+            lines.append(TX.loc(f"• {self.L(lab)}: {self._n(x, d)} {u} · {self._n(y, d)} {u}".rstrip()))
         big = a if A["radius"] > B["radius"] else b
         lines.append(self.L((f"{self.nm(big)} daha büyük; yarıçap oranı {self._n(max(A['radius'], B['radius']) / min(A['radius'], B['radius']), 2)}.",
                              f"{self.nm(big)} is larger; radius ratio {self._n(max(A['radius'], B['radius']) / min(A['radius'], B['radius']), 2)}.")))
