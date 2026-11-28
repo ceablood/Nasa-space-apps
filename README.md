@@ -1,5 +1,9 @@
 # AETHER-X · Uzay Ajansı Komuta Simülasyonu
 
+> **Bu depo taşındı (28.11.2026):** AETHER-X'in geliştirmesi artık **https://github.com/ceablood/Kozmogenis** deposunda sürüyor
+> (tüm geçmiş aktarıldı). Bu depo arşivlenmiştir; buradaki web sürümü 3.12'de kalır.
+
+
 ## ▶ Tarayıcıda oyna: https://ceablood.github.io/Nasa-space-apps/
 
 Site tek bir oyundur: AETHER-X (Python/pygame, tarayıcıda WebAssembly). Ayrı 3D web sürümü kaldırıldı; ayrıntı ve geri
